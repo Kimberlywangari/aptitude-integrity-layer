@@ -14,13 +14,16 @@ rejects the rest. Copying, pasting and screenshots are blocked, and every blocke
 
 •  Candidate device requirement: the test must be taken on a Windows or Mac computer or an iPad with a working webcam
 
-and microphone. Safe Exam Browser does not run on Android phones or Chromebooks, so candidates using them cannot sit
+and microphone, which must stay on for the whole test. Safe Exam Browser does not run on Android phones or Chromebooks, so candidates using them cannot sit
 the test. This is shown to candidates before they register.
 
 •  Webcam and microphone are recorded for every candidate. The test does not start until the camera and microphone work,
 
 and the candidate may retry within the session. If the camera drops mid-test or the upload is incomplete, the event is
 logged and the candidate may ﬁle a complaint, which a person reviews. These cases do not disqualify.
+If the microphone looks muted or silent during the test, the candidate sees a warning banner and the test carries on. The device
+notice and consent text tell candidates that the microphone must stay on for the whole test and that the warning is shown to their
+reviewer.
 
 •  Video is recorded at low resolution in short chunks, about 80 MB an hour, saved on the device ﬁrst, then uploaded in order
 with retries, resuming for up to 48 hours after the test. Candidates are told the expected data use and advised to use Wi-Fi.
@@ -40,6 +43,13 @@ What is logged and ﬂagged.
 never the text) and idle time. Events are timestamped by the server, and a heartbeat every 10 seconds reveals if logging is
 blocked, which is ﬂagged as a logging problem. Because candidates cannot go back, time per question is exact. Dropped
 connections and page reloads are shown to the reviewer as context, not ﬂagged.
+
+•  Microphone muting checks, in three layers: the browser's own mute and unmute events on the microphone, a live watch on the
+audio level during the test (a muted microphone gives a flat, silent signal, while a live one in a quiet room still has a faint noise
+floor), and a scan of the saved audio on the server after the test for long silent stretches. If the microphone looks muted or silent
+for 1 minute (adjustable), the candidate sees a banner ("Your microphone looks muted, please unmute") and the test carries
+on. The reviewer is shown every stretch found by either the browser (the stretches the candidate was warned about) or the server
+scan of the saved audio, as context, with a note of which saw it. It is not a flag and never stops the test.
 
 •  Flags for focus loss, copy attempts, a question held open far longer than the candidate's own typical time and then
 
@@ -61,7 +71,7 @@ Making sense of the ﬂags
 
 numbers, question details (section, and difficulty where known), how the candidate compares with their sitting, the
 candidate's score and overall pace, and anything that could explain the ﬂags innocently, such as a dropped connection, a
-page reload or the candidate's own self-report. Score and pace are shown as context only and are never ﬂagged on their
+page reload or the candidate's own self-report. Any muted or silent microphone stretches, from the browser or the server scan, are listed with them as context. Score and pace are shown as context only and are never ﬂagged on their
 own, because strong candidates are often both fast and accurate. The packet uses the candidate ID, never the name.
 
 •  A local AI model, running on Ollama, assesses each packet: whether the ﬂags support each other, whether the logs offer an
@@ -100,11 +110,16 @@ into Cytonn's recruitment system. (Out of scope for now)
 
 build); and a check for questions whose success rate jumps, which would suggest a leak. (Out of scope for now)
 
+•  Testing against a virtual camera, such as the OBS Virtual Camera (a fake webcam feed), and using a muted microphone as a
+   scripted-run or pilot scenario. Camera and microphone names are still logged for the reviewer. The microphone muting checks
+   above are built and unit-tested, but no scripted cheater run or pilot role is built around a virtual camera or a muted
+   microphone. (Out of scope for now)
+
 Every ﬂag is evidence for a human reviewer, never an automatic rejection. Only two outcomes are automatic: the test does not
 start until the camera and microphone work, and requests not sent from a veriﬁed Safe Exam Browser session are rejected. The
 cash cost is close to zero: the tools are free, the AI runs locally, and video storage is under Ksh 5 per candidate before deletion.
 Known limits remain: a candidate photographing the screen with a phone, a second device or person kept out of frame, help
-through a hidden earpiece, steady low-level cheating that avoids timing outliers, and questions memorised and shared after the
+through a hidden earpiece, a microphone muted in a way the checks do not catch, steady low-level cheating that avoids timing outliers, and questions memorised and shared after the
 test. These are reduced, not eliminated.
 
 How We Will Know It Works
@@ -118,8 +133,8 @@ How it is tested
 
 Rule-based checks catch scripted actions
 
-Scripted tests, one run inside real Safe Exam Browser, OBS
-virtual camera, a muted microphone
+Scripted tests, one run inside real Safe Exam Browser
+(virtual-camera and muted-microphone scenarios are out of scope)
 
 Honest volunteers wrongly ﬂagged
 

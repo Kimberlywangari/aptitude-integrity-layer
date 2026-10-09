@@ -1,7 +1,7 @@
 # Week 3: Per-question check, AI ranking, reviewer app, deletion, pilot (+ handover)
 
 **Dates:** Thu 22 Oct – Wed 28 Oct 2026, then Thu 29 Oct (handover) · **Days:** D11 Thu 22 · D12 Fri 23 · (Sat–Sun buffer) · D13 Mon 26 · D14 Tue 27 · D15 Wed 28 · Handover Thu 29
-**Branch:** `week-03` (from `main` at tag `week-2`) · **Tag at end:** `week-3`
+**Branches:** one per task (`<type>/<short-task>`, see [master plan §5](00-master-plan.md#5-working-method)), started from `main` at tag `week-2` · **Tag on `main` at end of week:** `week-3`
 **Back to:** [00-master-plan.md](00-master-plan.md) · **Previous:** [week-02.md](week-02.md)
 
 ## Goal
@@ -24,7 +24,7 @@ Reviewers can work a ranked queue and jump to the right moment in the video. A l
 **Confirm by Mon 26 Oct:**
 - [ ] Pilot date, time, venue and network, and the volunteer list (≥ 10 honest, 6 scripted cheaters, an observer).
 - [ ] Reviewer logins and the decision outcomes Cytonn wants.
-- [ ] The answer on the "flagged" definition (rule score ≥ 1.0) and on virtual-camera policy.
+- [ ] The answer on the "flagged" definition (rule score ≥ 1.0).
 
 ---
 
@@ -34,7 +34,7 @@ Reviewers can work a ranked queue and jump to the right moment in the video. A l
 
 ### Steps
 
-- [ ] **1. Branch (2 min):** `git switch main; git switch -c week-03`.
+- [ ] **1. Branch (2 min):** `git switch main`, then one branch per task, for example `git switch -c feat/per-question-check`. Merge each into `main` with `--no-ff` when its tests pass. Suggested names: `feat/per-question-check` and `feat/ollama-ranker` (D11), `feat/fact-check-runner` and `feat/claude-adapter` (D12), `feat/reviewer-app` (D13), `feat/video-purge` and `test/pilot-dry-run` (D14), `feat/pilot-metrics` (D15), `docs/handover` (29 Oct).
 - [ ] **2. Per-question check (75 min):** `services/flags/history.py` (pure function) + wire into `compute_session_flags`.
   - For each answer that was correct and has `question_stats` with `n ≥ 30`: fast if `time < 0.5 × p25_s` (ratio from `FlagConfig`).
   - Flag `FAST_CORRECT_VS_HISTORY` only if the candidate has **at least 2** such questions. Weight 2; any hard question in the set multiplies by 1.5. `detail` lists question numbers, times, p25 and difficulty, and `history_source` (`cytonn` or `synthetic`).
@@ -135,7 +135,7 @@ git commit -m "feat(eval): AI explanation accuracy script and hand-check sheet"
 - [ ] **5. Reviewer UI (150 min)**, routes under `/review`:
   - `Login.tsx`.
   - `Queue.tsx`: table (rank, candidate ID, flag chips, an "AI advisory" badge with strength or "rules only", decision status); filter by sitting.
-  - `CandidateDetail.tsx`: packet summary (flags with times and question numbers; how the candidate compares with the sitting; score and pace labelled *context only*; innocent signals highlighted), the explanation text with a clear "AI-generated, advisory, not a verdict" label, complaints, past decisions.
+  - `CandidateDetail.tsx`: packet summary (flags with times and question numbers; how the candidate compares with the sitting; score and pace labelled *context only*; innocent signals highlighted; muted or silent mic stretches from `mic_silence[]` listed as context with their times and a **Jump to video** button using the same seek maths), the explanation text with a clear "AI-generated, advisory, not a verdict" label, complaints, past decisions.
   - `VideoPlayer.tsx`: an HTML `<video controls>`; each flag has a **Jump to video** button that sets `currentTime` to `seek_s`, shows "starting 5 s before the moment", and handles `no_video_at_moment`.
   - `DecisionForm.tsx`: outcome select + required reason + confirm.
   - Plain, readable styling only. Function over looks (cut-list item 3).
@@ -173,19 +173,17 @@ git commit -m "test(review): auth, validation, audit and seek accuracy script"
   - **Test (this is the "deletion works" criterion):** with a `FakeClock`, create decisions at day −31, −30 (boundary) and −29; run purge; the −31 and −30 cases are deleted and the −29 case is kept; files are gone from disk; a second run does nothing; the video endpoint returns 410. **Real-clock version:** `update decisions set decided_at = now() - interval '31 days' where …;` then run the CLI.
 - [ ] **2. Remove dev-only bits (15 min):** delete `GET /api/spike/echo`; make sure `CHUNK_FAIL_RATE` and `?sim=drop-events` are off by default and ignored when `ENV=production`; `SEB_MODE=enforce`.
 - [ ] **3. Full scripted run in real SEB (75 min):** everything in `eval/scripted_actions.md`, performed by hand inside SEB through `http://localhost:8080`, once. For each action write down *whether SEB lets the action happen at all* (Alt+Tab is probably blocked, in which case the action cannot occur and cannot be "caught"; list those as "prevented by SEB"). Include:
-  - OBS Virtual Camera as the camera in one run (device label logged);
-  - mic muted at OS level mid-test (`mic_muted` event, appears in the packet as context);
   - a long hold, a copy attempt, an idle gap, a correct run.
   Then `close_sitting`, `compute_flags`, `rank`; confirm every performed action produced its flag. Save the result in `eval/reports/scripted-run-seb.md`.
 - [ ] **4. Dry run of the pilot (120 min):** use 2–3 people (or you on two machines) and run the **entire** pilot procedure with the real SEB config and the Compose stack:
   1. start the stack: `docker compose up -d`; start Ollama; check `/api/health`;
   2. hand out invite tokens, start SEB with the config, sit the test;
   3. observers log planted actions with wall-clock time;
-  4. close the sitting, compute flags (cohort checks are skipped below 8 — expected), build packets, rank with Ollama;
+  4. close the sitting, compute flags (cohort checks are skipped below 8 — expected), run the silence scan, build packets, rank with Ollama;
   5. log in as a reviewer, check each flag's video jump, record decisions;
   6. time every step.
   Fix anything that blocks. Anything that doesn't block goes to the post-pilot list.
-- [ ] **5. Prepare pilot-day material (60 min):** `eval/pilot/runbook.md` (start-up checklist, network check, what to do if SEB won't start, who does what), `eval/pilot/cheater-scripts.md` (6 scripts, below), `eval/pilot/observer-sheet.md` (per planted action: candidate ID, action, **wall-clock time to the second**), `eval/pilot/volunteer-brief.md` (what is recorded, data use ≈ 80 MB/h, Wi-Fi, consent wording, where to complain).
+- [ ] **5. Prepare pilot-day material (60 min):** `eval/pilot/runbook.md` (start-up checklist, network check, what to do if SEB won't start, who does what), `eval/pilot/cheater-scripts.md` (6 scripts, below), `eval/pilot/observer-sheet.md` (per planted action: candidate ID, action, **wall-clock time to the second**), `eval/pilot/volunteer-brief.md` (what is recorded, data use ≈ 80 MB/h, Wi-Fi, consent wording, where to complain, and the `MIC_NOTICE` line from master plan §7.8: keep the mic on for the whole test, and the warning is shown to the reviewer).
   - Suggested scripted roles: **C1** tab-out to look something up on 4 questions; **C2** copy the question text on 3 questions; **C3** go idle for 90 s, then answer 4 questions quickly and correctly; **C4** answer every question in a near-identical short time; **C5** answer many questions correctly in a fraction of the usual time; **C6** a mixed set (one tab-out, one copy, one long hold). Each also performs 5–6 timed, observer-logged actions for the video-timing check.
   - Also assign two honest volunteers to go offline for 2 minutes (the chunk-loss criterion).
 - [ ] **6. Freeze (30 min):** `pg_dump` a backup; run the whole test suite; tag `rc-pilot`; from now on, only fixes for blockers.
@@ -194,7 +192,7 @@ git commit -m "test(review): auth, validation, audit and seek accuracy script"
 Backdated deletion test passes (fake clock **and** real SQL clock). The SEB scripted run file is complete. The dry run completes end to end with no blocker open.
 
 ### If behind
-Do steps 1, 3 and 4 in that order; step 5 can be done on the evening of D14 or the morning of D15 before volunteers arrive. Skip the OBS-in-SEB run only if it can't be set up; say so in the report.
+Do steps 1, 3 and 4 in that order; step 5 can be done on the evening of D14 or the morning of D15 before volunteers arrive. Virtual-camera (OBS) and muted-mic runs are out of scope and are not part of the SEB run.
 
 ### Commits
 ```
@@ -222,6 +220,7 @@ git tag rc-pilot
   ```powershell
   python -m scripts.jobs close_sitting --sitting <id>
   python -m scripts.jobs compute_flags --sitting <id>      # includes cohort checks (sitting ≥ 8, closed)
+  python -m scripts.jobs detect_silence --sitting <id>     # server scan for muted/silent mic stretches
   python -m scripts.jobs build_packets --sitting <id>
   python -m scripts.jobs rank --sitting <id> --provider ollama   # records seconds per candidate
   ```
@@ -243,7 +242,7 @@ git tag rc-pilot
   Write the caveats the proposal already promises: 12–16 people is indicative, not proof; define "flagged" as you did (rule score ≥ 1.0) and "top third" as among queued candidates; if the pilot had fewer than 8 finished sessions, the cohort checks did not run and you must say so.
 - [ ] **6. Hand-check the AI explanations (30 min):** tick off the CSV from D12 against the packets.
 - [ ] **7. Look at the misses (30 min):** for every cheater not caught and every honest volunteer flagged, write down which flag/rule is responsible and what you would change. Do **not** change the thresholds today to make the numbers look better; list proposed changes for the handover.
-- [ ] **8. Wrap up (30 min):** merge `week-03` into `main`, tag `week-3`, back up the database and the report.
+- [ ] **8. Wrap up (30 min):** make sure every task branch is merged into `main`, tag `week-3` on `main`, back up the database and the report.
 
 ### Definition of done for Week 3
 - [ ] Reviewer app works end to end; decisions need written reasons; decisions and video views are audited.
@@ -256,7 +255,8 @@ git tag rc-pilot
 ```
 git commit -m "feat(eval): pilot metrics scripts and truth-file format"
 git commit -m "docs(eval): pilot report"
-git switch main; git merge --no-ff week-03 -m "merge: week 3 (per-question check, AI ranking, reviewer app, deletion, pilot)"
+# all task branches are now merged into main
+git switch main
 git tag week-3
 ```
 
@@ -272,7 +272,7 @@ git tag week-3
   - what was built and how to run it (`docker compose up`, Ollama, create a reviewer, import a question summary, run a sitting, run the jobs);
   - the environment variables (master plan §3) and what each does;
   - the decision log: thresholds in `flags/config.py` and why, "flagged" = rule score ≥ 1.0, the 30 days run from the **latest** decision, queue/video visibility rules, packet contents;
-  - **known limits**, from the proposal (phone photos, second device or person, earpiece, steady low-level cheating, memorised/shared questions) plus the ones found while building: SEB key verification can be spoofed by anyone who holds the key, heartbeats and chunks are not SEB-verified, only Windows was tested, what the page cannot observe inside SEB (from the D2 findings), what happens if upload can't finish (your D2 plan);
+  - **known limits**, from the proposal (phone photos, second device or person, earpiece, steady low-level cheating, memorised/shared questions) plus the ones found while building: the mic-muting limits in master plan §7.8 (which mutes the page can see, a faint-hiss mic, background noise played into the mic), SEB key verification can be spoofed by anyone who holds the key, heartbeats and chunks are not SEB-verified, only Windows was tested, what the page cannot observe inside SEB (from the D2 findings), what happens if upload can't finish (your D2 plan);
   - **untested items:** Mac and iPad, `ClaudeRanker` live (mocked only), HTTPS hosting, scale beyond the pilot;
   - **open sign-offs from Cytonn:** DPIA, consent wording, storage location, retention (including what deletes video for candidates with no decision), complaint process, reviewer outcomes;
   - the pilot results and the changes you propose.

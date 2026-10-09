@@ -1,6 +1,5 @@
 # Master Plan: Aptitude Test Integrity Layer
 
-Source: [../proposal.md](../proposal.md). Build window: Thu 8 Oct – Wed 28 Oct 2026, handover Thu 29 Oct.
 Weekly detail: [week-01.md](week-01.md) · [week-02.md](week-02.md) · [week-03.md](week-03.md)
 
 ---
@@ -12,7 +11,7 @@ Weekly detail: [week-01.md](week-01.md) · [week-02.md](week-02.md) · [week-03.
 **What it does**
 
 1. Locks the test inside Safe Exam Browser (SEB). The server rejects answers that don't come from a verified SEB session.
-2. Records webcam and microphone for every candidate, at low resolution, in short chunks saved on the device first and then uploaded in order with retries. The test cannot start until camera and microphone work.
+2. Records webcam and microphone for every candidate, at low resolution, in short chunks saved on the device first and then uploaded in order with retries. The test cannot start until camera and microphone work. If the microphone looks muted or silent during the test, a non-blocking banner warns the candidate and the stretch is logged for the reviewer (§7.8).
 3. Logs actions, not keystrokes: answers, skips, focus loss and return, copy attempts (length only), idle time, plus a 10-second heartbeat.
 4. Raises rule-based flags per candidate, per sitting (cohort), and per question (against past sittings).
 5. Bundles each flagged candidate's flags into an evidence packet, ranks them by simple rules, and (week 3) has a local AI model on Ollama re-rank them and write a short explanation, with a fact check and a fallback to the rule order.
@@ -25,10 +24,11 @@ Weekly detail: [week-01.md](week-01.md) · [week-02.md](week-02.md) · [week-03.
 - Score and pace are context only and are never flagged on their own.
 - Packets use the candidate ID, never a name. Copy events record length, never text.
 - Dropped connections and page reloads are shown to the reviewer as context, not flagged.
+- A muted or silent microphone mid-test gets a warning banner and a log entry, and is shown to the reviewer as context. It never stops the test and is never a flag.
 
 **Goals (the proposal's success table)** are listed with a test and a day in section 9.
 
-**Out of scope (don't build):** face/voice/expression/mouse analysis, keylogging, answer-similarity comparison, watermarking, automatic rejection, ID verification, per-question timers, test-format changes, links into Cytonn's recruitment system, verifying every request (heartbeats and chunks), Mac/iPad testing, question-leak detection.
+**Out of scope (don't build):** face/voice/expression/mouse analysis, keylogging, answer-similarity comparison, watermarking, automatic rejection, ID verification, per-question timers, test-format changes, links into Cytonn's recruitment system, verifying every request (heartbeats and chunks), Mac/iPad testing, question-leak detection, testing with a virtual camera (OBS or any other fake webcam feed), a muted microphone as a scripted-run or pilot scenario (the muting detection itself is built, §7.8).
 
 ---
 
@@ -40,13 +40,15 @@ Weekly detail: [week-01.md](week-01.md) · [week-02.md](week-02.md) · [week-03.
 | A2 | Weekly files give concrete steps: files, endpoints, tables, PowerShell commands, expected output. | Confirmed with you. |
 | A3 | Pilot stays on **Wed 28 Oct**; **Tue 27 Oct** is the full dry run and code freeze. | Confirmed. Zero slack after the pilot is a known risk (R3). |
 | A4 | Ollama runs on **your laptop** (spec unknown yet) while the Claude API payment is pending. D1 records the spec; D11 benchmarks and picks the model. The Claude adapter is built and tested with mocked responses and switched on with `AI_PROVIDER=claude` later. | Confirmed. |
-| A5 | Python 3.12 (3.11 works), TypeScript on the frontend, Windows 11, PowerShell. | Matches your machine. |
+| A5 | Python **3.13** (3.12 or newer works; this laptop's default 3.14 is avoided for now), TypeScript on the frontend, Windows 11, PowerShell. | Matches your machine (checked on D1). |
 | A6 | One origin for UI and API (Vite proxy in dev, nginx in compose). | SEB's request hash includes the exact URL. |
 | A7 | No candidate names are stored. Invitation tokens map to opaque candidate IDs. | Proposal says packets use IDs, never names. |
 | A8 | Only Windows + SEB is tested. | Proposal says so. |
 | A9 | Flag thresholds in section 7 are my proposed defaults. All live in one config file and are meant to be tuned on synthetic honest data. | The proposal says "far longer", "far from typical" without numbers. |
 | A10 | "Flagged" = rule score ≥ 1.0, or a logging problem. A lone focus loss (0.5) does not enter the queue. | Needed so honest candidates aren't flooded in. **Confirm with Douglas** (§10, "Policy and metrics"). |
 | A11 | Week 4 day 1 (29 Oct handover) is a closing section in `week-03.md`, not a fourth file. | You asked for a three-week plan. |
+| A12 | **One git branch per task**, named `<type>/<short-task>`, merged into `main` with `--no-ff` when its tests pass. You run the commits and merges; Claude builds each task and stops. | Changed on D1 (was one branch per week). |
+| A13 | Compose Postgres is on host port **5433** (a local Postgres already uses 5432). ffmpeg is installed on D7, not D1. Docker Desktop must be started by hand. | Found by checking this laptop on D1. |
 
 ---
 
@@ -54,20 +56,20 @@ Weekly detail: [week-01.md](week-01.md) · [week-02.md](week-02.md) · [week-03.
 
 | Layer | Choice | Notes |
 |---|---|---|
-| API | FastAPI, Uvicorn | Python 3.12 |
-| DB | PostgreSQL 16, SQLAlchemy 2, Alembic, `psycopg[binary]` | Migrations per day, never edit old migrations |
+| API | FastAPI, Uvicorn | Python 3.13 |
+| DB | PostgreSQL 16, SQLAlchemy 2, Alembic, `psycopg[binary]` | Migrations per day, never edit old migrations. Compose maps the database to host port 5433; the tests use a second database, `integrity_test`, in the same container |
 | Config / validation | pydantic v2, pydantic-settings | One `Settings` class; `.env` file |
 | HTTP client | httpx | Ollama and Claude adapters |
-| Video | `ffmpeg` / `ffprobe` | Remux MediaRecorder WebM so it seeks; check chunk 0 has video + audio. `winget install Gyan.FFmpeg` locally; installed in the API image |
+| Video | `ffmpeg` / `ffprobe` | Remux MediaRecorder WebM so it seeks; check chunk 0 has video + audio. Install ffmpeg manually on D7 (`winget` is not on PATH on this laptop); installed in the API image |
 | Auth (reviewers) | `bcrypt` + signed tokens (`itsdangerous`) | Simple, no external IdP |
 | AI | Ollama (local), `anthropic` SDK as an optional extra | Behind one `Ranker` interface |
 | Tests (backend) | pytest, pytest-asyncio, httpx `TestClient` | Fake clock injected everywhere time matters |
 | Frontend | React 18, Vite, TypeScript, react-router, TanStack Query, `idb` | IndexedDB for events and video chunks |
 | Tests (frontend) | Vitest + Testing Library, Playwright | Playwright drives scripted cheater runs |
 | Infra | Docker Compose: `db`, `api`, `web` (nginx), `worker`. Ollama runs on the host | `OLLAMA_BASE_URL=http://host.docker.internal:11434` |
-| Tools | SEB for Windows + SEB Config Tool, OBS Studio (virtual camera) | Install on D1 |
+| Tools | SEB for Windows + SEB Config Tool | Install on D1. No OBS: virtual-camera testing is out of scope |
 
-**Environment variables** (`.env.example`): `DATABASE_URL`, `PUBLIC_BASE_URL`, `SESSION_SECRET`, `SEB_MODE` (`off`|`log`|`enforce`), `SEB_ALLOWED_KEYS`, `VIDEO_ROOT`, `RETENTION_DAYS=30`, `AI_PROVIDER` (`rules`|`ollama`|`claude`), `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `CLAUDE_MODEL`, `ANTHROPIC_API_KEY`, `CHUNK_FAIL_RATE` (dev only, fault injection).
+**Environment variables** (`.env.example`): `ENV`, `DATABASE_URL`, `TEST_DATABASE_URL`, `PUBLIC_BASE_URL`, `SESSION_SECRET`, `SEB_MODE` (`off`|`log`|`enforce`), `SEB_ALLOWED_KEYS`, `VIDEO_ROOT`, `RETENTION_DAYS=30`, `AI_PROVIDER` (`rules`|`ollama`|`claude`), `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `CLAUDE_MODEL`, `ANTHROPIC_API_KEY`, `CHUNK_FAIL_RATE` (dev only, fault injection).
 
 ---
 
@@ -82,7 +84,7 @@ aptitude-integrity-layer/
 ├── docs/
 │   ├── proposal.md / proposal.pdf
 │   ├── plan/                      # these files
-│   ├── spikes/                    # laptop-specs.md, seb-findings.md, video-anchor.md, question-data.md,
+│   ├── spikes/                    # laptop-specs.md (local only, git-ignored), seb-findings.md, video-anchor.md, question-data.md,
 │   │                              # threshold-tuning.md, ollama-benchmark.md
 │   ├── candidate-notice.md        # device-requirement + data-use text, for Cytonn's registration page
 │   └── handover.md                # written on 29 Oct
@@ -107,6 +109,7 @@ aptitude-integrity-layer/
 │   │       ├── packets.py
 │   │       ├── ranking/    base.py rules.py ollama.py claude.py prompts.py factcheck.py runner.py
 │   │       ├── video/      store.py assemble.py seek.py purge.py
+│   │       ├── audio/      silence.py                      # server scan for silent stretches (§7.8)
 │   │       └── blueprint/  generator.py validator.py        # stretch S1
 │   ├── scripts/        seed_synthetic.py import_question_summary.py simulate_cohort.py jobs.py
 │   └── tests/          unit/ integration/ fixtures/
@@ -115,9 +118,9 @@ aptitude-integrity-layer/
 │   ├── public/spike/   (D2 SEB spike page)
 │   ├── src/
 │   │   ├── lib/        api.ts session.ts eventLogger.ts heartbeat.ts heartbeatWorker.ts
-│   │   │               media.ts recorder.ts chunkQueue.ts uploader.ts
+│   │   │               media.ts micWatch.ts recorder.ts chunkQueue.ts uploader.ts
 │   │   ├── candidate/  Start.tsx NotSeb.tsx PreCheck.tsx Integrity.tsx TestRunner.tsx
-│   │   │               SelfReport.tsx UploadStatus.tsx Complaint.tsx
+│   │   │               SelfReport.tsx UploadStatus.tsx Complaint.tsx MicBanner.tsx
 │   │   └── reviewer/   Login.tsx Queue.tsx CandidateDetail.tsx VideoPlayer.tsx DecisionForm.tsx
 │   ├── tests/          (Vitest)
 │   └── e2e/            (Playwright scripted-cheater specs)
@@ -133,7 +136,7 @@ aptitude-integrity-layer/
 
 ## 5. Working method
 
-- **Branch per week:** `week-01`, `week-02`, `week-03`. Merge to `main` at the end of each week and tag (`week-1`, `week-2`, `week-3`).
+- **Branch per task**, named `<type>/<short-task>` where the type is the commit prefix (`feat`, `fix`, `chore`, `docs`, `test`, `spike`). Examples: `chore/repo-base`, `feat/synthetic-seed`, `spike/seb-recording-test`. Start each from an up-to-date `main`, commit in small steps, and merge into `main` with `git merge --no-ff <branch>` once that task's tests pass. Tag `main` at the end of each week (`week-1`, `week-2`, `week-3`). Suggested branch names for each day are in the weekly files.
 - **Daily rhythm:** build in the morning, test in the afternoon, last 30 minutes: run the full test suite, commit, tick the boxes in the weekly file, write one line of "what I changed from the plan" in the commit body.
 - **Test pyramid:** pytest unit tests on pure functions (flag rules, scoring, fact check, seek maths) → pytest integration tests on a test database → Vitest for browser logic (logger, queue, uploader) → Playwright for scripted cheater runs → a manual SEB checklist every Friday → the pilot.
 - **Everything time-based takes an injected clock** (`app/clock.py`), so timer expiry, heartbeat gaps and 30-day deletion are testable without waiting.
@@ -180,6 +183,7 @@ aptitude-integrity-layer/
 | `events` | `session_id`, `client_seq`, `type`, `server_ts`, `received_at`, `payload` (unique on session + client_seq) |
 | `heartbeats` | `session_id`, `server_ts` |
 | `video_chunks` | `session_id`, `segment`, `seq`, `bytes`, `sha256`, `path`, `received_at`, `deleted_at` |
+| `audio_silences` | `session_id`, `segment`, `start_s`, `end_s`, `start_server_ts`, `end_server_ts` (server scan of the saved audio, §7.8) |
 | `flags` | `session_id`, `kind`, `weight`, `server_ts`, `position`, `detail`, `source` |
 | `sitting_stats` | `sitting_id`, metric, `median`, `mad`, `n` (cohort baselines) |
 | `packets` | `session_id`, `json`, `built_at` |
@@ -195,11 +199,11 @@ Candidate (bearer = per-session token): `POST /api/session/start`, `POST /api/se
 
 Reviewer (bearer = reviewer token): `POST /api/review/login`, `GET /api/review/queue`, `GET /api/review/candidates/{id}`, `GET /api/review/candidates/{id}/video`, `POST /api/review/candidates/{id}/video-view`, `POST /api/review/decisions`, `POST /api/review/candidates/{id}/shortlist`.
 
-CLI jobs (`python -m scripts.jobs <name>`): `seed_synthetic`, `import_question_summary`, `simulate_cohort`, `close_sitting`, `compute_flags`, `build_packets`, `rank`, `mark_incomplete_uploads`, `purge_videos`, `create_reviewer`, and `loop` (the worker's hourly runner for the purge and incomplete-upload jobs).
+CLI jobs (`python -m scripts.jobs <name>`): `seed_synthetic`, `import_question_summary`, `simulate_cohort`, `close_sitting`, `compute_flags`, `build_packets`, `rank`, `mark_incomplete_uploads`, `detect_silence`, `purge_videos`, `create_reviewer`, and `loop` (the worker's hourly runner for the purge and incomplete-upload jobs).
 
 ### 7.3 Event types
 
-`page_load`, `reload`, `question_opened`, `answered`, `skipped`, `focus_lost`, `focus_returned`, `visibility_hidden`, `visibility_visible`, `copy_attempt{length}`, `cut_attempt{length}`, `paste_attempt`, `contextmenu_attempt`, `idle_start`, `idle_end{duration_s}`, `connection_lost`, `connection_restored`, `device_info{camera_label, mic_label}`, `mic_muted`, `mic_unmuted`, `camera_dropped`, `track_ended`, `recording_started{segment}`, `upload_incomplete`.
+`page_load`, `reload`, `question_opened`, `answered`, `skipped`, `focus_lost`, `focus_returned`, `visibility_hidden`, `visibility_visible`, `copy_attempt{length}`, `cut_attempt{length}`, `paste_attempt`, `contextmenu_attempt`, `idle_start`, `idle_end{duration_s}`, `connection_lost`, `connection_restored`, `device_info{camera_label, mic_label}`, `mic_muted`, `mic_unmuted`, `mic_silent_start`, `mic_silent_end{duration_s}`, `camera_dropped`, `track_ended`, `recording_started{segment}`, `upload_incomplete`.
 
 Events sent late (after a dropped connection) carry `age_ms`, so the server computes `server_ts = server_receive_time − age_ms`. The server clock is the only clock that counts, and late events don't get a misleading time.
 
@@ -220,7 +224,7 @@ Events sent late (after a dropped connection) carry `age_ms`, so the server comp
 
 ### 7.5 Evidence packet (JSON, candidate ID only)
 
-`candidate_id`, `flags[]` (id, kind, `server_ts`, `elapsed_s`, `question_number`, `detail`), `questions[]` (number, section, difficulty or null), `vs_sitting` (percentiles, or `cohort_skipped: too_small`), `score`, `pace_s_per_q`, `innocent_signals[]` (drops, reloads, device events, self-report category and short note), `video_anchor`, and a `facts` block: every question number, whole-second time and count the packet contains. The AI sees `facts`, and the fact checker uses it.
+`candidate_id`, `flags[]` (id, kind, `server_ts`, `elapsed_s`, `question_number`, `detail`), `questions[]` (number, section, difficulty or null), `vs_sitting` (percentiles, or `cohort_skipped: too_small`), `score`, `pace_s_per_q`, `innocent_signals[]` (drops, reloads, device events, self-report category and short note), `mic_silence[]` (muted or silent stretches: start and end `server_ts`, `duration_s`, which layers saw it; context only, never a flag), `video_anchor`, and a `facts` block: every question number, whole-second time and count the packet contains. The AI sees `facts`, and the fact checker uses it.
 
 ### 7.6 AI assessment (strict JSON)
 
@@ -237,6 +241,24 @@ Fact check: every cited value must be in the packet; every number and "Q" refere
 | Slower than 2 min per packet | shrink the packet, drop a tier, or send only the top-N rule-ranked packets to the AI and use the rule order for the rest (nobody is lost) |
 
 Settings: temperature 0, `num_ctx` 4096, `stream: false`, JSON schema passed as `format`.
+
+### 7.8 Microphone muting checks
+
+A web page cannot stop a candidate muting the microphone (a hardware switch, a headset button, the Windows privacy toggle). So the plan detects it in three layers: the browser layers (1 and 2) warn the candidate live, and all three layers feed what the reviewer is shown. It never blocks the test and never raises a flag.
+
+| Layer | Where | How | Result |
+|---|---|---|---|
+| 1. Track events | Browser, `lib/media.ts` | `onmute` / `onunmute` on the audio track | `mic_muted` / `mic_unmuted` logged at once; a mute counts toward the banner timer in layer 2 |
+| 2. Live level watch | Browser, `lib/micWatch.ts` | An `AnalyserNode` on the shared stream, read every 250 ms. A window is *flat* when its peak sample is below `MIC_FLAT_PEAK` (default 0.0005). Audio is requested with `echoCancellation`, `noiseSuppression` and `autoGainControl` all `false`, so a live mic in a quiet room keeps a faint noise floor and a muted one stays flat | After `MIC_SILENCE_SECONDS` (default 60) of flat signal or mute: banner plus `mic_silent_start` (back-dated to when the flat run began). Signal back for 1 s: banner clears plus `mic_silent_end{duration_s}` |
+| 3. Server scan | `services/audio/silence.py`, job `detect_silence` | After assembly (D8): `ffmpeg -i seg.webm -vn -af silencedetect=noise=-65dB:d=60 -f null -`, parsing `silence_start` / `silence_end`. Thresholds in `MIC_SILENCE_DB` and `MIC_SERVER_MIN_SILENCE_SECONDS` | Rows in `audio_silences`; `server_ts` = segment start + offset (the D7 anchor formula) |
+
+**Banner** (`MicBanner.tsx`): non-blocking, `role="status"`, above the question and clear of the options and the Submit button. Text (placeholder): "Your microphone looks muted or silent. Please unmute it and keep it on for the whole test. Your test continues." The countdown and the answer buttons are untouched.
+
+**Packet:** `build_packet` merges the layers into `mic_silence[]`: every stretch the server scan (layer 3) found and every stretch the browser (layers 1 and 2) reported, which is the same moment the candidate saw the banner. Stretches that overlap in time are listed once, and the entry lists which layers saw it (`server`, `browser`, or both), so the reviewer can tell whether the candidate was warned and whether the saved audio confirms it. A browser-only stretch (for example when the audio never uploaded) and a server-only stretch (for example lost events or a closed tab) both appear. Run `detect_silence` before `build_packet`; without it only browser stretches appear. These stretches add no flag and no weight to the rule score. Their times and counts go in `facts` so the AI can cite them. A stretch shorter than `MIC_SILENCE_SECONDS` (60 s) is left out of the packet; the raw events stay in the `events` table. A "stretch" means 1 minute or more of mute or silence, the same figure for the banner (layer 2) and the server scan (layer 3), so a quick mute to cough triggers nothing.
+
+**Candidate wording** (one constant, `MIC_NOTICE` in `copy.ts`, placeholder until Cytonn approves): "Keep your microphone on for the whole test. If it is muted for a while you will see a warning which will be shown to your reviewer." Used in the device notice (D6, also `docs/candidate-notice.md`), the integrity statement (D3) and the volunteer brief (D14).
+
+**Known limits (list in the handover):** a stretch only the browser saw (for example when the audio never uploaded) is not confirmed by the saved audio, which is why each entry shows which layers saw it; layer 1 depends on whether SEB's browser fires `mute` for OS and hardware mutes (D2 spike check 12 finds out); a mic that outputs a faint hiss when muted passes layer 2; background noise played into the mic defeats all three layers; a very quiet, noise-gated mic can look silent, which is why this is context and not a flag. Thresholds are set on D6 against a live quiet room and a muted mic, and rechecked on D8.
 
 ---
 
@@ -257,11 +279,11 @@ Ordered by how much they can hurt you. "Handling" is what the plan does about ea
 | R9 | **Retention hole.** Videos are deleted 30 days after a *review decision*. Candidates who are never flagged, never shortlisted, or never reviewed have no decision, so nothing deletes their video. Also, "shortlisted" has no source (no link to Cytonn's system). | Reviewers mark candidates shortlisted in the app. Deletion job also reports undecided sessions older than a limit for a human to decide. Ask Cytonn (§10, "Needed for review and retention"). |
 | R10 | **Thresholds are undefined** ("far longer", "far from typical", idle time, "run", what counts as flagged). | Section 7.4 defaults, all configurable, tuned on the synthetic honest cohort, never on the cheaters alone. |
 | R11 | **Promised but not scheduled:** complaint filing, device-requirement notice, data-use/Wi-Fi notice, integrity statement and self-report wording, reviewer login, reviewer outcome options. | Each is placed on a day (complaints D8; notices D6; integrity/self-report D3; reviewer login and outcomes D13). Wording is a placeholder until Cytonn supplies it. |
-| R12 | **Virtual camera and muted mic.** The scripted-test criterion mentions OBS and a muted microphone but not what the system should do. | Pre-check gate needs a working camera and mic. Device labels and mic mute/unmute are logged as context. Interpretation used: pass pre-check normally, then mute the mic mid-test and use OBS as the camera in a separate run. Ask Cytonn (§10, "Policy and metrics"). |
+| R12 | **Mic muted after the pre-check; virtual camera.** The proposal gates the start on a working mic but says nothing about muting afterwards, and a page cannot prevent it. The scripted-test criterion also mentioned OBS; virtual-camera testing is out of scope. | Three-layer detection (§7.8): browser mute events, a live level watch and a server scan of the saved audio. Warn with a non-blocking banner, log, show the reviewer as context; no block and no flag. The notice tells candidates the mic must stay on. Virtual camera and muted mic are not scripted-run or pilot scenarios. Confirm with Cytonn (§10). |
 | R13 | **AI "ranks" vs a small context window.** Ranking all candidates in one prompt won't fit on a laptop. | Assess each packet separately, then sort. |
 | R14 | **Speed.** "Under 2 minutes per flagged candidate" depends on hardware nobody has named. | D11 benchmark; model tiers in 7.7; top-N fallback. |
 | R15 | **Cohort statistics are distorted by cheaters** in a group of ~14, and meaningless below ~8. | Median/MAD instead of mean/SD; below 8 the cohort checks are skipped and the packet says so. |
-| R16 | **Own laptop is server, database, AI host, and camera.** Docker Desktop + Postgres + Ollama + SEB + OBS can run out of RAM. | Measure on D1/D11. Run the AI step *after* the sitting closes, not during it. |
+| R16 | **Own laptop is server, database, AI host, and camera.** Docker Desktop + Postgres + Ollama + SEB can run out of RAM. | Measure on D1/D11. Run the AI step *after* the sitting closes, not during it. |
 | R17 | **Claude API not yet paid for.** | All acceptance runs on Ollama. The Claude adapter is tested with mocked responses only and listed as "untested live" in the handover. |
 | R18 | **Device claims.** Mac and iPad are listed as allowed but only Windows is tested. | Candidate-facing text says "tested on Windows"; flag it in the handover. |
 | R19 | **Timestamps vs offline queue.** The proposal says events are server-timestamped, but events made while offline arrive later. | `age_ms` correction (7.3). |
@@ -274,7 +296,7 @@ Ordered by how much they can hurt you. "Handling" is what the plan does about ea
 
 | Proposal criterion | Target | How it is tested | Script / test | First testable | Final run |
 |---|---|---|---|---|---|
-| Rule-based checks catch scripted actions | 100% | Scripted tests; one run in real SEB with OBS virtual camera and a muted mic | `eval/scripted_actions.md`, `tests/integration/test_scripted_scenarios.py`, `frontend/e2e/scripted-cheater.spec.ts` | D5 | D14 (real SEB) |
+| Rule-based checks catch scripted actions | 100% | Scripted tests; one run in real SEB (virtual-camera and muted-mic scenarios are out of scope) | `eval/scripted_actions.md`, `tests/integration/test_scripted_scenarios.py`, `frontend/e2e/scripted-cheater.spec.ts` | D5 | D14 (real SEB) |
 | Honest volunteers wrongly flagged | ≤ 1 in 10 | Pilot plus a synthetic honest cohort | `eval/metrics/false_flags.py` | D10 | D15 |
 | Planted cheating caught | ≥ 8 in 10 | Pilot | `eval/metrics/compute_metrics.py` | D10 (synthetic) | D15 |
 | Planted cheaters ranked in top third | ≥ 8 in 10 | Pilot | `eval/metrics/compute_metrics.py` | D10 (synthetic) | D15 |
@@ -315,12 +337,12 @@ Ask the **blocking** ones first. "Needed by" is the day the answer starts to mat
 
 | Question |
 |---|
-| **Virtual camera and muted mic:** log only (the plan), or block? |
+| **Muted mic during the test:** the plan warns the candidate and shows silent stretches to the reviewer as context (no block, no flag). Confirm, and confirm the notice wording (§7.8). |
 | **Definition of "flagged" for the pilot metrics:** confirm "rule score ≥ 1.0 enters the queue; a lone focus loss does not", and that "top third" means among queued candidates. |
 | **Recruitment pipeline result format:** the proposal asks for it even though the link is out of scope. What is it for, and does anything need to be exported? |
 | **Production hosting:** where will the server run, with HTTPS? Who runs Ollama or pays for the Claude API? |
 | **Sign-offs for production** (these don't block the pilot): DPIA, consent wording, storage location, 30-day retention, and who owns the open items after handover. |
-| **Candidate-facing wording:** integrity statement, self-report question, device-requirement notice, data-use notice. Placeholders are used until supplied. |
+| **Candidate-facing wording:** integrity statement, self-report question, device-requirement notice, data-use notice, mic-must-stay-on notice. Placeholders are used until supplied. |
 
 ---
 

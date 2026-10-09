@@ -1,7 +1,7 @@
 # Week 1: Foundations to rule-based flags
 
-**Dates:** Thu 8 Oct – Wed 14 Oct 2026 · **Days:** D1 Thu 8 · D2 Fri 9 · (Sat–Sun buffer) · D3 Mon 12 · D4 Tue 13 · D5 Wed 14
-**Branch:** `week-01` · **Tag at end:** `week-1`
+
+**Branches:** one per task, named `<type>/<short-task>` (see [master plan §5](00-master-plan.md#5-working-method)); each is merged into `main` when its tests pass · **Tag on `main` at end of week:** `week-1`
 **Back to:** [00-master-plan.md](00-master-plan.md) (section 7 has the table, endpoint, event and flag names used below)
 
 ## Goal
@@ -31,24 +31,24 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
 
 ### Steps
 
-- [ ] **1. Branch and base files (15 min)**
-  - `git switch -c week-01`
+- [x] **1. Branch and base files (15 min)** *(done on branch `chore/repo-base`)*
+  - `git switch -c chore/repo-base` (one branch per task; see "Task branches and commits" at the end of D1).
   - Create `.gitignore` (Python: `.venv/`, `__pycache__/`, `.pytest_cache/`; Node: `node_modules/`, `dist/`; `.env`, `data/`, `*.seb`).
-  - Create `.env.example` with the variables from master plan §3 (put real values in `.env`, which is ignored).
-  - Create the folders from master plan §4 that you need today (`backend/`, `frontend/`, `seb/`, `eval/`, `docs/spikes/`).
-- [ ] **2. Record your laptop spec (10 min)**: needed for the Ollama decision on D11. In PowerShell:
+  - Create `.env.example` with the variables from master plan §3 (put real values in `.env`, which is ignored). It also has `ENV` and `TEST_DATABASE_URL`.
+  - Folders: git does not track empty folders, so each folder is created by the task that first puts a file in it (`docs/spikes/` today, `backend/` and `frontend/` in their tasks, `seb/` and `eval/` from D2/D5).
+- [x] **2. Record your laptop spec (10 min)** *(done: `docs/spikes/laptop-specs.md`, kept local and git-ignored; 15.7 GB RAM, i7-1185G7, Intel Iris Xe, no discrete GPU)*: needed for the Ollama decision on D11. In PowerShell:
   ```powershell
   Get-CimInstance Win32_ComputerSystem | Select-Object @{n='RAM_GB';e={[math]::Round($_.TotalPhysicalMemory/1GB,1)}}
   Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
   Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM
   ```
   Paste the output into `docs/spikes/laptop-specs.md`.
-- [ ] **3. Install tools (30 min)**: Docker Desktop (WSL2 backend), Python 3.12, Node 20 LTS, Git, ffmpeg (`winget install Gyan.FFmpeg`), OBS Studio, Safe Exam Browser for Windows, and the SEB Config Tool (both from safeexambrowser.org). Check: `docker --version; python --version; node --version; ffmpeg -version`.
-- [ ] **4. Postgres in Compose (15 min)**: `docker-compose.yml` with one service `db` (`postgres:16`, user/password/db all `integrity` for local dev, port `5432:5432`, named volume `pgdata`, healthcheck `pg_isready`).
+- [ ] **3. Install tools (30 min)**: Docker Desktop (WSL2 backend; **start it**, the engine was not running at the start of D1), **Python 3.13** (3.12 or newer works; this laptop's default `python` is 3.14, which we avoid for now), Node 20 or newer (24 is fine), Git, Safe Exam Browser for Windows, and the SEB Config Tool (both from safeexambrowser.org). Check: `docker info; py -3.13 --version; node --version`. **ffmpeg is not needed until D7**; `winget` is not on PATH on this laptop, so download a build manually then.
+- [ ] **4. Postgres in Compose (15 min)**: `docker-compose.yml` with one service `db` (`postgres:16`, user/password/db all `integrity` for local dev, port **`5433:5432`** because a local Postgres already uses 5432 on this laptop, named volume `pgdata`, healthcheck `pg_isready`). An init script also creates a second database, `integrity_test`, which the tests use.
   - Run: `docker compose up -d db`
-  - Check: `docker compose exec db psql -U integrity -c "select 1"` → prints `1`.
+  - Check: `docker compose exec db psql -U integrity -c "select 1"` → prints `1`; the same with `-d integrity_test`.
 - [ ] **5. Backend skeleton (60 min)**
-  - `cd backend; py -3.12 -m venv .venv; .\.venv\Scripts\Activate.ps1`
+  - `cd backend; py -3.13 -m venv .venv`, then call the venv's Python directly (`.\.venv\Scripts\python.exe -m pytest`, `-m uvicorn`, `-m alembic`), which avoids `Activate.ps1` and PowerShell execution-policy problems.
   - `pyproject.toml` with dependencies: `fastapi`, `uvicorn[standard]`, `sqlalchemy>=2`, `alembic`, `psycopg[binary]`, `pydantic-settings`, `httpx`, `python-multipart`, `bcrypt`, `itsdangerous`; dev extras: `pytest`, `pytest-asyncio`, `ruff`. Then `pip install -e ".[dev]"`.
   - `app/config.py`: a `Settings(BaseSettings)` reading `.env`.
   - `app/db.py`: engine, `SessionLocal`, `get_db` dependency.
@@ -80,23 +80,17 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
 ### If behind
 Skip step 8's styling and the SEB config; D2 can start with `python -m http.server` in `frontend/public`.
 
-### Commits
-```
-git add .gitignore .env.example docs/
-git commit -m "docs: add proposal and implementation plan"
+### Task branches and commits (D1)
 
-git add docker-compose.yml backend/pyproject.toml backend/app backend/tests
-git commit -m "chore: scaffold FastAPI app, Compose Postgres, injectable clock and health route"
+The proposal and plan were already committed to `main` as `docs: add proposal and implementation plan`. From here, one branch per task. Merge each into `main` (`git switch main; git merge --no-ff <branch>`) before starting the next.
 
-git add backend/migrations backend/app/models
-git commit -m "feat(db): core tables for candidates, sittings, sessions, questions and stats"
-
-git add backend/scripts/seed_synthetic.py backend/tests/integration/test_seed.py
-git commit -m "feat(seed): idempotent synthetic question bank, stats and invitations"
-
-git add frontend
-git commit -m "chore(frontend): scaffold React + Vite + TypeScript with API proxy"
-```
+| Order | Branch | Contents | Commit message(s) |
+|---|---|---|---|
+| 1 | `chore/repo-base` | `.gitignore`, `.env.example`, plan-file updates (`docs/spikes/laptop-specs.md` stays local and git-ignored) | `docs: record D1 findings and per-task branch workflow` · `chore: add gitignore and env example` |
+| 2 | `chore/backend-scaffold` | `docker-compose.yml`, `backend/pyproject.toml`, `backend/app/*`, `backend/tests/*` | `chore: scaffold FastAPI app, Compose Postgres, injectable clock and health route` |
+| 3 | `feat/core-models` | `backend/app/models`, Alembic, `0001_core_tables`, `test_migrations.py` | `feat(db): core tables for candidates, sittings, sessions, questions and stats` |
+| 4 | `feat/synthetic-seed` | `backend/scripts/*`, `test_seed.py` | `feat(seed): idempotent synthetic question bank, stats and invitations` |
+| 5 | `chore/frontend-scaffold` | `frontend/` | `chore(frontend): scaffold React + Vite + TypeScript with API proxy` |
 
 ---
 
@@ -108,7 +102,7 @@ git commit -m "chore(frontend): scaffold React + Vite + TypeScript with API prox
 
 - [ ] **1. Spike page (90 min)**: `frontend/public/spike/index.html` + `spike.js` (plain JS, no build). It shows and logs:
   - `navigator.userAgent` (SEB adds a "SEB/…" token) and whether `window.SafeExamBrowser` exists; if it does, print `SafeExamBrowser.security` (some SEB versions expose the keys through a JS API).
-  - **Start camera + mic** button: `getUserMedia({ video: { width: 320, height: 240, frameRate: 15 }, audio: true })`; show the live preview.
+  - **Start camera + mic** button: `getUserMedia({ video: { width: 320, height: 240, frameRate: 15 }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })`; show the live preview. The three audio flags are off so a live mic keeps a noise floor and a muted one stays flat (master plan §7.8); check 12 shows whether SEB honours them. Add a small live level readout (`AnalyserNode`, peak sample) for check 12.
   - `MediaRecorder` with `mimeType: 'video/webm;codecs=vp8,opus'`, `videoBitsPerSecond: 150000`, `audioBitsPerSecond: 24000`, `start(10000)`.
   - `ondataavailable` → save each Blob into IndexedDB (database `spike`, store `chunks`, key = sequence number). Show chunk count, total bytes, and bytes per hour (extrapolated).
   - On page load, show how many chunks are **already** in IndexedDB (the survival check).
@@ -130,8 +124,8 @@ git commit -m "chore(frontend): scaffold React + Vite + TypeScript with API prox
   | 8 | Print Screen blocked. Does the page see anything? | Note both facts |
   | 9 | Alt+Tab, Win key, Ctrl+Alt+Del: does focus loss reach the page? | Note what's blocked and what isn't |
   | 10 | Quit URL quits SEB when the page navigates to it | Works / doesn't |
-  | 11 | OBS Virtual Camera appears as a camera; its label is readable via `enumerateDevices` | Label captured |
-  | 12 | Mute the mic at OS level: does the track fire `mute`? | Yes / no |
+  | 11 | ~~OBS Virtual Camera appears as a camera~~ **Out of scope:** virtual-camera testing is not part of this build. Skip. | n/a |
+  | 12 | Mute the mic at OS level (Windows privacy toggle, and a hardware switch or headset button if you have one), then unmute: does the track fire `mute` / `unmute`? Does the peak level go flat when muted, and stay above a small noise floor when unmuted in a quiet room? Are the three audio constraints honoured (`getSettings()`)? | Record yes / no for each; note the peak values. This decides how far master plan §7.8 layers 1 and 2 can be trusted |
   | 13 | CPU and RAM while recording (Task Manager) | Numbers recorded |
 
 - [ ] **5. Write the decision (30 min)** at the top of `seb-findings.md`:
@@ -141,13 +135,15 @@ git commit -m "chore(frontend): scaffold React + Vite + TypeScript with API prox
     - If check 4 fails but check 10 passes: **Plan A**: SEB cannot be closed until the upload is done; when `manifest.complete`, the page navigates to the Quit URL. If the connection is too bad, allow quit and log `upload_incomplete`; the candidate can file a complaint (the proposal's existing path).
     - If both fail: **Plan C**: record `upload_incomplete` and rely on the complaint path; raise it with Douglas now.
   - **What the page can observe** (checks 7–9) and the exact wording to use for "every blocked attempt is logged".
+  - **Mic mute visibility** (check 12): which mutes the page can see (`mute` event, flat level, neither), and the starting values for `MIC_FLAT_PEAK` and `MIC_SILENCE_SECONDS` (master plan §7.8).
   - **Which key type** works for verification.
 - [ ] **6. If recording does not work in SEB at all**: stop. Spend the rest of the day trying another SEB version or config option, then message Douglas with the evidence. The project depends on this.
 
 ### Weekend (Sat 10 – Sun 11): buffer
 Use it only to finish D1–D2 items, or to rest. Don't start D3 work.
 
-### Commits
+### Task branches and commits (D2)
+Branches: `spike/seb-recording-test` (commit 1), then `docs/seb-findings` (commit 2).
 ```
 git add frontend/public/spike backend/app/api/spike.py
 git commit -m "spike(seb): recording, IndexedDB survival and event-visibility test page"
@@ -184,7 +180,7 @@ git commit -m "docs(spike): SEB findings, go/no-go and resume-upload plan"
 - [ ] **4. Candidate screens (90 min)**: routes `/` Start (token from `?t=` or typed), `/integrity` (statement text + checkbox + "I agree"), `/test` (question, options, Submit, Skip, countdown), `/done` (self-report), `/not-seb`.
   - `lib/api.ts`: fetch wrapper that adds the bearer token (kept in `sessionStorage`) and maps 403 `seb_required` to the `/not-seb` page.
   - `TestRunner.tsx`: countdown from the server's `remaining_s` (re-synced on every response, not from the client clock); **no Back**: a `history.pushState` trap on `/test` plus a `beforeunload` prompt; the question is fetched from the server on every load, so a reload keeps the same question and time.
-  - Integrity statement text and self-report wording are placeholders until Cytonn supplies them (keep them in `src/candidate/copy.ts`).
+  - Integrity statement text and self-report wording are placeholders until Cytonn supplies them (keep them in `src/candidate/copy.ts`). The integrity statement also carries the `MIC_NOTICE` line (master plan §7.8): the mic must stay on for the whole test, and the warning is shown to the reviewer.
 - [ ] **5. Run it inside SEB (30 min)**: set `SEB_MODE=enforce`, put the key from D2 in `SEB_ALLOWED_KEYS`, change the SEB start URL to `http://localhost:5173/`. Take the whole test as a candidate from `data/invites.csv`.
 
 ### How to test the day
@@ -194,7 +190,8 @@ git commit -m "docs(spike): SEB findings, go/no-go and resume-upload plan"
 ### If behind
 Hard-code the integrity text and self-report to a single yes/no for now; do not skip the timer or no-back rule.
 
-### Commits
+### Task branches and commits (D3)
+Branches: `feat/seb-gate` (commit 1), `feat/test-flow` (commits 2, 3 and 5), `feat/candidate-screens` (commit 4).
 ```
 git commit -m "feat(seb): verify SEB request hash with off/log/enforce modes"
 git commit -m "feat(test-flow): session start, seeded question selection and option shuffle"
@@ -233,7 +230,8 @@ git commit -m "test(test-flow): timer expiry, no-back rule, reload safety, SEB g
 - **pytest:** the API and gap tests above.
 - **Manual in SEB:** take a few questions; in the DB (`select type, server_ts from events where session_id=… order by server_ts;`) you see `page_load`, `question_opened`, `answered`, and (try them) `focus_returned`/`copy_attempt` if SEB lets them through. Disconnect Wi-Fi for 20 s: `connection_lost`/`connection_restored` appear after reconnecting, with sensible times. Reload the page: a `reload` event appears. Run with `?sim=drop-events` for 60 s: `find_gaps` returns one unexplained gap.
 
-### Commits
+### Task branches and commits (D4)
+Branches: `feat/event-logging` (commits 1, 2, 4 and 6), `feat/heartbeat` (commits 3 and 5).
 ```
 git commit -m "feat(events): events and heartbeats tables, ingest endpoint with server-side timestamps"
 git commit -m "feat(events): whitelist event types, strip copy payload to length only, idempotent client_seq"
@@ -277,7 +275,7 @@ git commit -m "test(logging): logger, queue retry, ingest and gap detection"
   - `tests/integration/test_scripted_scenarios.py`: for each archetype, run the simulator into a test DB, run the engine, assert the expected flags (and that `honest` and `honest_fast` get none above 0.5).
   - `frontend/e2e/scripted-cheater.spec.ts` (Playwright, **one** run): log in as a candidate, answer a few questions, dispatch a `blur`/`focus` pair and a `copy` event on the question text, hold a question open past the (test-config) threshold and answer correctly; then call `compute_flags` and assert that the expected flags exist. For the test, use a sitting with shortened thresholds via the config override.
 - [ ] **7. Quick honest false-flag check (15 min)**: simulate 100 `honest` sessions and print how many have `sum(weights) ≥ 1.0`. Just look at the number today; the formal measurement is D10.
-- [ ] **8. Wrap up the week (30 min)**: full test run (`pytest -q; npm test; npx playwright test`); write a 5-minute demo script in the PR description; merge `week-01` into `main`; tag.
+- [ ] **8. Wrap up the week (30 min)**: full test run (`pytest -q; npm test; npx playwright test`); write a 5-minute demo script (in `docs/` or the last merge message); make sure every task branch is merged into `main`; tag `week-1` on `main`.
 
 ### How to test the day
 `pytest -q` is green and every row in `eval/scripted_actions.md` points to a passing test. The Playwright spec passes once. Honest simulated candidates are not flagged above a lone focus loss.
@@ -293,7 +291,8 @@ git commit -m "test(logging): logger, queue retry, ingest and gap detection"
 ### If behind
 Drop the Playwright run (keep pytest scenarios). Do **not** drop the SEB spike or the gap detection.
 
-### Commits
+### Task branches and commits (D5)
+Branches: `feat/rule-flags` (commits 1–3), `feat/cohort-simulator` (commit 4), `test/scripted-scenarios` (commits 5–6). Merge each into `main`, then tag.
 ```
 git commit -m "feat(flags): flags table and tunable FlagConfig defaults"
 git commit -m "feat(flags): pure rule functions for focus loss, copy, long-hold-correct, correct run and logging problems"
@@ -301,7 +300,8 @@ git commit -m "feat(flags): idempotent session flag engine and compute_flags job
 git commit -m "feat(sim): synthetic cohort simulator with honest and cheater archetypes"
 git commit -m "test(flags): per-rule boundary tests and scripted scenario suite"
 git commit -m "test(e2e): Playwright scripted-cheater run and scripted-action register"
-git commit -m "docs: week 1 demo notes"
-git switch main; git merge --no-ff week-01 -m "merge: week 1 (scaffold, SEB spike, test flow, logging, rule flags)"
+git commit -m "docs: week 1 demo notes"      # on test/scripted-scenarios or a docs/week-1-notes branch
+# all task branches are now merged into main
+git switch main
 git tag week-1
 ```
