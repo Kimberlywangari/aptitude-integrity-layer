@@ -2,6 +2,15 @@
 
 from app.models.candidate import Candidate
 from app.models.question import Option, Question, QuestionStats
+from app.models.session import SessionQuestion, TestSession
 from app.models.sitting import Sitting
 
-__all__ = ["Candidate", "Option", "Question", "QuestionStats", "Sitting"]
+__all__ = [
+    "Candidate",
+    "Option",
+    "Question",
+    "QuestionStats",
+    "SessionQuestion",
+    "Sitting",
+    "TestSession",
+]
