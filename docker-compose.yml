@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: integrity
+      POSTGRES_PASSWORD: integrity
+      POSTGRES_DB: integrity
+    ports:
+      # 5433 on the host: a local Postgres already uses 5432 on the dev laptop
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs once, on an empty data volume only: creates the second database the tests use
+      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U integrity -d integrity"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
