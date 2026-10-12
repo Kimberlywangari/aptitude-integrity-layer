@@ -20,6 +20,7 @@ from app.clock import FakeClock
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.main import app
+from scripts.seed_synthetic import SeedSummary, seed
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_PUBLIC_URL = "http://localhost:5173"
@@ -89,3 +90,8 @@ def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestCl
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def seeded(db: Session) -> SeedSummary:
+    return seed(db, seed=42, secret="test-secret", public_base_url=TEST_PUBLIC_URL)
