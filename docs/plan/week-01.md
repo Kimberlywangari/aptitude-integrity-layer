@@ -56,7 +56,7 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
   - `app/main.py`: FastAPI app, router prefix `/api`, `GET /api/health` returns `{"status":"ok","db":true}` after running `select 1`.
   - Run: `uvicorn app.main:app --reload --port 8000`
   - **Test:** `curl http://localhost:8000/api/health` → `{"status":"ok","db":true}`. Add `tests/integration/test_health.py` and run `pytest -q` → 1 passed.
-- [ ] **6. Core models and first migration (60 min)**: models for `candidates`, `sittings`, `sessions`, `questions`, `options`, `question_stats`, `session_questions` (columns in master plan §7.1; leave out tables that come later). Then:
+- [x] **6. Core models and first migration (60 min)** *(done 12 Oct: `0001_core_tables`; `test_migrations.py` runs downgrade base then upgrade head. The session model class is `TestSession`; `sessions.created_at` added)*: models for `candidates`, `sittings`, `sessions`, `questions`, `options`, `question_stats`, `session_questions` (columns in master plan §7.1; leave out tables that come later). Then:
   ```powershell
   alembic init migrations
   # set sqlalchemy.url in migrations/env.py from Settings
