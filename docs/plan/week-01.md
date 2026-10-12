@@ -64,7 +64,7 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
   alembic upgrade head
   ```
   - **Test:** `alembic downgrade base; alembic upgrade head` both succeed; `\dt` in psql lists the tables.
-- [ ] **7. Synthetic seed script (60 min)**: `scripts/seed_synthetic.py --seed 42`
+- [x] **7. Synthetic seed script (60 min)** *(done 12 Oct: also runnable as `python -m scripts.jobs seed_synthetic`; invitation tokens are deterministic from the seed and `SESSION_SECRET`, so `data/invites.csv` can be rebuilt)*: `scripts/seed_synthetic.py --seed 42`
   - 60 questions, `Q001`–`Q060`: 3 sections (`numerical`, `verbal`, `logical`), 20 each. Per section: 7 easy, 7 medium, 6 hard. 4 options each; `correct_option` random but fixed by the seed. Text is generated placeholder text ("Numerical question 7: ...").
   - `question_stats` with `source='synthetic'`, `n=400`. By difficulty: easy `median_s=25`, `pct_correct=0.85`; medium `45`, `0.60`; hard `75`, `0.35`. Add ±20% deterministic jitter per question. `p25_s = 0.7 × median`, `p75_s = 1.4 × median`.
   - One `sitting` (`question_count=12`, `duration_s=1800`, status `open`) and 20 candidates with invitation tokens; write the plaintext tokens to `data/invites.csv` (ignored by git) and store only hashes.
