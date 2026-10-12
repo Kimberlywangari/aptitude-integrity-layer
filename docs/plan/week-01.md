@@ -75,7 +75,7 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
   - `vite.config.ts`: dev proxy `/api` → `http://localhost:8000`.
   - `App.tsx` calls `/api/health` and shows "API: ok".
   - **Test:** `npm run dev`, open `http://localhost:5173`, see "API: ok".
-- [ ] **9. Make the first SEB config (20 min)**: open the SEB Config Tool, set the start URL to `http://localhost:5173/spike/index.html`, save as `seb/exam.seb` (ignored by git). Don't tune it yet; that is D2.
+- [ ] **9. Make the first SEB config (20 min)** *(NOT DONE: needs the SEB Config Tool GUI; settings to change are listed in `seb/README.md`)*: open the SEB Config Tool, set the start URL to `http://localhost:5173/spike/index.html`, save as `seb/exam.seb` (ignored by git). Don't tune it yet; that is D2.
 
 ### If behind
 Skip step 8's styling and the SEB config; D2 can start with `python -m http.server` in `frontend/public`.
@@ -109,8 +109,8 @@ The proposal and plan were already committed to `main` as `docs: add proposal an
   - A test paragraph with listeners for `copy`, `cut`, `paste`, `contextmenu`, `blur`, `focus`, `visibilitychange`, and a `keyup` for `PrintScreen`, each appending a line to an on-page log.
   - A **Ping** button calling `GET /api/spike/echo`.
 - [x] **2. Temporary echo route (10 min)** *(done 12 Oct; it also tests keys you give it against the rebuilt URL, and is not mounted when `ENV=production`)*: in `backend/app/api/spike.py`, `GET /api/spike/echo` returns the request headers (especially `X-SafeExamBrowser-RequestHash`, `X-SafeExamBrowser-ConfigKeyHash`) and the user agent. Delete this route before the pilot (note it in your D14 checklist).
-- [ ] **3. Configure SEB (45 min)**: in the Config Tool, set start URL `http://localhost:5173/spike/index.html`, then look for these options (labels differ by SEB version, so match by meaning): allow camera / video capture, allow microphone / audio capture, block clipboard / copy-paste, block print screen, send the Browser Exam Key / Config Key in request headers, Quit URL. Save, then start SEB with the config.
-- [ ] **4. Run the checklist (60 min)** and record every result in `docs/spikes/seb-findings.md` as a table: item · result · evidence (screenshot or log line) · decision.
+- [ ] **3. Configure SEB (45 min)** *(NOT DONE: needs real SEB; see `seb/README.md`)*: in the Config Tool, set start URL `http://localhost:5173/spike/index.html`, then look for these options (labels differ by SEB version, so match by meaning): allow camera / video capture, allow microphone / audio capture, block clipboard / copy-paste, block print screen, send the Browser Exam Key / Config Key in request headers, Quit URL. Save, then start SEB with the config.
+- [ ] **4. Run the checklist (60 min)** *(NOT DONE: needs real SEB; template is in `docs/spikes/seb-findings.md`)* and record every result in `docs/spikes/seb-findings.md` as a table: item · result · evidence (screenshot or log line) · decision.
 
   | # | Check | Pass means |
   |---|---|---|
@@ -128,7 +128,7 @@ The proposal and plan were already committed to `main` as `docs: add proposal an
   | 12 | Mute the mic at OS level (Windows privacy toggle, and a hardware switch or headset button if you have one), then unmute: does the track fire `mute` / `unmute`? Does the peak level go flat when muted, and stay above a small noise floor when unmuted in a quiet room? Are the three audio constraints honoured (`getSettings()`)? | Record yes / no for each; note the peak values. This decides how far master plan §7.8 layers 1 and 2 can be trusted |
   | 13 | CPU and RAM while recording (Task Manager) | Numbers recorded |
 
-- [ ] **5. Write the decision (30 min)** at the top of `seb-findings.md`:
+- [ ] **5. Write the decision (30 min)** *(NOT DONE: depends on step 4)* at the top of `seb-findings.md`:
   - **GO / NO-GO** for recording inside SEB.
   - **Resume-upload plan**:
     - If check 4 passes: **Plan B**: the candidate may close SEB; a `/resume` start URL (reopened in SEB within 48 h) finishes the upload. The pre-check page and the finish page tell the candidate to keep SEB open until the upload finishes.
