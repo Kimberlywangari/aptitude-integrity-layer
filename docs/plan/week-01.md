@@ -70,7 +70,7 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
   - One `sitting` (`question_count=12`, `duration_s=1800`, status `open`) and 20 candidates with invitation tokens; write the plaintext tokens to `data/invites.csv` (ignored by git) and store only hashes.
   - **Idempotent:** keyed on question ID and candidate number, so a second run changes nothing.
   - **Test:** `pytest tests/integration/test_seed.py`: run the seed twice, assert 60 questions, 240 options, 60 stats rows, 20 candidates, 1 sitting; per-section difficulty counts are 7/7/6.
-- [ ] **8. Frontend skeleton (30 min)**
+- [x] **8. Frontend skeleton (30 min)** *(done 12 Oct: the current templates install React 19, Vite 8 and TypeScript 6, not React 18; `/api` proxy checked with curl through port 5173)*
   - `npm create vite@latest frontend -- --template react-ts`, then `npm i react-router-dom @tanstack/react-query idb` and `npm i -D vitest @testing-library/react jsdom @playwright/test`.
   - `vite.config.ts`: dev proxy `/api` → `http://localhost:8000`.
   - `App.tsx` calls `/api/health` and shows "API: ok".
