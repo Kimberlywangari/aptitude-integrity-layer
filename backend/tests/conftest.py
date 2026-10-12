@@ -1,12 +1,16 @@
 """Shared fixtures.
 
-Integration tests run against the `integrity_test` database (TEST_DATABASE_URL). Every test runs inside a transaction that is rolled back, so tests never see each
-other's data.
+Integration tests run against the `integrity_test` database (TEST_DATABASE_URL). The schema is
+built from the real migrations once per run, and every test runs inside a transaction that is
+rolled back, so tests never see each other's data.
 """
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
@@ -17,7 +21,16 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.main import app
 
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_PUBLIC_URL = "http://localhost:5173"
+
+
+def alembic_config(url: str) -> Config:
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    cfg.attributes["configure_logger"] = False
+    return cfg
 
 
 @pytest.fixture(scope="session")
@@ -27,6 +40,7 @@ def test_database_url() -> str:
 
 @pytest.fixture(scope="session")
 def test_engine(test_database_url: str) -> Iterator[Engine]:
+    command.upgrade(alembic_config(test_database_url), "head")
     engine = create_engine(test_database_url)
     yield engine
     engine.dispose()
