@@ -160,7 +160,7 @@ git commit -m "docs(spike): SEB findings, go/no-go and resume-upload plan"
 
 ### Steps
 
-- [ ] **1. SEB verification (45 min)**: `app/core/seb.py`
+- [x] **1. SEB verification (45 min)** *(done 12 Oct: a request passes if either SEB header matches any allowed key, so the key type chosen on D2 only changes `SEB_ALLOWED_KEYS`)*: `app/core/seb.py`
   - `verify_seb(request, settings) -> bool`: build the absolute URL as the browser saw it (`PUBLIC_BASE_URL` + request path + query), compute `sha256(url + key)` for each key in `SEB_ALLOWED_KEYS`, compare with `X-SafeExamBrowser-RequestHash` (and the Config Key header if you chose that) using `hmac.compare_digest`.
   - `SEB_MODE`: `off` (always passes, local dev), `log` (passes but records the result and prints mismatches), `enforce` (403 `{"code":"seb_required"}`).
   - `require_seb` dependency, applied to `session/start`, `answer` and `skip`. Save `sessions.seb_verified`.
