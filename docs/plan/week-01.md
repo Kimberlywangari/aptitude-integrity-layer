@@ -165,12 +165,12 @@ git commit -m "docs(spike): SEB findings, go/no-go and resume-upload plan"
   - `SEB_MODE`: `off` (always passes, local dev), `log` (passes but records the result and prints mismatches), `enforce` (403 `{"code":"seb_required"}`).
   - `require_seb` dependency, applied to `session/start`, `answer` and `skip`. Save `sessions.seb_verified`.
   - **Test (unit):** a known URL + key + hash passes; wrong URL fails; wrong key fails; `off` always passes. **Manual:** `SEB_MODE=enforce`; the app works in SEB; the same URL in normal Chrome shows the "Safe Exam Browser required" page (D3 step 5).
-- [ ] **2. Session start and question selection (60 min)**: `services/test_flow.py`
+- [x] **2. Session start and question selection (60 min)** *(done 12 Oct. **Changed from the plan:** `start` creates the session with the timer NOT running; `begin` sets `started_at`/`ends_at`, so reading the statement (and the D6 pre-check) costs no test time)*: `services/test_flow.py`
   - `POST /api/session/start {token}`: hash the token, find the candidate, create the session (or return the existing in-progress one, so a reload doesn't restart anything). Set `started_at = clock.now()`, `ends_at = started_at + duration_s`. Return `session_id` and a bearer token (random, only its hash stored in `access_token_hash`).
   - `select_questions(session, rng) -> list[Question]` — plain random sample of `question_count`, balanced by section for now (**keep it behind this one function; the blueprint generator replaces it in S1**). Seed `rng` from the session ID so it is reproducible.
   - `shuffle.py`: option order per session and question, seeded the same way; store it in `session_questions.option_order`.
   - **Test:** same session → same questions and option order; two different candidates differ; 12 questions returned; each section present.
-- [ ] **3. Question, answer, skip, finish (75 min)**
+- [x] **3. Question, answer, skip, finish (75 min)** *(done 12 Oct. Also: answering the last question finishes the test; `finish` returns counts only, never the score, which stays server-side for packets)*
   - `GET /api/session/{id}/question` returns the current question with options in the shuffled order (opaque option IDs, **no** `correct` field), the position, the total, and `remaining_s = ends_at − clock.now()`. First view sets `opened_at`; later views (reloads) do **not** change it.
   - `POST …/answer {position, option_id}` and `POST …/skip {position}`: accept only the **current** position (otherwise 409 `not_current`), set `answered_at`, `correct`, advance. No going back.
   - Any request after `ends_at` finishes the session and returns 410 `time_up`. `POST …/finish` is idempotent and computes the score.
