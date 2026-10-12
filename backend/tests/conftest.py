@@ -83,7 +83,12 @@ def settings() -> Settings:
 
 @pytest.fixture
 def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestClient]:
-    app.dependency_overrides[get_db] = lambda: db
+    def reload_db():
+        # Each request sees the database, not objects cached by an earlier request.
+        db.expire_all()
+        return db
+
+    app.dependency_overrides[get_db] = reload_db
     app.dependency_overrides[get_clock] = lambda: clock
     app.dependency_overrides[get_settings] = lambda: settings
     try:
