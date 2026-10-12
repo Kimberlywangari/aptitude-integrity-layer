@@ -100,7 +100,7 @@ The proposal and plan were already committed to `main` as `docs: add proposal an
 
 ### Steps
 
-- [ ] **1. Spike page (90 min)**: `frontend/public/spike/index.html` + `spike.js` (plain JS, no build). It shows and logs:
+- [x] **1. Spike page (90 min)** *(built 12 Oct and exercised in headless Chromium with a fake camera/mic: record, IndexedDB write, reload survival, echo. Also `spike/quit.html`, survival markers, and a "Send log to server" button that writes `data/spike-log.jsonl`)*: `frontend/public/spike/index.html` + `spike.js` (plain JS, no build). It shows and logs:
   - `navigator.userAgent` (SEB adds a "SEB/…" token) and whether `window.SafeExamBrowser` exists; if it does, print `SafeExamBrowser.security` (some SEB versions expose the keys through a JS API).
   - **Start camera + mic** button: `getUserMedia({ video: { width: 320, height: 240, frameRate: 15 }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })`; show the live preview. The three audio flags are off so a live mic keeps a noise floor and a muted one stays flat (master plan §7.8); check 12 shows whether SEB honours them. Add a small live level readout (`AnalyserNode`, peak sample) for check 12.
   - `MediaRecorder` with `mimeType: 'video/webm;codecs=vp8,opus'`, `videoBitsPerSecond: 150000`, `audioBitsPerSecond: 24000`, `start(10000)`.
@@ -108,7 +108,7 @@ The proposal and plan were already committed to `main` as `docs: add proposal an
   - On page load, show how many chunks are **already** in IndexedDB (the survival check).
   - A test paragraph with listeners for `copy`, `cut`, `paste`, `contextmenu`, `blur`, `focus`, `visibilitychange`, and a `keyup` for `PrintScreen`, each appending a line to an on-page log.
   - A **Ping** button calling `GET /api/spike/echo`.
-- [ ] **2. Temporary echo route (10 min)**: in `backend/app/api/spike.py`, `GET /api/spike/echo` returns the request headers (especially `X-SafeExamBrowser-RequestHash`, `X-SafeExamBrowser-ConfigKeyHash`) and the user agent. Delete this route before the pilot (note it in your D14 checklist).
+- [x] **2. Temporary echo route (10 min)** *(done 12 Oct; it also tests keys you give it against the rebuilt URL, and is not mounted when `ENV=production`)*: in `backend/app/api/spike.py`, `GET /api/spike/echo` returns the request headers (especially `X-SafeExamBrowser-RequestHash`, `X-SafeExamBrowser-ConfigKeyHash`) and the user agent. Delete this route before the pilot (note it in your D14 checklist).
 - [ ] **3. Configure SEB (45 min)**: in the Config Tool, set start URL `http://localhost:5173/spike/index.html`, then look for these options (labels differ by SEB version, so match by meaning): allow camera / video capture, allow microphone / audio capture, block clipboard / copy-paste, block print screen, send the Browser Exam Key / Config Key in request headers, Quit URL. Save, then start SEB with the config.
 - [ ] **4. Run the checklist (60 min)** and record every result in `docs/spikes/seb-findings.md` as a table: item · result · evidence (screenshot or log line) · decision.
 
