@@ -44,10 +44,10 @@ By the end of the week a candidate can take a short test **inside Safe Exam Brow
   ```
   Paste the output into `docs/spikes/laptop-specs.md`.
 - [x] **3. Install tools (30 min)** *(done: Docker running, Python 3.13.14, Node 24.19, Git 2.55, SEB 3.10.2 with SEB Config Tool)*: Docker Desktop (WSL2 backend; **start it**, the engine was not running at the start of D1), **Python 3.13** (3.12 or newer works; this laptop's default `python` is 3.14, which we avoid for now), Node 20 or newer (24 is fine), Git, Safe Exam Browser for Windows, and the SEB Config Tool (both from safeexambrowser.org). Check: `docker info; py -3.13 --version; node --version`. **ffmpeg is not needed until D7**; `winget` is not on PATH on this laptop, so download a build manually then.
-- [ ] **4. Postgres in Compose (15 min)**: `docker-compose.yml` with one service `db` (`postgres:16`, user/password/db all `integrity` for local dev, port **`5433:5432`** because a local Postgres already uses 5432 on this laptop, named volume `pgdata`, healthcheck `pg_isready`). An init script also creates a second database, `integrity_test`, which the tests use.
+- [x] **4. Postgres in Compose (15 min)** *(done 12 Oct: `docker-compose.yml`, init script in `docker/db-init/`; both `integrity` and `integrity_test` answer `select 1`)*: `docker-compose.yml` with one service `db` (`postgres:16`, user/password/db all `integrity` for local dev, port **`5433:5432`** because a local Postgres already uses 5432 on this laptop, named volume `pgdata`, healthcheck `pg_isready`). An init script also creates a second database, `integrity_test`, which the tests use.
   - Run: `docker compose up -d db`
   - Check: `docker compose exec db psql -U integrity -c "select 1"` → prints `1`; the same with `-d integrity_test`.
-- [ ] **5. Backend skeleton (60 min)**
+- [x] **5. Backend skeleton (60 min)** *(done 12 Oct: health route returns `{"status":"ok","db":true}`; Alembic, models and tests in step 6/7)*
   - `cd backend; py -3.13 -m venv .venv`, then call the venv's Python directly (`.\.venv\Scripts\python.exe -m pytest`, `-m uvicorn`, `-m alembic`), which avoids `Activate.ps1` and PowerShell execution-policy problems.
   - `pyproject.toml` with dependencies: `fastapi`, `uvicorn[standard]`, `sqlalchemy>=2`, `alembic`, `psycopg[binary]`, `pydantic-settings`, `httpx`, `python-multipart`, `bcrypt`, `itsdangerous`; dev extras: `pytest`, `pytest-asyncio`, `ruff`. Then `pip install -e ".[dev]"`.
   - `app/config.py`: a `Settings(BaseSettings)` reading `.env`.
