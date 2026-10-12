@@ -177,11 +177,11 @@ git commit -m "docs(spike): SEB findings, go/no-go and resume-upload plan"
   - `POST …/self-report {had_technical_issues: bool, note?: str (≤ 300)}`.
   - `POST …/begin` marks the test started after the integrity statement is accepted (`integrity_accepted_at`). (D6–D7 will add the pre-check gate to this route.)
   - **Test (pytest, with `FakeClock`):** answer position 1 after moving to 2 → 409; advance clock past `ends_at` → next request 410 and session finished; reload twice → `opened_at` unchanged; correct answer sets `correct=True`; skip sets `skipped=True`; token from another session → 401.
-- [ ] **4. Candidate screens (90 min)**: routes `/` Start (token from `?t=` or typed), `/integrity` (statement text + checkbox + "I agree"), `/test` (question, options, Submit, Skip, countdown), `/done` (self-report), `/not-seb`.
+- [x] **4. Candidate screens (90 min)** *(done 12 Oct; checked in headless Chromium: full 12-question run, reload keeps question and time, Back is trapped, refused with `SEB_MODE=enforce`)*: routes `/` Start (token from `?t=` or typed), `/integrity` (statement text + checkbox + "I agree"), `/test` (question, options, Submit, Skip, countdown), `/done` (self-report), `/not-seb`.
   - `lib/api.ts`: fetch wrapper that adds the bearer token (kept in `sessionStorage`) and maps 403 `seb_required` to the `/not-seb` page.
   - `TestRunner.tsx`: countdown from the server's `remaining_s` (re-synced on every response, not from the client clock); **no Back**: a `history.pushState` trap on `/test` plus a `beforeunload` prompt; the question is fetched from the server on every load, so a reload keeps the same question and time.
   - Integrity statement text and self-report wording are placeholders until Cytonn supplies them (keep them in `src/candidate/copy.ts`). The integrity statement also carries the `MIC_NOTICE` line (master plan §7.8): the mic must stay on for the whole test, and the warning is shown to the reviewer.
-- [ ] **5. Run it inside SEB (30 min)**: set `SEB_MODE=enforce`, put the key from D2 in `SEB_ALLOWED_KEYS`, change the SEB start URL to `http://localhost:5173/`. Take the whole test as a candidate from `data/invites.csv`.
+- [ ] **5. Run it inside SEB (30 min)** *(NOT DONE: needs real SEB and the D2 key)*: set `SEB_MODE=enforce`, put the key from D2 in `SEB_ALLOWED_KEYS`, change the SEB start URL to `http://localhost:5173/`. Take the whole test as a candidate from `data/invites.csv`.
 
 ### How to test the day
 - `pytest -q` is green (timer, no-back, shuffle, SEB verify).
