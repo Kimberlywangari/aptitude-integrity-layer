@@ -19,6 +19,7 @@ playwright-report/
 data/
 *.seb
 docs/spikes/laptop-specs.md
+.claude/
 
 # Editors and OS
 .vscode/
