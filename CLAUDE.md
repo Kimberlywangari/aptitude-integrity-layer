@@ -57,6 +57,18 @@ cd frontend; npm run lint                                             # oxlint
 
 The full list is in master plan section 1.
 
+## Optimisation
+
+Speed and efficiency matter in every part of this project, not only the parts that look slow.
+
+- Think about speed, memory and storage while writing code, not afterwards. A slow query, an
+  oversized payload or a wasteful loop is a bug.
+- Keep what goes to the candidate's browser small. Candidates may be on a weak connection
+  while the camera is recording.
+- Keep database access lean: fetch only what is needed, and index the lookups we actually do.
+- If a change makes something slower, say so and why, so we can discuss whether it is worth the
+  tradeoff.
+
 ## Where things live
 
 - `backend/`: FastAPI app (`app/`), Alembic migrations, scripts (seed and jobs) and tests.
