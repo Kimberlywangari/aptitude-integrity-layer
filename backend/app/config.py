@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # Wrong invitation codes allowed per client in the window before /session/start answers 429.
     start_max_failures: int = 20
     start_window_s: int = 300
+    # Wrong staff passwords allowed per client address, and per email, in the window before
+    # /review/login answers 429. Only failures count.
+    login_max_failures: int = 10
+    login_window_s: int = 900
+    # How long a staff token is good for, as the master plan says: one working day.
+    staff_token_ttl_s: int = 8 * 3600
     # Behind a trusted reverse proxy (nginx in compose), the real client is the last address in
     # X-Forwarded-For. Leave false when the API is reached directly.
     trust_forwarded_for: bool = False

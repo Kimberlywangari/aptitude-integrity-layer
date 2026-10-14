@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_clock, get_start_limiter
+from app.api.deps import client_key, get_clock, get_start_limiter
 from app.clock import Clock
 from app.config import Settings, get_settings
 from app.core.seb import require_seb
@@ -50,19 +50,6 @@ def current_session(
     if not valid:
         raise ApiError(401, "unauthorized")
     return session
-
-
-def client_key(request: Request, settings: Settings) -> str:
-    """Who is asking, for the wrong-code limit.
-
-    Behind our own reverse proxy the real client is the last X-Forwarded-For entry (the one the
-    proxy appended; earlier entries are whatever the client claimed). Otherwise it is the peer.
-    """
-    if settings.trust_forwarded_for:
-        last = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
-        if last:
-            return last
-    return request.client.host if request.client else "unknown"
 
 
 @router.post("/start", response_model=StartResponse)

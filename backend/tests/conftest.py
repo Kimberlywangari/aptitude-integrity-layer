@@ -15,9 +15,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_clock, get_start_limiter
+from app.api.deps import get_clock, get_login_limiter, get_start_limiter
 from app.clock import FakeClock
 from app.config import Settings, get_settings
+from app.core import passwords
 from app.db import get_db
 from app.main import app
 from app.services.rate_limit import AttemptLimiter
@@ -66,6 +67,12 @@ def db(test_engine: Engine) -> Iterator[Session]:
         connection.close()
 
 
+@pytest.fixture(autouse=True)
+def cheap_password_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """bcrypt's lowest cost, so a test that signs in does not spend a quarter of a second on it."""
+    monkeypatch.setattr(passwords, "ROUNDS", 4)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
@@ -95,6 +102,8 @@ def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestCl
     # a fresh wrong-code limiter per test, so one test's failures never block another
     limiter = AttemptLimiter(settings.start_max_failures, settings.start_window_s)
     app.dependency_overrides[get_start_limiter] = lambda: limiter
+    login_limiter = AttemptLimiter(settings.login_max_failures, settings.login_window_s)
+    app.dependency_overrides[get_login_limiter] = lambda: login_limiter
     try:
         yield TestClient(app)
     finally:

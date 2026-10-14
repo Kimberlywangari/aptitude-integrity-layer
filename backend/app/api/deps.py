@@ -1,11 +1,17 @@
-from fastapi import Depends
+from fastapi import Depends, Header, Request
+from sqlalchemy.orm import Session
 
 from app.clock import Clock, SystemClock
 from app.config import Settings, get_settings
+from app.core.staff_token import fingerprint_matches, read_staff_token
+from app.db import get_db
+from app.errors import ApiError
+from app.models import Reviewer
 from app.services.rate_limit import AttemptLimiter
 
 _clock: Clock = SystemClock()
 _start_limiter: AttemptLimiter | None = None
+_login_limiter: AttemptLimiter | None = None
 
 
 def get_clock() -> Clock:
@@ -19,3 +25,60 @@ def get_start_limiter(settings: Settings = Depends(get_settings)) -> AttemptLimi
     if _start_limiter is None:
         _start_limiter = AttemptLimiter(settings.start_max_failures, settings.start_window_s)
     return _start_limiter
+
+
+def get_login_limiter(settings: Settings = Depends(get_settings)) -> AttemptLimiter:
+    """FastAPI dependency: the one limiter for wrong staff passwords. Tests override it."""
+    global _login_limiter
+    if _login_limiter is None:
+        _login_limiter = AttemptLimiter(settings.login_max_failures, settings.login_window_s)
+    return _login_limiter
+
+
+def client_key(request: Request, settings: Settings) -> str:
+    """Who is asking, for the attempt limits.
+
+    Behind our own reverse proxy the real client is the last X-Forwarded-For entry (the one the
+    proxy appended; earlier entries are whatever the client claimed). Otherwise it is the peer.
+    """
+    if settings.trust_forwarded_for:
+        last = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+        if last:
+            return last
+    return request.client.host if request.client else "unknown"
+
+
+def current_staff(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
+) -> Reviewer:
+    """The signed-in, active staff account for this request, or 401 `unauthorized`.
+
+    The account row is read every time (one primary-key lookup), so a switched-off account or a
+    changed password stops its tokens at once, and the role is never taken from the token.
+    """
+    scheme, _, token = (authorization or "").partition(" ")
+    claims = None
+    if scheme.lower() == "bearer":
+        claims = read_staff_token(settings.session_secret, clock, token, settings.staff_token_ttl_s)
+    reviewer = db.get(Reviewer, claims["sub"]) if claims else None
+    if (
+        reviewer is None
+        or not reviewer.is_active
+        or not fingerprint_matches(claims["pw"], reviewer.password_hash)
+    ):
+        raise ApiError(401, "unauthorized")
+    return reviewer
+
+
+def require_reviewer(staff: Reviewer = Depends(current_staff)) -> Reviewer:
+    """Any active staff account; admins are included."""
+    return staff
+
+
+def require_admin(staff: Reviewer = Depends(current_staff)) -> Reviewer:
+    if staff.role != "admin":
+        raise ApiError(403, "forbidden")
+    return staff
