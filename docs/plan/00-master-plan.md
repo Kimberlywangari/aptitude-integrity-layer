@@ -191,16 +191,16 @@ aptitude-integrity-layer/
 | `sitting_stats` | `sitting_id`, metric, `median`, `mad`, `n` (cohort baselines) |
 | `packets` | `session_id`, `json`, `built_at` |
 | `rankings` | `session_id`, `rule_score`, `rule_rank`, `ai_status` (`not_run`/`ok`/`retried`/`fallback`), `ai_json`, `ai_attempts`, `ai_seconds`, `final_rank` |
-| `reviewers` | `id`, `email`, `password_hash` |
+| `reviewers` | `id`, `email` (lower-case, unique), `password_hash` (bcrypt), `role` (`reviewer`/`admin`), `is_active`, `created_at` |
 | `decisions` | `session_id`, `reviewer_id`, `outcome`, `reason`, `decided_at` |
-| `audit_log` | `reviewer_id`, `action` (`decision`/`video_view`/`video_purged`/`login`), `session_id`, `ts`, `detail` |
+| `audit_log` | `id`, `reviewer_id` (null if the account is removed), `action` (`decision`/`video_view`/`video_purged`/`login`), `session_id`, `ts`, `detail` |
 | `complaints` | `session_id`, `category`, `text`, `created_at`, `status` |
 
 ### 7.2 Endpoints
 
 Candidate (bearer = per-session token): `POST /api/session/start`, `POST /api/session/{id}/begin`, `GET /api/session/{id}/question`, `POST /api/session/{id}/answer`, `POST /api/session/{id}/skip`, `POST /api/session/{id}/finish`, `POST /api/session/{id}/self-report`, `POST /api/session/resume`, `POST /api/precheck/result`, `POST /api/events`, `POST /api/heartbeat`, `PUT /api/chunks/{session}/{seq}`, `GET /api/chunks/{session}/manifest`, `POST /api/complaints`, `GET /api/health`.
 
-Reviewer (bearer = reviewer token): `POST /api/review/login`, `GET /api/review/queue`, `GET /api/review/candidates/{id}`, `GET /api/review/candidates/{id}/video`, `POST /api/review/candidates/{id}/video-view`, `POST /api/review/decisions`, `POST /api/review/candidates/{id}/shortlist`.
+Reviewer (bearer = reviewer token): `POST /api/review/login`, `GET /api/review/me`, `GET /api/review/queue`, `GET /api/review/candidates/{id}`, `GET /api/review/candidates/{id}/video`, `POST /api/review/candidates/{id}/video-view`, `POST /api/review/decisions`, `POST /api/review/candidates/{id}/shortlist`.
 
 Admin (bearer = admin token; the recruiter's setup screens, thin wrappers over the CLI jobs below): `GET/POST /api/admin/sittings`, `POST /api/admin/sittings/{id}/close`, `POST /api/admin/invites`, `GET /api/admin/questions/summary`, `POST /api/admin/questions/import`, `POST /api/admin/questions/retire-synthetic`. Reviewer calls also include `GET /api/review/audit`. Candidate side adds `GET /api/chunks/{session}/manifest` returning counts only (`expected`, `received`, `missing`, `bytes`, `complete`).
 

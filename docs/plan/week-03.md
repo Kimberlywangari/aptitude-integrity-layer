@@ -123,7 +123,7 @@ git commit -m "feat(eval): AI explanation accuracy script and hand-check sheet"
 
 ### Steps
 
-- [ ] **1. Reviewer accounts and login (45 min):** migration `reviewers`, `decisions`, `audit_log`. `python -m scripts.jobs create_reviewer --email … --password …` (bcrypt). `POST /api/review/login` returns a signed token (8 h); a `require_reviewer` dependency on every `/api/review/*` route; log `login` in the audit log.
+- [~] **1. Reviewer accounts and login (45 min):** **built early** on `feat/staff-login-and-nav` (see `docs/plan/staff-login-and-navigation.md`): migration `0002` has `reviewers` (with `role` and `is_active`) and `audit_log`; `create_reviewer` and `deactivate_reviewer` jobs (bcrypt, 12 characters minimum); `POST /api/review/login` returns a signed 8 h token and `GET /api/review/me` is the first route behind `require_reviewer`; `require_admin` exists; failures are limited per address and per email; `login` is audited. **Still to do here:** the `decisions` table and its migration, and `require_reviewer` on each new `/api/review/*` route.
 - [ ] **2. Queue and candidate endpoints (75 min)**
   - `GET /api/review/queue?sitting=` → ordered by `final_rank`: candidate ID, rank, rule score, AI strength and status (`ok`/`retried`/`fallback`), flag kinds, decision status, shortlisted. The `LOGGING_PROBLEM`-only lane sits at the bottom, clearly labelled.
   - `GET /api/review/candidates/{id}` → packet, flags (each with `video_seek_s`), AI explanation (or the rule explanation), complaints, decisions, and the segment list from D8.
