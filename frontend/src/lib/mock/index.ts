@@ -22,6 +22,7 @@ import type {
   PrecheckRequest,
   PrecheckResponse,
 } from '../api'
+import { getStaff } from '../staffSession'
 import { MIN_REASON_CHARS } from '../reviewTypes'
 import type {
   AuditEntry,
@@ -98,8 +99,26 @@ function bodyOf<T>(body: unknown): T {
   return (body ?? {}) as T
 }
 
+interface Identity {
+  email: string
+  role: 'reviewer' | 'admin'
+}
+
+/**
+ * Who a staff token belongs to. Mock sign-in tokens spell it out; a token from the real server
+ * (login is real while the rest of /api/review is still mocked) is matched to the stored session.
+ */
+function identityOf(token: string | null): Identity {
+  if (!token || token.startsWith('mock-expired')) fail(401, 'unauthorized') // expired, for tests
+  const mock = token.match(/^mock-(reviewer|admin):(.*)$/)
+  if (mock) return { role: mock[1] as Identity['role'], email: mock[2] }
+  const staff = getStaff()
+  if (staff && staff.token === token) return { email: staff.email, role: staff.role }
+  fail(401, 'unauthorized')
+}
+
 function emailOf(token: string): string {
-  return token.split(':')[1] ?? 'reviewer@example.com'
+  return identityOf(token).email
 }
 
 function audit(reviewer: string, action: AuditEntry['action'], candidate: string | null, detail: string) {
@@ -145,13 +164,13 @@ export async function mockApi<T>(
 }
 
 function requireStaff(token: string | null): string {
-  if (!token?.startsWith('mock-')) fail(401, 'unauthorized')
-  return token
+  identityOf(token)
+  return token as string
 }
 
 function requireAdmin(token: string | null): string {
   const t = requireStaff(token)
-  if (!t.startsWith('mock-admin')) fail(403, 'forbidden')
+  if (identityOf(t).role !== 'admin') fail(403, 'forbidden')
   return t
 }
 

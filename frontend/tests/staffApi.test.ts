@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, ApiError, pathForError, staffPathForError } from '../src/lib/api'
+import { api, ApiError, pathForError, staffRecovery } from '../src/lib/api'
 import { clearSession, saveSession } from '../src/lib/session'
 import { clearStaff, getStaff, saveStaff } from '../src/lib/staffSession'
 
@@ -33,6 +33,45 @@ describe('api() token choice', () => {
   })
 })
 
+describe('fixture mode', () => {
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response('{"token":"t","email":"r@example.com","role":"reviewer"}')),
+    )
+    vi.stubEnv('VITE_MOCK_API', '1') // read when the module loads, so load it again below
+    vi.resetModules()
+    saveStaff({ token: 'staff-token', email: 'r@example.com', role: 'reviewer' })
+  })
+
+  afterEach(() => {
+    fetchMock.mockReset()
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.resetModules()
+    clearStaff()
+  })
+
+  it('sends sign-in and me to the real server while the rest of /api/review is mocked', async () => {
+    const { api: fixtureApi } = await import('../src/lib/api')
+    const { setMockLatency } = await import('../src/lib/mock')
+    setMockLatency(0)
+
+    await fixtureApi('/api/review/login', { method: 'POST', body: { email: 'a', password: 'b' } })
+    await fixtureApi('/api/review/me')
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/review/login',
+      '/api/review/me',
+    ])
+
+    fetchMock.mockClear()
+    await fixtureApi('/api/review/queue') // still a fixture: no request leaves the page
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('error routing', () => {
   const err = (status: number, code: string) => new ApiError(status, code, {})
 
@@ -40,11 +79,12 @@ describe('error routing', () => {
     expect(pathForError(err(409, 'precheck_required'))).toBe('/precheck')
   })
 
-  it('sends signed-out staff to the login page and others to the queue', () => {
-    expect(staffPathForError(err(401, 'unauthorized'))).toBe('/review/login')
-    expect(staffPathForError(err(403, 'forbidden'))).toBe('/review')
-    expect(staffPathForError(err(422, 'reason_too_short'))).toBeNull()
-    expect(staffPathForError(new Error('network'))).toBeNull()
+  it('has signed-out staff sign in again, and sends the under-privileged home', () => {
+    expect(staffRecovery(err(401, 'unauthorized'))).toBe('sign-in')
+    expect(staffRecovery(err(401, 'invalid_credentials'))).toBe('sign-in')
+    expect(staffRecovery(err(403, 'forbidden'))).toBe('home')
+    expect(staffRecovery(err(422, 'reason_too_short'))).toBeNull()
+    expect(staffRecovery(new Error('network'))).toBeNull()
   })
 })
 

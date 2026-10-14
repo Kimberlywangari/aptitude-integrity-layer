@@ -1,3 +1,4 @@
+import { CANDIDATE_PATH } from './routes'
 import { getAccessToken } from './session'
 import { getStaff } from './staffSession'
 
@@ -7,6 +8,13 @@ import { getStaff } from './staffSession'
 // constant, so a production build carries none of it.
 const MOCK_ENABLED = import.meta.env.VITE_MOCK_API === '1'
 const MOCKED_PREFIXES = ['/api/precheck', '/api/complaints', '/api/chunks', '/api/review', '/api/admin']
+// Already on the server, so they go there even while the rest of their prefix is still mocked.
+const REAL_PATHS = ['/api/review/login', '/api/review/me']
+
+function isMocked(path: string): boolean {
+  if (REAL_PATHS.includes(path.split('?')[0])) return false
+  return MOCKED_PREFIXES.some((prefix) => path.startsWith(prefix))
+}
 
 /** Reviewer and admin calls carry the staff token; everything else carries the candidate's. */
 function isStaffPath(path: string): boolean {
@@ -40,7 +48,7 @@ interface RequestOptions {
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = isStaffPath(path) ? (getStaff()?.token ?? null) : getAccessToken()
-  if (MOCK_ENABLED && MOCKED_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+  if (MOCK_ENABLED && isMocked(path)) {
     const { mockApi } = await import('./mock')
     return mockApi<T>(path, options.method ?? 'GET', options.body, token)
   }
@@ -147,16 +155,19 @@ export function pathForError(error: unknown): string | null {
     case 'time_up':
       return '/done'
     case 'unauthorized':
-      return '/'
+      return CANDIDATE_PATH
     default:
       return null
   }
 }
 
-/** Where a signed-out or under-privileged staff member goes, or null for any other error. */
-export function staffPathForError(error: unknown): string | null {
+/**
+ * What a staff member should do after a failed request: sign in again, go back to their own
+ * pages, or nothing (any other error is the screen's to show).
+ */
+export function staffRecovery(error: unknown): 'sign-in' | 'home' | null {
   if (!(error instanceof ApiError)) return null
-  if (error.code === 'unauthorized' || error.code === 'invalid_credentials') return '/review/login'
-  if (error.code === 'forbidden') return '/review'
+  if (error.code === 'unauthorized' || error.code === 'invalid_credentials') return 'sign-in'
+  if (error.code === 'forbidden') return 'home'
   return null
 }

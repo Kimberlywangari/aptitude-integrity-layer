@@ -84,7 +84,7 @@ describe('pathForError()', () => {
     expect(pathForError(err('not_started'))).toBe('/integrity')
     expect(pathForError(err('finished'))).toBe('/done')
     expect(pathForError(err('time_up'))).toBe('/done')
-    expect(pathForError(err('unauthorized'))).toBe('/')
+    expect(pathForError(err('unauthorized'))).toBe('/candidate')
   })
 
   it('leaves everything else to the caller', () => {

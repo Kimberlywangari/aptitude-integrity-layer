@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ApiError } from '../src/lib/api'
 import type { AdminSitting, ImportReport, InvitesResponse } from '../src/lib/adminTypes'
 import { mockApi, resetMock, setMockLatency } from '../src/lib/mock'
+import { clearStaff, saveStaff } from '../src/lib/staffSession'
 import type { CandidateDetail, QueueResponse } from '../src/lib/reviewTypes'
 
 const REVIEWER = 'mock-reviewer:r@example.com'
@@ -43,6 +44,28 @@ describe('mock sign-in and access', () => {
       call('/api/review/login', 'POST', { email: 'r@example.com', password: 'wrong' }, null),
     )
     expect(code).toBe('invalid_credentials')
+  })
+
+  it('accepts a token from the real server when it is the stored session', async () => {
+    saveStaff({ token: 'eyJ.real.token', email: 'real@example.com', role: 'reviewer' })
+    try {
+      await expect(call('/api/review/queue', 'GET', undefined, 'eyJ.real.token')).resolves.toBeTruthy()
+      expect(await codeOf(call('/api/review/queue', 'GET', undefined, 'eyJ.someone.else'))).toBe(
+        'unauthorized',
+      )
+      // the role of a real token is the stored session's
+      expect(await codeOf(call('/api/admin/sittings', 'GET', undefined, 'eyJ.real.token'))).toBe(
+        'forbidden',
+      )
+    } finally {
+      clearStaff()
+    }
+  })
+
+  it('refuses a token marked expired', async () => {
+    expect(await codeOf(call('/api/review/queue', 'GET', undefined, 'mock-expired:r@example.com'))).toBe(
+      'unauthorized',
+    )
   })
 
   it('needs a token for review calls and an admin token for admin calls', async () => {
