@@ -6,10 +6,12 @@ Later days register more jobs here (compute_flags, build_packets, rank, purge_vi
 import sys
 from collections.abc import Callable
 
-from scripts import seed_synthetic
+from scripts import reviewers, seed_synthetic
 
 JOBS: dict[str, Callable[[list[str]], None]] = {
     "seed_synthetic": seed_synthetic.main,
+    "create_reviewer": reviewers.create_main,
+    "deactivate_reviewer": reviewers.deactivate_main,
 }
 
 
