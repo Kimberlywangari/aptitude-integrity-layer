@@ -121,7 +121,10 @@ aptitude-integrity-layer/
 │   │   │               media.ts micWatch.ts recorder.ts chunkQueue.ts uploader.ts
 │   │   ├── candidate/  Start.tsx NotSeb.tsx PreCheck.tsx Integrity.tsx TestRunner.tsx
 │   │   │               SelfReport.tsx UploadStatus.tsx Complaint.tsx MicBanner.tsx
-│   │   └── reviewer/   Login.tsx Queue.tsx CandidateDetail.tsx VideoPlayer.tsx DecisionForm.tsx
+│   │   ├── reviewer/   Login.tsx Queue.tsx CandidateDetail.tsx VideoPlayer.tsx DecisionForm.tsx Audit.tsx
+│   │   ├── admin/      Sittings.tsx Invites.tsx Questions.tsx   # the recruiter's setup screens
+│   │   ├── staff/      StaffApp.tsx StaffLayout.tsx staff.css   # lazy chunk: reviewer + admin only
+│   │   └── lib/mock/   fixtures for endpoints not built yet (VITE_MOCK_API=1, dev only)
 │   ├── tests/          (Vitest)
 │   └── e2e/            (Playwright scripted-cheater specs)
 └── eval/
@@ -198,6 +201,8 @@ aptitude-integrity-layer/
 Candidate (bearer = per-session token): `POST /api/session/start`, `POST /api/session/{id}/begin`, `GET /api/session/{id}/question`, `POST /api/session/{id}/answer`, `POST /api/session/{id}/skip`, `POST /api/session/{id}/finish`, `POST /api/session/{id}/self-report`, `POST /api/session/resume`, `POST /api/precheck/result`, `POST /api/events`, `POST /api/heartbeat`, `PUT /api/chunks/{session}/{seq}`, `GET /api/chunks/{session}/manifest`, `POST /api/complaints`, `GET /api/health`.
 
 Reviewer (bearer = reviewer token): `POST /api/review/login`, `GET /api/review/queue`, `GET /api/review/candidates/{id}`, `GET /api/review/candidates/{id}/video`, `POST /api/review/candidates/{id}/video-view`, `POST /api/review/decisions`, `POST /api/review/candidates/{id}/shortlist`.
+
+Admin (bearer = admin token; the recruiter's setup screens, thin wrappers over the CLI jobs below): `GET/POST /api/admin/sittings`, `POST /api/admin/sittings/{id}/close`, `POST /api/admin/invites`, `GET /api/admin/questions/summary`, `POST /api/admin/questions/import`, `POST /api/admin/questions/retire-synthetic`. Reviewer calls also include `GET /api/review/audit`. Candidate side adds `GET /api/chunks/{session}/manifest` returning counts only (`expected`, `received`, `missing`, `bytes`, `complete`).
 
 CLI jobs (`python -m scripts.jobs <name>`): `seed_synthetic`, `import_question_summary`, `simulate_cohort`, `close_sitting`, `compute_flags`, `build_packets`, `rank`, `mark_incomplete_uploads`, `detect_silence`, `purge_videos`, `create_reviewer`, and `loop` (the worker's hourly runner for the purge and incomplete-upload jobs).
 

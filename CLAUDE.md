@@ -46,6 +46,8 @@ cd frontend; npm run lint                                             # oxlint
 - Claude must ask, and show the branch name and the commit message, before running any commit
   or the merge into `main`.
 - No `Co-Authored-By` or other attribution lines in commits or PR descriptions.
+- Every plan goes in `docs/plan/`, never in a scratch or home-folder location. Name it for the
+  task, for example `docs/plan/hosting-supabase-vercel.md`.
 - Commit only when tests are green. More detail in master plan section 5.
 
 ## Hard rules
@@ -73,7 +75,7 @@ Speed and efficiency matter in every part of this project, not only the parts th
 
 - `backend/`: FastAPI app (`app/`), Alembic migrations, scripts (seed and jobs) and tests.
 - `frontend/`: React and Vite app. `public/spike/` is the plain-JavaScript SEB spike page.
-- `docs/`: proposal, plan (`plan/`) and spike findings (`spikes/`).
+- `docs/`: proposal, plan (`plan/`, where every plan lives) and spike findings (`spikes/`).
 - `docker/`: init SQL for the Compose Postgres. `docker-compose.yml` at the root runs the database.
 - `seb/`: how to build the SEB config and how request keys are verified. The `.seb` files are
   git-ignored.
