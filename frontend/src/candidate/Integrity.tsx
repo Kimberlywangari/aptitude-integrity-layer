@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { BeginResponse } from '../lib/api'
+import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
 import { INTEGRITY_CHECKBOX, INTEGRITY_POINTS, INTEGRITY_TITLE } from './copy'
 
@@ -13,7 +14,7 @@ export default function Integrity() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!sessionId) navigate('/', { replace: true })
+    if (!sessionId) navigate(CANDIDATE_PATH, { replace: true })
   }, [sessionId, navigate])
 
   async function begin() {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import type { ManifestResponse } from '../lib/api'
+import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
 import { UPLOAD_DONE, UPLOAD_KEEP_OPEN, UPLOAD_STUCK, UPLOAD_TITLE } from './copy'
 
@@ -24,7 +25,7 @@ export default function UploadStatus() {
 
   useEffect(() => {
     if (!sessionId) {
-      navigate('/', { replace: true })
+      navigate(CANDIDATE_PATH, { replace: true })
       return
     }
     lastChangeAt.current = performance.now()

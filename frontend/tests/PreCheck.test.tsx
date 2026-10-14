@@ -58,7 +58,7 @@ function renderPage() {
       <Routes>
         <Route path="/precheck" element={<PreCheck />} />
         <Route path="/integrity" element={<p>integrity page</p>} />
-        <Route path="/" element={<p>start page</p>} />
+        <Route path="/candidate" element={<p>start page</p>} />
       </Routes>
     </MemoryRouter>,
   )

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { QuestionResponse, ResolveResponse } from '../lib/api'
+import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
 import MicBanner from './MicBanner'
 
@@ -48,7 +49,7 @@ export default function TestRunner() {
 
   const load = useCallback(async () => {
     if (!sessionId) {
-      navigate('/', { replace: true })
+      navigate(CANDIDATE_PATH, { replace: true })
       return
     }
     try {

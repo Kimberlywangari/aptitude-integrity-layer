@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, pathForError } from '../lib/api'
 import type { FinishResponse } from '../lib/api'
+import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
 import { SELF_REPORT_NOTE_HINT, SELF_REPORT_NOTE_LABEL, SELF_REPORT_QUESTION } from './copy'
 
@@ -18,7 +19,7 @@ export default function Done() {
   // Finishing is idempotent, so this is safe on every visit and after time-up.
   useEffect(() => {
     if (!sessionId) {
-      navigate('/', { replace: true })
+      navigate(CANDIDATE_PATH, { replace: true })
       return
     }
     api<FinishResponse>(`/api/session/${sessionId}/finish`, { method: 'POST' })

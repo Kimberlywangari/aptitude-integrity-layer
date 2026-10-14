@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { PrecheckRequest, PrecheckResponse } from '../lib/api'
+import { CANDIDATE_PATH } from '../lib/routes'
 import { acquireDevices, classifyDeviceError } from '../lib/devices'
 import type { DeviceErrorKind, DeviceHandle } from '../lib/devices'
 import { INITIAL_MIC_CHECK, stepMicCheck } from '../lib/micCheck'
@@ -41,7 +42,7 @@ export default function PreCheck() {
   const peak = useRef(0)
 
   useEffect(() => {
-    if (!sessionId) navigate('/', { replace: true })
+    if (!sessionId) navigate(CANDIDATE_PATH, { replace: true })
   }, [sessionId, navigate])
 
   // Release the camera and microphone when the candidate leaves this screen.

@@ -170,3 +170,42 @@ progress {
   border: 1px solid #d9b94c;
   border-radius: 6px;
 }
+
+/* Entry page and sign-in pages */
+.page.narrow {
+  max-width: 26rem;
+}
+
+.back,
+.switch {
+  margin: 0 0 1rem;
+}
+
+.entry-cards {
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.entry-card {
+  display: grid;
+  gap: 0.15rem;
+  padding: 1rem 1.1rem;
+  color: inherit;
+  text-decoration: none;
+  background: #fff;
+  border: 1px solid #c9c9c4;
+  border-radius: 8px;
+}
+
+.entry-card strong {
+  color: #1f4f8b;
+  font-size: 1.1rem;
+}
+
+.entry-card:hover,
+.entry-card:focus-visible {
+  border-color: #1f4f8b;
+}

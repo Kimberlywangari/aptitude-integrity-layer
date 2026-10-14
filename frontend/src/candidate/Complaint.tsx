@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { ComplaintCategory, ComplaintRequest } from '../lib/api'
+import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
 import {
   COMPLAINT_CATEGORIES,
@@ -23,7 +24,7 @@ export default function Complaint() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!sessionId) navigate('/', { replace: true })
+    if (!sessionId) navigate(CANDIDATE_PATH, { replace: true })
   }, [sessionId, navigate])
 
   async function submit(event: FormEvent) {
