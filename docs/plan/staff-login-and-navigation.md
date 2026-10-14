@@ -1,6 +1,15 @@
 # Entry page, staff sign-in and navigation
 
-> **Status (14 Oct 2026):** decisions below are settled with the user. Nothing is built yet.
+> **Status (14 Oct 2026):** decisions below are settled with the user. Backend (migration `0002`,
+> login, `me`, role dependencies, jobs) and the frontend routing step (entry page, sign-in pages,
+> layout, breadcrumbs, route-specific fixtures) are built. Still to do: the candidate dead ends,
+> the admin setup strip and the visual pass.
+>
+> Deviations from the plan as written: breadcrumbs live in `staff/crumbs.ts` (a component file may
+> not also export functions); `staffPathForError` became `staffRecovery`, which says what to do
+> instead of returning a path, because the right sign-in page now depends on where the person was;
+> the fixture router accepts a real server token by matching it to the stored session; a reviewer
+> who uses the admin sign-in is told so and nothing is stored.
 > Builds on the screens in [ui-screens-and-invite-codes.md](ui-screens-and-invite-codes.md) and
 > brings the reviewer login (week-03 D13 step 1) forward, with an `admin` role added.
 

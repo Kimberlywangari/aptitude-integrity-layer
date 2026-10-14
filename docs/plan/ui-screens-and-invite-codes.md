@@ -47,7 +47,7 @@ end-to-end functional. That is the honest scope.
 | 8 | **Upload status** ("keep SEB open until finished", then Quit URL) | `/uploading` | to build | chunk manifest (D8) |
 | 9 | **Complaint form** (camera / upload / other, up to 1000 chars) | `/complaint` | to build | `POST /api/complaints` (D8) |
 | 10 | Resume page | `/resume` | **conditional** | only if SEB spike check 4 passes (Plan B); skip until decided |
-| 11 | **Reviewer login** | `/review/login` | to build | `POST /api/review/login` (D13) |
+| 11 | **Reviewer login** | `/login/reviewer` and `/login/admin` (was `/review/login`, which still forwards) | built; real server login | see [staff-login-and-navigation.md](staff-login-and-navigation.md) |
 | 12 | **Reviewer queue** (rank, candidate ID, flag chips, "AI advisory" badge or "rules only", decision status, sitting filter, low-rank logging-problem lane) | `/review` | to build | `GET /api/review/queue` |
 | 13 | **Candidate detail** (packet summary, flags with times and question numbers, cohort comparison, score and pace labelled context only, innocent signals, mic-silence stretches, AI explanation labelled advisory, complaints, past decisions) | `/review/candidates/:id` | to build | `GET /api/review/candidates/{id}` |
 | 14 | **Video player** (jump to flag − 5 s, handles no-video-at-moment, video deleted notice) | inside 13 | to build | Range video endpoint |

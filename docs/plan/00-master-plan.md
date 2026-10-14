@@ -117,13 +117,15 @@ aptitude-integrity-layer/
 │   ├── Dockerfile  nginx.conf  package.json  vite.config.ts  index.html
 │   ├── public/spike/   (D2 SEB spike page)
 │   ├── src/
-│   │   ├── lib/        api.ts session.ts eventLogger.ts heartbeat.ts heartbeatWorker.ts
+│   │   ├── lib/        api.ts routes.ts session.ts eventLogger.ts heartbeat.ts heartbeatWorker.ts
 │   │   │               media.ts micWatch.ts recorder.ts chunkQueue.ts uploader.ts
 │   │   ├── candidate/  Start.tsx NotSeb.tsx PreCheck.tsx Integrity.tsx TestRunner.tsx
 │   │   │               SelfReport.tsx UploadStatus.tsx Complaint.tsx MicBanner.tsx
-│   │   ├── reviewer/   Login.tsx Queue.tsx CandidateDetail.tsx VideoPlayer.tsx DecisionForm.tsx Audit.tsx
+│   │   ├── entry/      Entry.tsx   # "/": candidate, reviewer or admin; forwards /?t=CODE
+│   │   ├── reviewer/   Queue.tsx CandidateDetail.tsx VideoPlayer.tsx DecisionForm.tsx Audit.tsx
 │   │   ├── admin/      Sittings.tsx Invites.tsx Questions.tsx   # the recruiter's setup screens
-│   │   ├── staff/      StaffApp.tsx StaffLayout.tsx staff.css   # lazy chunk: reviewer + admin only
+│   │   ├── staff/      StaffApp.tsx StaffLayout.tsx SignIn.tsx Breadcrumbs.tsx crumbs.ts staff.css
+│   │   │               # lazy chunk: sign-in, reviewer and admin only
 │   │   └── lib/mock/   fixtures for endpoints not built yet (VITE_MOCK_API=1, dev only)
 │   ├── tests/          (Vitest)
 │   └── e2e/            (Playwright scripted-cheater specs)

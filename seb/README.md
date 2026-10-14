@@ -8,7 +8,8 @@ git-ignored because they can contain keys and passwords.
 1. Open **SEB Config Tool** (installed with SEB 3.10.2).
 2. Set **Start URL** to the page you want to test:
    - D2 spike: `http://localhost:5173/spike/index.html`
-   - D3 onwards: `http://localhost:5173/`
+   - D3 onwards: `http://localhost:5173/candidate` (code entry; `/` is the page that asks
+     whether you are a candidate, a reviewer or an admin, which a candidate in SEB should skip)
 3. Set **Quit URL**: `http://localhost:5173/spike/quit.html` for the spike's check 10; for the real
    test use `<public base URL>/quit.html` (`frontend/public/quit.html`), the page the upload screen
    sends a candidate to once everything is uploaded so SEB can close.
@@ -25,8 +26,8 @@ Record in `docs/spikes/seb-findings.md` exactly which option you changed and wha
 
 ## One file for everyone
 
-Candidates all use the **same** `.seb` with the start URL set to the site root. Each candidate
-then types their own short invitation code (8 characters, shown as XXXX-XXXX) on the first
+Candidates all use the **same** `.seb` with the start URL set to `<public base URL>/candidate`.
+Each candidate then types their own short invitation code (8 characters, shown as XXXX-XXXX) on the first
 screen. Clipboard is off inside SEB, so they cannot paste; the page ignores case, dashes and
 spaces, and reads O, I and L as 0, 1 and 1. One file means one Config Key and one Browser Exam
 Key for `SEB_ALLOWED_KEYS`, and any edited copy of the file produces a different key and is
