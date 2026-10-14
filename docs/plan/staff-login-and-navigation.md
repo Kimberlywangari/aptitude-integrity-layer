@@ -96,7 +96,7 @@ set to the site root") changes to `/candidate` with the frontend step below.
 - **Dependencies:** `require_reviewer` (any active staff, admins included) and `require_admin`
   in `app/api/deps.py`.
 - **Rate limit:** reuse `AttemptLimiter` (failures only), keyed by client address and by email;
-  `login_max_failures` 10 and `login_window_s` 900 in `Settings`.
+  `login_max_failures` 10 and `login_window_s` 60 in `Settings`: a wrong password costs a reviewer at most a minute.
 - **Audit:** a successful login writes an `audit_log` row (`action = login`).
 - **CLI:** `python -m scripts.jobs create_reviewer --email ... [--password ...] [--role admin]`.
   Without `--password` it prompts, so the password stays out of shell history. Minimum 12

@@ -127,15 +127,22 @@ describe('staff app', () => {
       expect(getStaff()).toBeNull()
     })
 
-    it('says how long to wait after too many wrong attempts', async () => {
+    it.each([
+      [45, /wait about 1 minute and/],
+      [60, /wait about 1 minute and/],
+      [61, /wait about 2 minutes and/],
+    ])('says how long to wait after too many wrong attempts (%i s)', async (seconds, message) => {
       vi.mocked(api).mockRejectedValueOnce(
-        new ApiError(429, 'too_many_attempts', { code: 'too_many_attempts', retry_after_s: 600 }),
+        new ApiError(429, 'too_many_attempts', {
+          code: 'too_many_attempts',
+          retry_after_s: seconds,
+        }),
       )
       renderAt('/login/reviewer')
       await screen.findByRole('heading', { name: 'Reviewer sign in' })
       signInWith('r@example.com')
 
-      expect((await screen.findByRole('alert')).textContent).toMatch(/wait about 10 minutes/)
+      expect((await screen.findByRole('alert')).textContent).toMatch(message)
     })
 
     it('links each sign-in to the other one and back to the entry page', async () => {

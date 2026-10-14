@@ -30,9 +30,11 @@ class Settings(BaseSettings):
     start_max_failures: int = 20
     start_window_s: int = 300
     # Wrong staff passwords allowed per client address, and per email, in the window before
-    # /review/login answers 429. Only failures count.
+    # /review/login answers 429. Only failures count. A short window keeps a mistyped password from
+    # costing a reviewer much time, and 10 tries a minute is still too slow to guess a 12+
+    # character password.
     login_max_failures: int = 10
-    login_window_s: int = 900
+    login_window_s: int = 60
     # How long a staff token is good for, as the master plan says: one working day.
     staff_token_ttl_s: int = 8 * 3600
     # Behind a trusted reverse proxy (nginx in compose), the real client is the last address in
