@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     seb_mode: str = "off"  # off | log | enforce
     seb_allowed_keys: str = ""  # comma-separated Config Key / Browser Exam Key values
 
+    # Wrong invitation codes allowed per client in the window before /session/start answers 429.
+    start_max_failures: int = 20
+    start_window_s: int = 300
+    # Behind a trusted reverse proxy (nginx in compose), the real client is the last address in
+    # X-Forwarded-For. Leave false when the API is reached directly.
+    trust_forwarded_for: bool = False
+
     video_root: str = "./data/video"
     retention_days: int = 30
     chunk_fail_rate: float = 0.0

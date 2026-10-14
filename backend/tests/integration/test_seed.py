@@ -3,7 +3,7 @@ from collections import Counter
 
 from sqlalchemy import func, select
 
-from app.core.security import hash_token
+from app.core.security import INVITE_ALPHABET, hash_token, normalise_invite_code
 from app.models import Candidate, Option, Question, QuestionStats, Sitting
 from scripts.seed_synthetic import seed
 
@@ -74,8 +74,26 @@ def test_invites_are_hashed_in_the_database_and_written_to_csv(db, tmp_path):
         rows = list(csv.DictReader(fh))
     assert len(rows) == 20
     assert rows[0]["url"] == f"http://x/?t={rows[0]['token']}"
+    # the CSV shows the code the way a candidate types it
+    assert all(len(r["token"]) == 9 and r["token"][4] == "-" for r in rows)
 
     stored = {c.id: c.invite_token_hash for c in db.scalars(select(Candidate))}
     for invite in result.invites:
         assert stored[invite.candidate_id] == hash_token(invite.token)
         assert invite.token not in stored.values()
+
+
+def test_invites_are_short_typeable_codes_and_the_csv_form_maps_back_to_them(db, tmp_path):
+    path = tmp_path / "invites.csv"
+    result = seed(db, seed=42, secret="s", public_base_url="http://x", invites_path=path)
+
+    with path.open(newline="", encoding="utf-8") as fh:
+        rows = {r["candidate_id"]: r["token"] for r in csv.DictReader(fh)}
+
+    assert len({i.token for i in result.invites}) == 20
+    for invite in result.invites:
+        assert len(invite.token) == 8
+        assert set(invite.token) <= set(INVITE_ALPHABET)
+        # typing the CSV form (or a lower-case copy of it) reaches the same stored hash
+        assert normalise_invite_code(rows[invite.candidate_id]) == invite.token
+        assert normalise_invite_code(rows[invite.candidate_id].lower()) == invite.token

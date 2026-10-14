@@ -1,11 +1,12 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_clock
+from app.api.deps import get_clock, get_start_limiter
 from app.clock import Clock
+from app.config import Settings, get_settings
 from app.core.seb import require_seb
 from app.core.security import tokens_match
 from app.db import get_db
@@ -25,6 +26,7 @@ from app.schemas.session import (
     StartResponse,
 )
 from app.services import test_flow
+from app.services.rate_limit import AttemptLimiter
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -50,14 +52,39 @@ def current_session(
     return session
 
 
+def client_key(request: Request, settings: Settings) -> str:
+    """Who is asking, for the wrong-code limit.
+
+    Behind our own reverse proxy the real client is the last X-Forwarded-For entry (the one the
+    proxy appended; earlier entries are whatever the client claimed). Otherwise it is the peer.
+    """
+    if settings.trust_forwarded_for:
+        last = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+        if last:
+            return last
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/start", response_model=StartResponse)
 def start(
     body: StartRequest,
+    request: Request,
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
     seb_verified: bool = Depends(require_seb),
+    limiter: AttemptLimiter = Depends(get_start_limiter),
+    settings: Settings = Depends(get_settings),
 ) -> StartResponse:
-    result = test_flow.start_session(db, clock, body.token, seb_verified)
+    key = client_key(request, settings)
+    wait = limiter.retry_after_s(key, clock.now())
+    if wait > 0:
+        raise ApiError(429, "too_many_attempts", retry_after_s=wait)
+    try:
+        result = test_flow.start_session(db, clock, body.token, seb_verified)
+    except ApiError as exc:
+        if exc.code == "invalid_invitation":
+            limiter.record_failure(key, clock.now())
+        raise
     return StartResponse(
         session_id=result.session.id,
         access_token=result.access_token,

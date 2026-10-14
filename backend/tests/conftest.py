@@ -15,11 +15,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_clock
+from app.api.deps import get_clock, get_start_limiter
 from app.clock import FakeClock
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.main import app
+from app.services.rate_limit import AttemptLimiter
 from scripts.seed_synthetic import SeedSummary, seed
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -91,6 +92,9 @@ def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestCl
     app.dependency_overrides[get_db] = reload_db
     app.dependency_overrides[get_clock] = lambda: clock
     app.dependency_overrides[get_settings] = lambda: settings
+    # a fresh wrong-code limiter per test, so one test's failures never block another
+    limiter = AttemptLimiter(settings.start_max_failures, settings.start_window_s)
+    app.dependency_overrides[get_start_limiter] = lambda: limiter
     try:
         yield TestClient(app)
     finally:

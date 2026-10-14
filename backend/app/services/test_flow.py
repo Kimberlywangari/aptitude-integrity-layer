@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import Clock
-from app.core.security import hash_token, new_token
+from app.core.security import hash_token, new_token, normalise_invite_code
 from app.errors import ApiError
 from app.models import Candidate, Option, Question, SessionQuestion, Sitting, TestSession
 from app.services.shuffle import balanced_sample, session_rng, shuffle_options
@@ -102,7 +102,9 @@ def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bo
     """
     now = clock.now()
     candidate = db.scalar(
-        select(Candidate).where(Candidate.invite_token_hash == hash_token(invite_token))
+        select(Candidate).where(
+            Candidate.invite_token_hash == hash_token(normalise_invite_code(invite_token))
+        )
     )
     if candidate is None:
         raise ApiError(401, "invalid_invitation")
