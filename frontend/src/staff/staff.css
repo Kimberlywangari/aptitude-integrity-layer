@@ -1,0 +1,175 @@
+/* Reviewer app and recruiter setup screens. Imported by StaffApp, so it is part of the lazy
+   staff chunk and never reaches a candidate's browser. Shared pieces (.banner, .ok, .option,
+   buttons, inputs) stay in ../index.css. */
+
+select {
+  font: inherit;
+  padding: 0.5rem;
+  margin: 0.25rem 0 1rem;
+  border: 1px solid #8a8a8a;
+  border-radius: 6px;
+  background: #fff;
+}
+
+
+.page.wide {
+  max-width: 76rem;
+}
+
+.staff-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  padding: 0.6rem 1.25rem;
+  background: #fff;
+  border-bottom: 1px solid #d8d8d3;
+}
+
+.staff-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  flex: 1;
+}
+
+.staff-header a {
+  color: #1f4f8b;
+  text-decoration: none;
+}
+
+.staff-header a.active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.staff-user {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+.panel {
+  box-sizing: border-box;
+  padding: 1rem 1.1rem;
+  margin: 0 0 1rem;
+  background: #fff;
+  border: 1px solid #d8d8d3;
+  border-radius: 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.table th,
+.table td {
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #e4e4df;
+}
+
+.table th {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  letter-spacing: 0.05em;
+}
+
+.chip,
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  margin: 0 0.3rem 0.3rem 0;
+  font-size: 0.85rem;
+  background: #ecece6;
+  border-radius: 999px;
+}
+
+.badge.ai {
+  background: #dce8f7;
+}
+
+.detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.detail-header h1 {
+  margin: 0;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.detail-side {
+  position: sticky;
+  top: 1rem;
+}
+
+.detail-side video,
+.video-placeholder {
+  width: 100%;
+  min-height: 11rem;
+  background: #111;
+  border-radius: 6px;
+}
+
+.video-placeholder {
+  box-sizing: border-box;
+  padding: 1rem;
+  color: #ddd;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.list li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #e4e4df;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 1rem;
+}
+
+@media (max-width: 60rem) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-side {
+    position: static;
+  }
+}
