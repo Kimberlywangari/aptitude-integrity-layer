@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, pathForError } from '../lib/api'
 import type { FinishResponse } from '../lib/api'
 import { getSessionId } from '../lib/session'
@@ -12,7 +12,6 @@ export default function Done() {
   const [summary, setSummary] = useState<FinishResponse | null>(null)
   const [issues, setIssues] = useState<boolean | null>(null)
   const [note, setNote] = useState('')
-  const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,10 +39,10 @@ export default function Done() {
         method: 'POST',
         body: { had_technical_issues: issues, note: note.trim() || null },
       })
-      setSent(true)
+      // Recording upload carries on from here; the candidate waits for it on /uploading.
+      navigate('/uploading', { replace: true })
     } catch {
       setError('Could not save that. Please try again.')
-    } finally {
       setBusy(false)
     }
   }
@@ -57,58 +56,58 @@ export default function Done() {
         </p>
       )}
 
-      {sent ? (
-        <p role="status">Thank you. You can close this window.</p>
-      ) : (
-        <form onSubmit={submit}>
-          <fieldset>
-            <legend>{SELF_REPORT_QUESTION}</legend>
-            <label className="option">
-              <input
-                type="radio"
-                name="issues"
-                checked={issues === false}
-                onChange={() => setIssues(false)}
-              />
-              No
-            </label>
-            <label className="option">
-              <input
-                type="radio"
-                name="issues"
-                checked={issues === true}
-                onChange={() => setIssues(true)}
-              />
-              Yes
-            </label>
-          </fieldset>
+      <form onSubmit={submit}>
+        <fieldset>
+          <legend>{SELF_REPORT_QUESTION}</legend>
+          <label className="option">
+            <input
+              type="radio"
+              name="issues"
+              checked={issues === false}
+              onChange={() => setIssues(false)}
+            />
+            No
+          </label>
+          <label className="option">
+            <input
+              type="radio"
+              name="issues"
+              checked={issues === true}
+              onChange={() => setIssues(true)}
+            />
+            Yes
+          </label>
+        </fieldset>
 
-          {issues === true && (
-            <>
-              <label htmlFor="note">{SELF_REPORT_NOTE_LABEL}</label>
-              <textarea
-                id="note"
-                value={note}
-                maxLength={300}
-                rows={4}
-                onChange={(e) => setNote(e.target.value)}
-              />
-              <p className="muted">
-                {SELF_REPORT_NOTE_HINT} ({note.length}/300)
-              </p>
-            </>
-          )}
-
-          <button type="submit" disabled={busy || issues === null}>
-            Send
-          </button>
-          {error && (
-            <p role="alert" className="error">
-              {error}
+        {issues === true && (
+          <>
+            <label htmlFor="note">{SELF_REPORT_NOTE_LABEL}</label>
+            <textarea
+              id="note"
+              value={note}
+              maxLength={300}
+              rows={4}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <p className="muted">
+              {SELF_REPORT_NOTE_HINT} ({note.length}/300)
             </p>
-          )}
-        </form>
-      )}
+          </>
+        )}
+
+        <button type="submit" disabled={busy || issues === null}>
+          {busy ? 'Sending...' : 'Send'}
+        </button>
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+      </form>
+
+      <p>
+        <Link to="/complaint">Camera or upload trouble? Tell us.</Link>
+      </p>
     </main>
   )
 }

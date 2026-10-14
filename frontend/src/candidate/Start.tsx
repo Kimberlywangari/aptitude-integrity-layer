@@ -3,17 +3,19 @@ import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
 import type { SessionStatus, StartResponse } from '../lib/api'
+import { normaliseInviteCode } from '../lib/inviteCode'
 import { saveSession } from '../lib/session'
 
 const MESSAGES: Record<string, string> = {
   invalid_invitation: 'That invitation is not valid. Check the link or code you were sent.',
   no_open_sitting: 'This test is not open right now.',
+  too_many_attempts: 'Too many wrong codes. Please wait a few minutes and try again.',
 }
 
 function routeFor(status: SessionStatus): string {
   if (status === 'in_progress') return '/test'
   if (status === 'finished') return '/done'
-  return '/integrity'
+  return '/precheck' // device check first; it hands over to /integrity
 }
 
 export default function Start() {
@@ -30,7 +32,8 @@ export default function Start() {
     try {
       const body = await api<StartResponse>('/api/session/start', {
         method: 'POST',
-        body: { token: invitation.trim() },
+        // Typed by hand inside SEB, so case, dashes and spaces are forgiven (lib/inviteCode.ts).
+        body: { token: normaliseInviteCode(invitation) },
       })
       saveSession(body.session_id, body.access_token)
       navigate(routeFor(body.status), { replace: true })
@@ -70,6 +73,9 @@ export default function Start() {
           value={token}
           onChange={(e) => setToken(e.target.value)}
           autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="XXXX-XXXX"
           autoFocus
           disabled={busy}
         />

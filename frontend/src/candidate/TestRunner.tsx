@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { QuestionResponse, ResolveResponse } from '../lib/api'
 import { getSessionId } from '../lib/session'
+import MicBanner from './MicBanner'
 
 interface Clock {
   remaining: number // seconds left, as the server said
@@ -149,6 +150,8 @@ export default function TestRunner() {
           {left === null ? '--:--' : format(left)}
         </span>
       </header>
+
+      <MicBanner />
 
       <p className="section">{question.section}</p>
       <p id="question-text" className="question-text">
