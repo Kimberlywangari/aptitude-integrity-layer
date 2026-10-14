@@ -22,6 +22,8 @@ py -3.13 -m venv .venv
 cd ..\frontend                              # second terminal
 npm install
 npm run dev                                 # http://localhost:5173 (proxies /api to :8000)
+                                            # reviewer, admin, pre-check, upload and complaint
+                                            # screens run on fixtures (frontend/.env.development)
 ```
 
 Open `http://localhost:5173/?t=<token>` with a token from `data/invites.csv`.
