@@ -20,6 +20,8 @@ data/
 *.seb
 docs/spikes/laptop-specs.md
 .claude/
+.agents/
+skills-lock.json
 
 # Editors and OS
 .vscode/
