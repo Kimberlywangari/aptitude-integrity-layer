@@ -2,8 +2,15 @@
 
 > **Status (14 Oct 2026):** decisions below are settled with the user. Backend (migration `0002`,
 > login, `me`, role dependencies, jobs) and the frontend routing step (entry page, sign-in pages,
-> layout, breadcrumbs, route-specific fixtures) are built. Still to do: the candidate dead ends,
-> the admin setup strip and the visual pass.
+> layout, breadcrumbs, route-specific fixtures) are built, and so are the candidate dead ends, the
+> admin setup strip and the admin endpoints (`/api/admin/*`, migration `0003`), which the setup
+> screens now use instead of fixtures. Still to do: the visual pass.
+>
+> Open item: Cytonn has not sent the question summary or the question-bank export. The summary's
+> columns are the ones the plan names; the bank export's columns (`question_id`, `text`,
+> `option_a` to `option_d`) are this project's guess, held in `BANK_COLUMNS` in
+> `backend/app/services/question_import.py`. A row with no difficulty tag gets one from
+> `pct_correct` (easy from 70, hard below 45), which is also a guess to confirm.
 >
 > Deviations from the plan as written: breadcrumbs live in `staff/crumbs.ts` (a component file may
 > not also export functions); `staffPathForError` became `staffRecovery`, which says what to do
