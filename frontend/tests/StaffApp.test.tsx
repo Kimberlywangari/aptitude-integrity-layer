@@ -323,6 +323,33 @@ describe('staff app', () => {
       expect(await screen.findByText('Synthetic sitting 1')).toBeTruthy()
     })
 
+    it('shows where the setup stands, with a way to the next step', async () => {
+      asAdmin()
+      renderAt('/admin')
+      const setup = await screen.findByRole('region', { name: 'Setup' })
+
+      expect(within(setup).getByText(/Only placeholder questions so far \(60\)/)).toBeTruthy()
+      expect(
+        within(setup).getByRole('link', { name: 'Import the real questions' }).getAttribute('href'),
+      ).toBe('/admin/questions')
+      expect(within(setup).getByText('"Synthetic sitting 1" is open.')).toBeTruthy()
+      expect(within(setup).getByText('20 invitations for this sitting.')).toBeTruthy()
+      expect(within(setup).getByText(/14 of 20 finished/)).toBeTruthy()
+    })
+
+    it('says when a sitting with that name already exists', async () => {
+      asAdmin()
+      renderAt('/admin')
+      fireEvent.change(await screen.findByLabelText('Name'), {
+        target: { value: 'Synthetic sitting 1' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Create sitting' }))
+
+      expect((await screen.findByRole('alert')).textContent).toBe(
+        'A sitting with that name already exists.',
+      )
+    })
+
     it('asks before closing a sitting that has unfinished candidates', async () => {
       asAdmin()
       renderAt('/admin')

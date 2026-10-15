@@ -287,7 +287,8 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
     if (!(b.duration_s >= 60)) fail(422, 'invalid_duration')
     if (!(b.question_count >= 1)) fail(422, 'invalid_question_count')
     const available = bankSummary().total
-    if (b.question_count > available) fail(503, 'question_bank_too_small', { available })
+    if (b.question_count > available) fail(409, 'question_bank_too_small', { available })
+    if (sittings.some((s) => s.name === b.name.trim())) fail(409, 'name_taken')
     const sitting: AdminSitting = {
       id: Math.max(...sittings.map((s) => s.id)) + 1,
       name: b.name.trim(),

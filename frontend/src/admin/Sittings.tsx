@@ -10,11 +10,15 @@ import type {
   QuestionBankSummary,
 } from '../lib/adminTypes'
 import { formatDateTime } from '../lib/format'
+import SetupSteps from './SetupSteps'
 
 const CREATE_ERRORS: Record<string, string> = {
   name_required: 'Give the sitting a name.',
+  name_too_long: 'That name is too long. Use 100 characters or fewer.',
+  name_taken: 'A sitting with that name already exists.',
   invalid_duration: 'The duration must be at least one minute.',
   invalid_question_count: 'The sitting needs at least one question.',
+  invalid_window: 'It must close after it opens.',
 }
 
 function createMessage(error: unknown): string | null {
@@ -98,6 +102,10 @@ export default function Sittings() {
     <>
       <h1>Sittings</h1>
 
+      {bank.data && sittings.data && (
+        <SetupSteps bank={bank.data} sittings={sittings.data.sittings} />
+      )}
+
       {bank.data && bank.data.synthetic > 0 && (
         <p role="status" className="banner">
           {bank.data.synthetic} placeholder questions are still in the question bank and can
@@ -106,7 +114,7 @@ export default function Sittings() {
         </p>
       )}
 
-      <section className="panel">
+      <section className="panel" id="new-sitting">
         <h2>New sitting</h2>
         <form onSubmit={submit}>
           <label htmlFor="name">Name</label>
