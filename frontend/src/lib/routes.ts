@@ -6,6 +6,13 @@ import type { StaffRole } from './staffSession'
 /** Code entry. This is also the start URL the SEB config points at. */
 export const CANDIDATE_PATH = '/candidate'
 
+/**
+ * Where a finished candidate is sent so SEB can close. The SEB config's Quit URL must be this same
+ * address (http://<host>/quit). It has to be reached by a full page load, not a router link, or
+ * SEB never sees the request.
+ */
+export const QUIT_PATH = '/quit'
+
 export const LOGIN_PATH = {
   reviewer: '/login/reviewer',
   admin: '/login/admin',

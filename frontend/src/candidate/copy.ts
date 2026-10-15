@@ -98,6 +98,13 @@ export const UPLOAD_STUCK =
   'The upload is not moving. You can quit now. A person will see that your upload was ' +
   'incomplete, and you can tell us what happened with the form below.'
 
+// ---- the last page
+
+export const QUIT_TITLE = 'You have finished'
+export const QUIT_BODY = 'This window may close by itself. If it does not, press Leave.'
+export const QUIT_LEAVE = 'Leave'
+export const QUIT_STILL_OPEN = 'If the window is still open after you press Leave, close it yourself.'
+
 export const COMPLAINT_TITLE = 'Tell us what went wrong'
 export const COMPLAINT_NOTE_LABEL = 'What happened? (up to 1000 characters)'
 export const COMPLAINT_THANKS =
