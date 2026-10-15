@@ -7,13 +7,11 @@ import { getStaff } from './staffSession'
 // screen talks to the server. The mock module is imported lazily, and the flag is a build-time
 // constant, so a production build carries none of it.
 const MOCK_ENABLED = import.meta.env.VITE_MOCK_API === '1'
-// /api/admin is not here any more: the setup screens talk to the real server.
-const MOCKED_PREFIXES = ['/api/precheck', '/api/complaints', '/api/chunks', '/api/review']
-// Already on the server, so they go there even while the rest of their prefix is still mocked.
-const REAL_PATHS = ['/api/review/login', '/api/review/me']
+// /api/admin and /api/review are not here any more: the setup and review screens talk to the
+// real server. What is left is the candidate's pre-check, complaints and the upload manifest.
+const MOCKED_PREFIXES = ['/api/precheck', '/api/complaints', '/api/chunks']
 
 function isMocked(path: string): boolean {
-  if (REAL_PATHS.includes(path.split('?')[0])) return false
   return MOCKED_PREFIXES.some((prefix) => path.startsWith(prefix))
 }
 

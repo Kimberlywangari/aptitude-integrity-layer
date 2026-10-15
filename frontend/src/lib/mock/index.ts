@@ -1,5 +1,7 @@
 // In-memory stand-in for the endpoints the backend does not have yet (pre-check, complaints,
-// upload manifest, reviewer app, admin). Loaded only when VITE_MOCK_API=1.
+// upload manifest). Loaded only when VITE_MOCK_API=1. The reviewer and admin screens now use the
+// real server (api.ts MOCKED_PREFIXES); their fixtures stay here because the screen tests run on
+// them.
 //
 // Sign in with any email and password. An email starting with "admin" gets the admin role.
 // The password "wrong" is refused, so the error path can be seen.
