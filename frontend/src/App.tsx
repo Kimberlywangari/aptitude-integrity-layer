@@ -6,11 +6,12 @@ import Entry from './entry/Entry'
 import Integrity from './candidate/Integrity'
 import NotSeb from './candidate/NotSeb'
 import PreCheck from './candidate/PreCheck'
+import Quit from './candidate/Quit'
 import Start from './candidate/Start'
 import TestRunner from './candidate/TestRunner'
 import UploadStatus from './candidate/UploadStatus'
 import { setSebRequiredHandler } from './lib/api'
-import { CANDIDATE_PATH } from './lib/routes'
+import { CANDIDATE_PATH, QUIT_PATH } from './lib/routes'
 import ThemeToggle from './ThemeToggle'
 
 // Sign-in, reviewer and recruiter screens are a separate chunk: a candidate on a weak connection
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/done" element={<Done />} />
           <Route path="/uploading" element={<UploadStatus />} />
           <Route path="/complaint" element={<Complaint />} />
+          <Route path={QUIT_PATH} element={<Quit />} />
           <Route path="/not-seb" element={<NotSeb />} />
           <Route path="/login/*" element={<StaffApp section="login" />} />
           <Route path="/review/*" element={<StaffApp section="review" />} />

@@ -10,7 +10,7 @@ describe('light and dark toggle', () => {
     window.history.pushState({}, '', '/')
   })
 
-  it.each(['/', '/candidate', '/not-seb', '/no/such/page'])('is on %s', (path) => {
+  it.each(['/', '/candidate', '/quit', '/not-seb', '/no/such/page'])('is on %s', (path) => {
     window.history.pushState({}, '', path)
     render(<App />)
     expect(screen.getByRole('button', { name: /^(dark|light) mode$/i })).toBeTruthy()

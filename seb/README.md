@@ -11,8 +11,10 @@ git-ignored because they can contain keys and passwords.
    - D3 onwards: `http://localhost:5173/candidate` (code entry; `/` is the page that asks
      whether you are a candidate, a reviewer or an admin, which a candidate in SEB should skip)
 3. Set **Quit URL**: `http://localhost:5173/spike/quit.html` for the spike's check 10; for the real
-   test use `<public base URL>/quit.html` (`frontend/public/quit.html`), the page the upload screen
-   sends a candidate to once everything is uploaded so SEB can close.
+   test use `<public base URL>/quit` (the Quit page, `frontend/src/candidate/Quit.tsx`; the address
+   is `QUIT_PATH` in `frontend/src/lib/routes.ts`). The upload screen sends a candidate there once
+   everything is uploaded so SEB can close. The config and the app must hold the same address, or
+   SEB never sees the finish as a quit.
 4. Turn on camera and microphone capture, turn off clipboard use, turn off Print Screen, and
    turn on "send Browser Exam Key / Config Key in the HTTP headers".
 5. Save as `seb/exam.seb` and open that file (double-click, or `SafeExamBrowser.exe` with the
