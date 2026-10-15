@@ -185,6 +185,8 @@ fieldset {
 .question-text {
   font-size: 1.15rem;
   margin: 0.25rem 0 1.25rem;
+  /* Keep the line breaks a question carries: a passage above its question, or a list of values. */
+  white-space: pre-line;
 }
 
 .actions {

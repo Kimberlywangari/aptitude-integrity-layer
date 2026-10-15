@@ -1,0 +1,601 @@
+{
+  "version": 1,
+  "note": "Authored for this project as a working question bank until Cytonn supplies its approved bank. All items are original. Difficulty is a judgement from the number of steps and the traps involved (easy: one step; medium: two steps or one trap; hard: several steps or a counter-intuitive result), not measured. The `explanation` field is for reviewers and is not stored in the database.",
+  "questions": [
+    {
+      "id": "Q001",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "A shirt costs KSh 2,000 and is sold at a 15% discount. What is the sale price?",
+      "options": { "A": "KSh 1,700", "B": "KSh 1,800", "C": "KSh 1,850", "D": "KSh 2,300" },
+      "correct": "A",
+      "explanation": "15% of 2,000 is 300, and 2,000 - 300 = 1,700."
+    },
+    {
+      "id": "Q002",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "A worker earns KSh 850 a day. How much does the worker earn in 6 days?",
+      "options": { "A": "KSh 4,800", "B": "KSh 5,010", "C": "KSh 5,100", "D": "KSh 5,400" },
+      "correct": "C",
+      "explanation": "850 x 6 = 5,100."
+    },
+    {
+      "id": "Q003",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "The ages of four friends are 20, 24, 26 and 30. What is their average age?",
+      "options": { "A": "24", "B": "25", "C": "26", "D": "27" },
+      "correct": "B",
+      "explanation": "The ages add up to 100, and 100 / 4 = 25."
+    },
+    {
+      "id": "Q004",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "Juice concentrate is mixed with water in the ratio 1 : 4. How many litres of water are needed to make 10 litres of the mixture?",
+      "options": { "A": "2 litres", "B": "4 litres", "C": "6 litres", "D": "8 litres" },
+      "correct": "D",
+      "explanation": "There are 5 parts in total and water is 4 of them: 4/5 x 10 = 8 litres."
+    },
+    {
+      "id": "Q005",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "A bus leaves at 08:45 and the journey takes 2 hours 50 minutes. At what time does it arrive?",
+      "options": { "A": "11:25", "B": "11:35", "C": "11:45", "D": "12:35" },
+      "correct": "B",
+      "explanation": "08:45 + 2 hours = 10:45, and 10:45 + 50 minutes = 11:35."
+    },
+    {
+      "id": "Q006",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "A tank holds 240 litres and is 3/8 full. How many litres are in the tank?",
+      "options": { "A": "45 litres", "B": "60 litres", "C": "80 litres", "D": "90 litres" },
+      "correct": "D",
+      "explanation": "240 / 8 = 30, and 30 x 3 = 90."
+    },
+    {
+      "id": "Q007",
+      "section": "numerical",
+      "difficulty": "easy",
+      "text": "A car travels at 60 km/h for 2.5 hours. How far does it travel?",
+      "options": { "A": "150 km", "B": "160 km", "C": "180 km", "D": "200 km" },
+      "correct": "A",
+      "explanation": "Distance = speed x time = 60 x 2.5 = 150 km."
+    },
+    {
+      "id": "Q008",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "A jacket is sold for KSh 3,200 after a 20% discount. What was the original price?",
+      "options": { "A": "KSh 2,560", "B": "KSh 3,840", "C": "KSh 4,000", "D": "KSh 4,200" },
+      "correct": "C",
+      "explanation": "The sale price is 80% of the original, so the original is 3,200 / 0.8 = 4,000."
+    },
+    {
+      "id": "Q009",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "A salary rises from KSh 40,000 to KSh 46,000. What is the percentage increase?",
+      "options": { "A": "15%", "B": "6%", "C": "13%", "D": "20%" },
+      "correct": "A",
+      "explanation": "The increase is 6,000, and 6,000 / 40,000 = 15%. (13% divides by the new salary instead of the old one.)"
+    },
+    {
+      "id": "Q010",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "KSh 18,000 is shared between Amina and Brian in the ratio 2 : 3. How much does Brian receive?",
+      "options": { "A": "KSh 6,000", "B": "KSh 7,200", "C": "KSh 9,000", "D": "KSh 10,800" },
+      "correct": "D",
+      "explanation": "There are 5 parts of KSh 3,600 each, and Brian gets 3 parts = 10,800."
+    },
+    {
+      "id": "Q011",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "Three machines fill 900 bottles in 4 hours. At the same rate, how many bottles do five machines fill in 3 hours?",
+      "options": { "A": "1,000", "B": "1,125", "C": "1,200", "D": "1,500" },
+      "correct": "B",
+      "explanation": "One machine fills 900 / (3 x 4) = 75 bottles an hour. Five machines for 3 hours: 5 x 3 x 75 = 1,125."
+    },
+    {
+      "id": "Q012",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "The average of five numbers is 18. Four of them are 12, 15, 20 and 22. What is the fifth number?",
+      "options": { "A": "19", "B": "20", "C": "21", "D": "22" },
+      "correct": "C",
+      "explanation": "The five numbers total 90. The four known numbers total 69, so the fifth is 21."
+    },
+    {
+      "id": "Q013",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "KSh 50,000 is invested for 3 years at 8% simple interest a year. What is the total amount at the end of the 3 years?",
+      "options": { "A": "KSh 12,000", "B": "KSh 62,000", "C": "KSh 62,986", "D": "KSh 64,000" },
+      "correct": "B",
+      "explanation": "Simple interest is 50,000 x 0.08 x 3 = 12,000, so the total is 62,000. (KSh 62,986 is what compound interest would give; KSh 12,000 is the interest alone.)"
+    },
+    {
+      "id": "Q014",
+      "section": "numerical",
+      "difficulty": "medium",
+      "text": "A train travels 180 km at 90 km/h and then 120 km at 40 km/h. What is its average speed for the whole journey?",
+      "options": { "A": "60 km/h", "B": "65 km/h", "C": "70 km/h", "D": "75 km/h" },
+      "correct": "A",
+      "explanation": "The first part takes 2 hours and the second 3 hours: 300 km in 5 hours = 60 km/h. (65 km/h is the simple average of the two speeds, which ignores that more time is spent at the lower speed.)"
+    },
+    {
+      "id": "Q015",
+      "section": "numerical",
+      "difficulty": "hard",
+      "text": "A price is increased by 20% and the new price is then decreased by 20%. The final price is KSh 960. What was the original price?",
+      "options": { "A": "KSh 900", "B": "KSh 960", "C": "KSh 1,000", "D": "KSh 1,040" },
+      "correct": "C",
+      "explanation": "A 20% rise then a 20% fall leaves 1.2 x 0.8 = 0.96 of the original. 960 / 0.96 = 1,000."
+    },
+    {
+      "id": "Q016",
+      "section": "numerical",
+      "difficulty": "hard",
+      "text": "How many litres of water must be added to 12 litres of a 25% salt solution to make a 15% solution?",
+      "options": { "A": "4 litres", "B": "5 litres", "C": "6 litres", "D": "8 litres" },
+      "correct": "D",
+      "explanation": "12 litres at 25% holds 3 litres of salt. For 15% the total must be 3 / 0.15 = 20 litres, so 8 litres of water are added."
+    },
+    {
+      "id": "Q017",
+      "section": "numerical",
+      "difficulty": "hard",
+      "text": "Monthly sales in thousands of KSh were: January 120, February 150, March 135, April 180.\nBy what percentage were April's sales above the average monthly sales for January to March?",
+      "options": { "A": "25%", "B": "30%", "C": "33.3%", "D": "50%" },
+      "correct": "C",
+      "explanation": "The January to March average is (120 + 150 + 135) / 3 = 135. April is 45 above that: 45 / 135 = 33.3%."
+    },
+    {
+      "id": "Q018",
+      "section": "numerical",
+      "difficulty": "hard",
+      "text": "Pipe A can fill an empty tank in 6 hours and pipe B can fill it in 12 hours. A drain can empty a full tank in 24 hours. With both pipes and the drain open, how long does it take to fill the empty tank?",
+      "options": { "A": "4 hours", "B": "4 hours 48 minutes", "C": "5 hours", "D": "6 hours" },
+      "correct": "B",
+      "explanation": "In one hour the tank gains 1/6 + 1/12 - 1/24 = 5/24 of its volume. 24 / 5 = 4.8 hours = 4 hours 48 minutes."
+    },
+    {
+      "id": "Q019",
+      "section": "numerical",
+      "difficulty": "hard",
+      "text": "In a company the ratio of men to women is 3 : 2. 40% of the men and 60% of the women are in management. What percentage of all employees are in management?",
+      "options": { "A": "48%", "B": "44%", "C": "50%", "D": "52%" },
+      "correct": "A",
+      "explanation": "Take 5 people: 3 men and 2 women. Managers: 0.4 x 3 + 0.6 x 2 = 2.4. 2.4 / 5 = 48%."
+    },
+    {
+      "id": "Q020",
+      "section": "numerical",
+      "difficulty": "hard",
+      "text": "A bag holds 5 red balls and 3 blue balls. Two balls are drawn at random without replacement. What is the probability that both are red?",
+      "options": { "A": "5/16", "B": "25/64", "C": "1/2", "D": "5/14" },
+      "correct": "D",
+      "explanation": "5/8 x 4/7 = 20/56 = 5/14. (25/64 is the answer if the first ball were put back.)"
+    },
+    {
+      "id": "Q021",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "Choose the word closest in meaning to RAPID.",
+      "options": { "A": "Slow", "B": "Quick", "C": "Careful", "D": "Late" },
+      "correct": "B",
+      "explanation": "Rapid means fast, and quick is the closest."
+    },
+    {
+      "id": "Q022",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "Choose the word most opposite in meaning to SCARCE.",
+      "options": { "A": "Plentiful", "B": "Rare", "C": "Costly", "D": "Hidden" },
+      "correct": "A",
+      "explanation": "Scarce means in short supply; plentiful means there is a lot."
+    },
+    {
+      "id": "Q023",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "The student was so ______ that she finished the whole project a week early.",
+      "options": { "A": "lazy", "B": "careless", "C": "hesitant", "D": "diligent" },
+      "correct": "D",
+      "explanation": "Finishing early shows hard, careful work, which is what diligent means."
+    },
+    {
+      "id": "Q024",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "Which word does not belong with the others?\nTable, Chair, Sofa, Carrot",
+      "options": { "A": "Carrot", "B": "Table", "C": "Chair", "D": "Sofa" },
+      "correct": "A",
+      "explanation": "Table, chair and sofa are furniture. A carrot is a vegetable."
+    },
+    {
+      "id": "Q025",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "Hot is to cold as up is to ______.",
+      "options": { "A": "down", "B": "high", "C": "over", "D": "top" },
+      "correct": "A",
+      "explanation": "Hot and cold are opposites, as are up and down."
+    },
+    {
+      "id": "Q026",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "Which sentence is grammatically correct?",
+      "options": {
+        "A": "She don't like coffee.",
+        "B": "She doesn't likes coffee.",
+        "C": "She doesn't like coffee.",
+        "D": "She not like coffee."
+      },
+      "correct": "C",
+      "explanation": "After 'doesn't' the main verb takes its base form: like."
+    },
+    {
+      "id": "Q027",
+      "section": "verbal",
+      "difficulty": "easy",
+      "text": "Passage: The library opens at 9 am on weekdays and at 10 am on Saturdays. It is closed on Sundays.\nOn which day does the library open at the latest time?",
+      "options": { "A": "Monday", "B": "Friday", "C": "Saturday", "D": "Sunday" },
+      "correct": "C",
+      "explanation": "Weekdays open at 9 am and Saturday at 10 am. On Sunday the library does not open at all, so Saturday is the latest opening."
+    },
+    {
+      "id": "Q028",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Choose the word closest in meaning to CANDID.",
+      "options": { "A": "Secretive", "B": "Hostile", "C": "Hesitant", "D": "Honest" },
+      "correct": "D",
+      "explanation": "Candid means open and truthful."
+    },
+    {
+      "id": "Q029",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Choose the word most opposite in meaning to FRUGAL.",
+      "options": { "A": "Wasteful", "B": "Thrifty", "C": "Careful", "D": "Modest" },
+      "correct": "A",
+      "explanation": "Frugal means careful with money; wasteful is the opposite."
+    },
+    {
+      "id": "Q030",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Author is to book as composer is to ______.",
+      "options": { "A": "orchestra", "B": "symphony", "C": "instrument", "D": "audience" },
+      "correct": "B",
+      "explanation": "An author creates a book; a composer creates a symphony."
+    },
+    {
+      "id": "Q031",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Although the plan seemed risky, the board decided to ______ with it because the evidence supported it.",
+      "options": { "A": "retreat", "B": "collapse", "C": "proceed", "D": "withdraw" },
+      "correct": "C",
+      "explanation": "The evidence supported the plan, so the board went ahead with it."
+    },
+    {
+      "id": "Q032",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Which sentence uses its or it's correctly?",
+      "options": {
+        "A": "The company changed it's policy last year.",
+        "B": "The company changed its policy last year.",
+        "C": "Its a good time to change the policy.",
+        "D": "The policy has lost it's purpose."
+      },
+      "correct": "B",
+      "explanation": "'Its' is the possessive. 'It's' only ever means 'it is' or 'it has'."
+    },
+    {
+      "id": "Q033",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Passage: Since the new bus lane opened, the average journey time on Mombasa Road has fallen from 50 minutes to 35 minutes. The number of private cars using the road has not changed.\nWhich statement is supported by the passage?",
+      "options": {
+        "A": "The bus lane has reduced the number of private cars.",
+        "B": "Average journeys on Mombasa Road are shorter than before the bus lane opened.",
+        "C": "Fewer people now travel along Mombasa Road.",
+        "D": "Private car drivers now save 15 minutes on every journey."
+      },
+      "correct": "B",
+      "explanation": "The passage gives the fall in average journey time. It says the number of cars has not changed, and says nothing about the number of people or about car drivers specifically."
+    },
+    {
+      "id": "Q034",
+      "section": "verbal",
+      "difficulty": "medium",
+      "text": "Passage: Every employee who completed the safety course last year received a certificate. Wanjiru started work at the company this month.\nWhich statement can be concluded from the passage?",
+      "options": {
+        "A": "Wanjiru has a safety certificate.",
+        "B": "Wanjiru completed the safety course last year.",
+        "C": "Wanjiru does not have a safety certificate.",
+        "D": "None of the other statements can be concluded."
+      },
+      "correct": "D",
+      "explanation": "The passage says nothing about what Wanjiru did before joining, so none of the first three can be concluded."
+    },
+    {
+      "id": "Q035",
+      "section": "verbal",
+      "difficulty": "hard",
+      "text": "Choose the word closest in meaning to EPHEMERAL.",
+      "options": { "A": "Fleeting", "B": "Lasting", "C": "Fragile", "D": "Obscure" },
+      "correct": "A",
+      "explanation": "Ephemeral means lasting a very short time."
+    },
+    {
+      "id": "Q036",
+      "section": "verbal",
+      "difficulty": "hard",
+      "text": "Verdict is to trial as conclusion is to ______.",
+      "options": { "A": "witness", "B": "judge", "C": "argument", "D": "opinion" },
+      "correct": "C",
+      "explanation": "A verdict is the result of a trial; a conclusion is the result of an argument."
+    },
+    {
+      "id": "Q037",
+      "section": "verbal",
+      "difficulty": "hard",
+      "text": "The consultant's report was so ______ that even experts struggled to follow its reasoning.",
+      "options": { "A": "lucid", "B": "concise", "C": "candid", "D": "convoluted" },
+      "correct": "D",
+      "explanation": "Experts struggling to follow it means it was needlessly complicated: convoluted."
+    },
+    {
+      "id": "Q038",
+      "section": "verbal",
+      "difficulty": "hard",
+      "text": "Passage: A survey of 500 employees found that those who work from home two days a week report higher job satisfaction than those who work in the office five days a week. The survey did not ask whether employees had chosen their working pattern themselves.\nWhich conclusion is best supported by the passage?",
+      "options": {
+        "A": "Working from home causes higher job satisfaction.",
+        "B": "Working in an office five days a week lowers job satisfaction.",
+        "C": "Most employees would choose to work from home.",
+        "D": "Employees who work from home two days a week reported higher satisfaction in this survey, but the survey does not show why."
+      },
+      "correct": "D",
+      "explanation": "The survey shows a difference in reported satisfaction, not its cause. The other options claim a cause or a preference that the passage does not support."
+    },
+    {
+      "id": "Q039",
+      "section": "verbal",
+      "difficulty": "hard",
+      "text": "A retailer argues: 'Since we introduced free delivery, our sales have risen by 20%, so free delivery caused the rise.'\nWhich fact most weakens this argument?",
+      "options": {
+        "A": "Free delivery costs the retailer money.",
+        "B": "During the same period a large competitor closed all of its shops.",
+        "C": "Some customers did not use free delivery.",
+        "D": "The retailer sells many different products."
+      },
+      "correct": "B",
+      "explanation": "A competitor closing gives another explanation for the rise in sales, which weakens the claim that free delivery caused it."
+    },
+    {
+      "id": "Q040",
+      "section": "verbal",
+      "difficulty": "hard",
+      "text": "Passage: Only candidates who score above 70% in the written test are invited to an interview. Brian scored 85% in the written test.\nWhich statement is correct?",
+      "options": {
+        "A": "Brian will be invited to an interview.",
+        "B": "Brian will not be invited to an interview.",
+        "C": "Brian may or may not be invited; scoring above 70% does not guarantee an invitation.",
+        "D": "Brian scored too high to be invited."
+      },
+      "correct": "C",
+      "explanation": "Scoring above 70% is necessary for an invitation, not sufficient. The passage does not say it guarantees one."
+    },
+    {
+      "id": "Q041",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "What comes next?\n3, 6, 12, 24, ?",
+      "options": { "A": "30", "B": "36", "C": "42", "D": "48" },
+      "correct": "D",
+      "explanation": "Each number is double the one before."
+    },
+    {
+      "id": "Q042",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "What comes next?\n5, 8, 11, 14, ?",
+      "options": { "A": "17", "B": "18", "C": "19", "D": "20" },
+      "correct": "A",
+      "explanation": "Each number is 3 more than the one before."
+    },
+    {
+      "id": "Q043",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "What comes next?\nA, C, E, G, ?",
+      "options": { "A": "H", "B": "I", "C": "J", "D": "K" },
+      "correct": "B",
+      "explanation": "The letters move on by two each time: G, then I."
+    },
+    {
+      "id": "Q044",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "Tom is taller than Sam. Sam is taller than Lee. Who is the shortest?",
+      "options": { "A": "Tom", "B": "Sam", "C": "Lee", "D": "It cannot be known" },
+      "correct": "C",
+      "explanation": "Tom > Sam > Lee, so Lee is the shortest."
+    },
+    {
+      "id": "Q045",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "Which number does not belong with the others?\n2, 3, 5, 9, 11",
+      "options": { "A": "9", "B": "2", "C": "5", "D": "11" },
+      "correct": "A",
+      "explanation": "All the others are prime numbers; 9 = 3 x 3."
+    },
+    {
+      "id": "Q046",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "All birds have feathers. A sparrow is a bird.\nWhich conclusion follows?",
+      "options": {
+        "A": "A sparrow can swim.",
+        "B": "All animals have feathers.",
+        "C": "Only sparrows have feathers.",
+        "D": "A sparrow has feathers."
+      },
+      "correct": "D",
+      "explanation": "A sparrow is a bird and all birds have feathers."
+    },
+    {
+      "id": "Q047",
+      "section": "logical",
+      "difficulty": "easy",
+      "text": "If today is Wednesday, what day of the week will it be 10 days from now?",
+      "options": { "A": "Friday", "B": "Saturday", "C": "Sunday", "D": "Monday" },
+      "correct": "B",
+      "explanation": "10 days is one week plus 3 days. Wednesday + 3 days = Saturday."
+    },
+    {
+      "id": "Q048",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "What comes next?\n2, 5, 11, 23, 47, ?",
+      "options": { "A": "91", "B": "93", "C": "95", "D": "97" },
+      "correct": "C",
+      "explanation": "Each number is double the one before, plus 1: 47 x 2 + 1 = 95."
+    },
+    {
+      "id": "Q049",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "What comes next?\n3, 5, 9, 15, 23, ?",
+      "options": { "A": "31", "B": "33", "C": "35", "D": "37" },
+      "correct": "B",
+      "explanation": "The gaps are 2, 4, 6, 8, so the next gap is 10: 23 + 10 = 33."
+    },
+    {
+      "id": "Q050",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "What comes next?\nB, E, H, K, N, ?",
+      "options": { "A": "Q", "B": "R", "C": "S", "D": "T" },
+      "correct": "A",
+      "explanation": "Each letter is three places after the last: N + 3 = Q."
+    },
+    {
+      "id": "Q051",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "No reptiles are mammals. All snakes are reptiles.\nWhich statement must be true?",
+      "options": {
+        "A": "Some snakes are mammals.",
+        "B": "All mammals are snakes.",
+        "C": "All reptiles are snakes.",
+        "D": "No snakes are mammals."
+      },
+      "correct": "D",
+      "explanation": "Snakes are reptiles and no reptile is a mammal, so no snake is a mammal."
+    },
+    {
+      "id": "Q052",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "Anne finished a race before Ben. Cara finished after Ben. Dan finished before Anne.\nWho finished second?",
+      "options": { "A": "Ben", "B": "Cara", "C": "Anne", "D": "Dan" },
+      "correct": "C",
+      "explanation": "The order is Dan, Anne, Ben, Cara."
+    },
+    {
+      "id": "Q053",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "In a code, CAT is written as DBU. How is DOG written in the same code?",
+      "options": { "A": "EPH", "B": "ENH", "C": "DPH", "D": "FQI" },
+      "correct": "A",
+      "explanation": "Each letter moves one place on: D to E, O to P, G to H."
+    },
+    {
+      "id": "Q054",
+      "section": "logical",
+      "difficulty": "hard",
+      "text": "What is the angle between the hour hand and the minute hand of a clock at 3:15?",
+      "options": { "A": "0 degrees", "B": "7.5 degrees", "C": "15 degrees", "D": "30 degrees" },
+      "correct": "B",
+      "explanation": "At 3:15 the minute hand points at 3, which is 90 degrees. The hour hand has moved a quarter of the way from 3 to 4, so it is at 90 + 7.5 = 97.5 degrees. The difference is 7.5 degrees."
+    },
+    {
+      "id": "Q055",
+      "section": "logical",
+      "difficulty": "hard",
+      "text": "Three boxes are labelled 'Apples', 'Oranges' and 'Mixed'. Every label is wrong. You take one fruit from the box labelled 'Mixed' and it is an apple.\nWhat does the box labelled 'Oranges' contain?",
+      "options": {
+        "A": "Only apples",
+        "B": "Only oranges",
+        "C": "A mixture of apples and oranges",
+        "D": "It cannot be worked out"
+      },
+      "correct": "C",
+      "explanation": "The 'Mixed' label is wrong, so that box holds only apples. The 'Oranges' label is wrong, so that box cannot hold only oranges, and the apples are taken, so it holds the mixture."
+    },
+    {
+      "id": "Q056",
+      "section": "logical",
+      "difficulty": "hard",
+      "text": "Exactly one of three people is telling the truth.\nAsha says: 'Brian is lying.'\nBrian says: 'Cyrus is lying.'\nCyrus says: 'Asha and Brian are both lying.'\nWho is telling the truth?",
+      "options": { "A": "Asha", "B": "Cyrus", "C": "It cannot be worked out", "D": "Brian" },
+      "correct": "D",
+      "explanation": "If Asha were truthful, Brian would be lying, so Cyrus would be truthful: two truth-tellers, which is not allowed. If Cyrus were truthful, Asha and Brian would both be lying, but then Asha's claim that Brian is lying would be true. If Brian is truthful, Cyrus is lying and Asha is lying, which fits."
+    },
+    {
+      "id": "Q057",
+      "section": "logical",
+      "difficulty": "hard",
+      "text": "What comes next?\n2, 10, 4, 20, 6, 30, 8, ?",
+      "options": { "A": "40", "B": "36", "C": "42", "D": "50" },
+      "correct": "A",
+      "explanation": "Two series are interleaved: 2, 4, 6, 8 and 10, 20, 30, 40."
+    },
+    {
+      "id": "Q058",
+      "section": "logical",
+      "difficulty": "hard",
+      "text": "How many different 3-letter codes can be made from the letters A, B, C, D and E if no letter may be used more than once?",
+      "options": { "A": "10", "B": "15", "C": "60", "D": "125" },
+      "correct": "C",
+      "explanation": "5 x 4 x 3 = 60. (10 counts groups where the order does not matter; 125 allows repeated letters.)"
+    },
+    {
+      "id": "Q059",
+      "section": "logical",
+      "difficulty": "medium",
+      "text": "If it rains, the match is cancelled. The match was not cancelled.\nWhich conclusion must be true?",
+      "options": {
+        "A": "It rained.",
+        "B": "It did not rain.",
+        "C": "The match will be held tomorrow.",
+        "D": "It rained, but only lightly."
+      },
+      "correct": "B",
+      "explanation": "Any rain cancels the match. The match was not cancelled, so it did not rain."
+    },
+    {
+      "id": "Q060",
+      "section": "logical",
+      "difficulty": "hard",
+      "text": "Four colleagues, Kamau, Lydia, Musa and Njeri, each have one meeting, on Monday, Tuesday, Wednesday and Thursday, all on different days.\nKamau's meeting is earlier in the week than Lydia's.\nMusa's meeting is the day immediately after Njeri's.\nKamau's meeting is not on Monday.\nNjeri's meeting is not on Tuesday.\nOn which day is Lydia's meeting?",
+      "options": { "A": "Monday", "B": "Tuesday", "C": "Wednesday", "D": "Thursday" },
+      "correct": "D",
+      "explanation": "Njeri and Musa have consecutive days, and Njeri is not on Tuesday, so the pair is Monday and Tuesday or Wednesday and Thursday. Wednesday and Thursday would leave Monday and Tuesday for Kamau and Lydia with Kamau first, putting Kamau on Monday, which is not allowed. So Njeri is on Monday, Musa on Tuesday, Kamau on Wednesday and Lydia on Thursday."
+    }
+  ]
+}
