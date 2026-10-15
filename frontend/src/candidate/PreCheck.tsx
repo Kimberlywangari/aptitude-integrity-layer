@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { PrecheckRequest, PrecheckResponse } from '../lib/api'
 import { CANDIDATE_PATH } from '../lib/routes'
+import { micCheckEnabled } from '../lib/features'
 import { acquireDevices, classifyDeviceError } from '../lib/devices'
 import type { DeviceErrorKind, DeviceHandle } from '../lib/devices'
 import { INITIAL_MIC_CHECK, stepMicCheck } from '../lib/micCheck'
@@ -13,6 +14,7 @@ import {
   DEVICE_NOTICE_CHECKBOX,
   DEVICE_NOTICE_POINTS,
   DEVICE_NOTICE_TITLE,
+  MIC_CHECK_OFF_NOTE,
   MIC_MUTED_MESSAGE,
   MIC_PROMPT,
   MIC_QUIET_MESSAGE,
@@ -26,6 +28,9 @@ type Phase = 'idle' | 'starting' | 'live'
 export default function PreCheck() {
   const navigate = useNavigate()
   const sessionId = getSessionId()
+  // False while the microphone step is switched off for testing (lib/features.ts).
+  const micChecked = micCheckEnabled()
+  const checkLabel = micChecked ? 'Check my camera and microphone' : 'Check my camera'
 
   const [understood, setUnderstood] = useState(false)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -83,7 +88,7 @@ export default function PreCheck() {
 
   // Level meter and the "say your name" check.
   useEffect(() => {
-    if (phase !== 'live' || mic.result !== 'listening') return
+    if (!micChecked || phase !== 'live' || mic.result !== 'listening') return
     const id = window.setInterval(() => {
       const handle = devices.current
       if (!handle) return
@@ -95,7 +100,7 @@ export default function PreCheck() {
       setMic((state) => stepMicCheck(state, isMuted ? 0 : rms, TICK_MS))
     }, TICK_MS)
     return () => window.clearInterval(id)
-  }, [phase, mic.result])
+  }, [micChecked, phase, mic.result])
 
   async function proceed() {
     const handle = devices.current
@@ -104,9 +109,11 @@ export default function PreCheck() {
     setError(null)
     const body: PrecheckRequest = {
       camera_ok: cameraOk,
-      mic_ok: mic.result === 'passed',
+      // When the step is left out, say so: `mic_ok` then means "not checked", not "passed".
+      mic_ok: micChecked && mic.result === 'passed',
+      mic_checked: micChecked,
       device_labels: { camera: handle.cameraLabel, mic: handle.micLabel },
-      mic_peak: Number(peak.current.toFixed(4)),
+      mic_peak: micChecked ? Number(peak.current.toFixed(4)) : 0,
       video_size: handle.videoSize,
     }
     try {
@@ -132,7 +139,7 @@ export default function PreCheck() {
   }
 
   const micPassed = mic.result === 'passed'
-  const canContinue = understood && cameraOk && micPassed && !busy
+  const canContinue = understood && cameraOk && (!micChecked || micPassed) && !busy
 
   return (
     <main className="page">
@@ -160,7 +167,7 @@ export default function PreCheck() {
               disabled={!understood || phase === 'starting'}
               onClick={() => void start()}
             >
-              {phase === 'starting' ? 'Starting...' : 'Check my camera and microphone'}
+              {phase === 'starting' ? 'Starting...' : checkLabel}
             </button>
           )}
           {deviceError && (
@@ -186,7 +193,9 @@ export default function PreCheck() {
 
         <li>
           <h2>3. Microphone</h2>
-          {phase === 'live' ? (
+          {!micChecked ? (
+            <p className="muted">{MIC_CHECK_OFF_NOTE}</p>
+          ) : phase === 'live' ? (
             <>
               <p>{MIC_PROMPT}</p>
               <meter

@@ -8,6 +8,10 @@ export const MIC_NOTICE =
   'Keep your microphone on for the whole test. If it is muted for a while you will see a ' +
   'warning which will be shown to your reviewer.'
 
+/** Shown in place of the microphone step while that check is switched off for testing. */
+export const MIC_CHECK_OFF_NOTE =
+  'The microphone check is switched off for this test run, so your microphone is not tested.'
+
 export const INTEGRITY_TITLE = 'Before you begin'
 
 export const INTEGRITY_POINTS: string[] = [

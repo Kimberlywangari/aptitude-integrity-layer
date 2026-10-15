@@ -180,7 +180,9 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
   // ---- candidate side
   if (route === 'POST /api/precheck/result') {
     const b = bodyOf<PrecheckRequest>(body)
-    return { passed: Boolean(b.camera_ok && b.mic_ok) } satisfies PrecheckResponse
+    // The microphone is waived only when its step was left out, never when it failed.
+    const micFine = b.mic_ok || b.mic_checked === false
+    return { passed: Boolean(b.camera_ok && micFine) } satisfies PrecheckResponse
   }
 
   if (route === 'POST /api/complaints') {

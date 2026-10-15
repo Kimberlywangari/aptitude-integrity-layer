@@ -2,7 +2,12 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PreCheck from '../src/candidate/PreCheck'
-import { DEVICE_ERRORS, MIC_MUTED_MESSAGE, MIC_QUIET_MESSAGE } from '../src/candidate/copy'
+import {
+  DEVICE_ERRORS,
+  MIC_CHECK_OFF_NOTE,
+  MIC_MUTED_MESSAGE,
+  MIC_QUIET_MESSAGE,
+} from '../src/candidate/copy'
 import { api } from '../src/lib/api'
 import { acquireDevices } from '../src/lib/devices'
 import type { DeviceHandle } from '../src/lib/devices'
@@ -86,6 +91,7 @@ describe('PreCheck', () => {
     cleanup()
     clearSession()
     vi.useRealTimers()
+    vi.unstubAllEnvs()
     vi.mocked(acquireDevices).mockReset()
   })
 
@@ -185,5 +191,49 @@ describe('PreCheck', () => {
     await startChecks()
     unmount()
     expect(fake.stop).toHaveBeenCalled()
+  })
+
+  describe('with the microphone check switched off (VITE_MIC_CHECK=off)', () => {
+    beforeEach(() => {
+      vi.stubEnv('VITE_MIC_CHECK', 'off')
+    })
+
+    it('needs only the camera, and reports the microphone as not checked', async () => {
+      const fake = fakeDevices()
+      fake.setLevel(QUIET) // a silent microphone must not block anyone
+      vi.mocked(acquireDevices).mockResolvedValue(fake.handle)
+      renderPage()
+
+      fireEvent.click(screen.getByLabelText(/I understand/))
+      fireEvent.click(button('Check my camera'))
+      await settle()
+
+      expect(screen.getByText('Camera working.')).toBeTruthy()
+      expect(screen.getByText(MIC_CHECK_OFF_NOTE)).toBeTruthy()
+      expect(screen.queryByLabelText('Microphone level')).toBeNull()
+      expect(button('Continue to the test').disabled).toBe(false)
+
+      fireEvent.click(button('Continue to the test'))
+      await settle()
+
+      expect(screen.getByText('integrity page')).toBeTruthy()
+      const [, options] = vi.mocked(api).mock.calls[0] as [string, { body: Record<string, unknown> }]
+      expect(options.body).toMatchObject({
+        camera_ok: true,
+        mic_ok: false,
+        mic_checked: false,
+        mic_peak: 0,
+      })
+    })
+
+    it('still needs the camera', async () => {
+      vi.mocked(acquireDevices).mockRejectedValue(new DOMException('no', 'NotAllowedError'))
+      renderPage()
+      fireEvent.click(screen.getByLabelText(/I understand/))
+      fireEvent.click(button('Check my camera'))
+      await settle()
+      expect(screen.getByRole('alert').textContent).toBe(DEVICE_ERRORS.denied)
+      expect(button('Continue to the test').disabled).toBe(true)
+    })
   })
 })

@@ -269,6 +269,19 @@ describe('mock candidate endpoints', () => {
     ).resolves.toEqual({ passed: false })
   })
 
+  it('waives the microphone only when its step was left out, never when it failed', async () => {
+    const send = (body: object) => candidate('/api/precheck/result', 'POST', body)
+    await expect(send({ camera_ok: true, mic_ok: false, mic_checked: false })).resolves.toEqual({
+      passed: true,
+    })
+    await expect(send({ camera_ok: true, mic_ok: false, mic_checked: true })).resolves.toEqual({
+      passed: false,
+    })
+    await expect(send({ camera_ok: false, mic_ok: false, mic_checked: false })).resolves.toEqual({
+      passed: false,
+    })
+  })
+
   it('validates complaints', async () => {
     expect(await codeOf(candidate('/api/complaints', 'POST', { category: 'x', text: 'a' }))).toBe(
       'invalid_complaint',
