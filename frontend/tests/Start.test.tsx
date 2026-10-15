@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { HELP_CONTACT } from '../src/candidate/copy'
 import Start from '../src/candidate/Start'
 import { api, ApiError } from '../src/lib/api'
 import { clearSession, getSessionId } from '../src/lib/session'
@@ -77,17 +78,33 @@ describe('Start', () => {
     expect(options.body.token).toBe('ABCDEFGH')
   })
 
-  it('says plainly when the code is wrong', async () => {
+  it('says plainly when the code is wrong, and what to do next', async () => {
     vi.mocked(api).mockRejectedValue(new ApiError(401, 'invalid_invitation', {}))
     renderStart()
     submit('ZZZZ-ZZZZ')
     expect((await screen.findByRole('alert')).textContent).toContain('not valid')
+    expect(screen.getByText(HELP_CONTACT)).toBeTruthy()
   })
 
-  it('tells a throttled candidate to wait', async () => {
+  it('says when the test is not open yet', async () => {
+    vi.mocked(api).mockRejectedValue(new ApiError(409, 'no_open_sitting', {}))
+    renderStart()
+    submit('ABCD-EFGH')
+    expect((await screen.findByRole('alert')).textContent).toContain('not open right now')
+  })
+
+  it('tells a throttled candidate how long to wait', async () => {
     vi.mocked(api).mockRejectedValue(new ApiError(429, 'too_many_attempts', { retry_after_s: 120 }))
     renderStart()
     submit('ZZZZ-ZZZZ')
-    expect((await screen.findByRole('alert')).textContent).toContain('wait a few minutes')
+    expect((await screen.findByRole('alert')).textContent).toContain('wait about 2 minutes')
+  })
+
+  it('falls back to a plain message for anything unexpected', async () => {
+    vi.mocked(api).mockRejectedValue(new Error('network'))
+    renderStart()
+    submit('ABCD-EFGH')
+    expect((await screen.findByRole('alert')).textContent).toBe('Something went wrong. Please try again.')
+    expect(screen.getByText(HELP_CONTACT)).toBeTruthy()
   })
 })

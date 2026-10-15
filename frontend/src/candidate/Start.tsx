@@ -5,11 +5,18 @@ import { api, ApiError } from '../lib/api'
 import type { SessionStatus, StartResponse } from '../lib/api'
 import { normaliseInviteCode } from '../lib/inviteCode'
 import { saveSession } from '../lib/session'
+import { waitPhrase } from '../lib/wait'
+import { HELP_CONTACT, START_ERRORS, START_FALLBACK_ERROR } from './copy'
 
-const MESSAGES: Record<string, string> = {
-  invalid_invitation: 'That invitation is not valid. Check the link or code you were sent.',
-  no_open_sitting: 'This test is not open right now.',
-  too_many_attempts: 'Too many wrong codes. Please wait a few minutes and try again.',
+function messageFor(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'too_many_attempts') {
+      const seconds = typeof error.body.retry_after_s === 'number' ? error.body.retry_after_s : 60
+      return `Too many wrong codes. Please wait ${waitPhrase(seconds)} and try again.`
+    }
+    if (START_ERRORS[error.code]) return START_ERRORS[error.code]
+  }
+  return START_FALLBACK_ERROR
 }
 
 function routeFor(status: SessionStatus): string {
@@ -40,11 +47,7 @@ export default function Start() {
     } catch (e) {
       // seb_required is handled globally (it navigates to /not-seb)
       if (e instanceof ApiError && e.code === 'seb_required') return
-      setError(
-        e instanceof ApiError && MESSAGES[e.code]
-          ? MESSAGES[e.code]
-          : 'Something went wrong. Please try again.',
-      )
+      setError(messageFor(e))
       setBusy(false)
     }
   }
@@ -84,9 +87,12 @@ export default function Start() {
         </button>
       </form>
       {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <>
+          <p role="alert" className="error">
+            {error}
+          </p>
+          <p className="muted">{HELP_CONTACT}</p>
+        </>
       )}
     </main>
   )

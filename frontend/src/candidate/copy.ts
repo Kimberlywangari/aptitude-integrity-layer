@@ -24,10 +24,32 @@ export const SELF_REPORT_QUESTION = 'Did you have any technical problems during 
 export const SELF_REPORT_NOTE_LABEL = 'What happened? (optional, up to 300 characters)'
 export const SELF_REPORT_NOTE_HINT = 'Please do not write your name or contact details.'
 
+/** Under every dead end, so nobody is left without a next step. Cytonn supplies the real contact. */
+export const HELP_CONTACT =
+  'If this keeps happening, contact the person who sent your invitation.'
+
+// ---- code entry
+
+export const START_ERRORS: Record<string, string> = {
+  invalid_invitation:
+    'That code is not valid. Check it against your invitation and type it again. Capital ' +
+    'letters and the dash do not matter.',
+  no_open_sitting:
+    'This test is not open right now. Check the date and time on your invitation and come ' +
+    'back then.',
+}
+export const START_FALLBACK_ERROR = 'Something went wrong. Please try again.'
+
 export const NOT_SEB_TITLE = 'Safe Exam Browser required'
 export const NOT_SEB_BODY =
-  'This test can only be taken inside Safe Exam Browser. Please close this window and open ' +
-  'the test from the Safe Exam Browser configuration file you were given.'
+  'This test can only be taken inside Safe Exam Browser. This window is a normal browser.'
+export const NOT_SEB_STEPS: string[] = [
+  'Close this window.',
+  'Open the Safe Exam Browser file you were given. It ends in .seb.',
+  'Type your invitation code when the test opens.',
+]
+export const NOT_SEB_HELP =
+  'If you do not have the file, or it will not open, contact the person who sent your invitation.'
 
 // ---- device pre-check (D6) and the mid-test warning
 

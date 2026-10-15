@@ -6,6 +6,7 @@ import { homeFor, LOGIN_PATH, safeNext } from '../lib/routes'
 import type { LoginResponse } from '../lib/reviewTypes'
 import { getStaff, saveStaff } from '../lib/staffSession'
 import type { StaffRole } from '../lib/staffSession'
+import { waitPhrase } from '../lib/wait'
 
 type Area = StaffRole
 
@@ -27,7 +28,7 @@ const COPY: Record<Area, { title: string; lead: string; other: Area; otherLabel:
 type Problem =
   | { kind: 'credentials' }
   | { kind: 'wrong-area' }
-  | { kind: 'too-many'; minutes: number }
+  | { kind: 'too-many'; seconds: number }
   | { kind: 'other' }
 
 function describe(problem: Problem): string {
@@ -37,9 +38,7 @@ function describe(problem: Problem): string {
     case 'wrong-area':
       return 'This account is a reviewer account, which cannot open the admin pages.'
     case 'too-many':
-      return `Too many wrong attempts. Please wait about ${problem.minutes} minute${
-        problem.minutes === 1 ? '' : 's'
-      } and try again.`
+      return `Too many wrong attempts. Please wait ${waitPhrase(problem.seconds)} and try again.`
     default:
       return 'Something went wrong. Please try again.'
   }
@@ -84,7 +83,7 @@ export default function SignIn({ area }: { area: Area }) {
         setProblem({ kind: 'credentials' })
       } else if (e instanceof ApiError && e.code === 'too_many_attempts') {
         const seconds = typeof e.body.retry_after_s === 'number' ? e.body.retry_after_s : 60
-        setProblem({ kind: 'too-many', minutes: Math.max(1, Math.ceil(seconds / 60)) })
+        setProblem({ kind: 'too-many', seconds })
       } else {
         setProblem({ kind: 'other' })
       }

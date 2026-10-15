@@ -1,16 +1,17 @@
 /* Reviewer app and recruiter setup screens. Imported by StaffApp, so it is part of the lazy
-   staff chunk and never reaches a candidate's browser. Shared pieces (.banner, .ok, .option,
-   buttons, inputs) stay in ../index.css. */
+   staff chunk and never reaches a candidate's browser. Colours, radii and the easing curve are
+   the tokens in ../index.css; shared pieces (.banner, .ok, .option, buttons, inputs) live there.
+
+   These screens are used all day, so nothing here animates except short colour changes. */
 
 select {
   font: inherit;
   padding: 0.5rem;
   margin: 0.25rem 0 1rem;
   border: 1px solid #8a8a8a;
-  border-radius: 6px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
 }
-
 
 .page.wide {
   max-width: 76rem;
@@ -22,8 +23,14 @@ select {
   gap: 0.75rem 1.25rem;
   align-items: center;
   padding: 0.6rem 1.25rem;
-  background: #fff;
-  border-bottom: 1px solid #d8d8d3;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.staff-brand {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
 }
 
 .staff-header nav {
@@ -33,18 +40,31 @@ select {
   flex: 1;
 }
 
-.staff-header a {
-  color: #1f4f8b;
+.staff-header nav a {
+  padding: 0.15rem 0;
+  color: var(--accent);
   text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: border-color 150ms var(--ease-out);
 }
 
-.staff-header a.active {
+.staff-header nav a.active {
   font-weight: 600;
-  text-decoration: underline;
+  border-bottom-color: var(--accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .staff-header nav a:hover {
+    border-bottom-color: var(--line);
+  }
+
+  .staff-header nav a.active:hover {
+    border-bottom-color: var(--accent);
+  }
 }
 
 .staff-user {
-  color: #555;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -57,9 +77,9 @@ h2 {
   box-sizing: border-box;
   padding: 1rem 1.1rem;
   margin: 0 0 1rem;
-  background: #fff;
-  border: 1px solid #d8d8d3;
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
 }
 
 .table-wrap {
@@ -70,7 +90,8 @@ h2 {
 .table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
 }
 
 .table th,
@@ -78,12 +99,18 @@ h2 {
   padding: 0.5rem 0.6rem;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid #e4e4df;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .table th {
   font-size: 0.85rem;
-  color: #555;
+  color: var(--muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .table tbody tr:hover {
+    background: var(--accent-tint);
+  }
 }
 
 .nowrap {
@@ -138,7 +165,7 @@ h2 {
   width: 100%;
   min-height: 11rem;
   background: #111;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .video-placeholder {
@@ -155,7 +182,7 @@ h2 {
 
 .list li {
   padding: 0.6rem 0;
-  border-bottom: 1px solid #e4e4df;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .field-row {
@@ -174,10 +201,6 @@ h2 {
   }
 }
 
-.staff-brand {
-  font-weight: 600;
-}
-
 .breadcrumbs ol {
   display: flex;
   flex-wrap: wrap;
@@ -194,6 +217,6 @@ h2 {
   color: #8a8a8a;
 }
 
-.breadcrumbs a {
-  color: #1f4f8b;
+.breadcrumbs [aria-current='page'] {
+  color: var(--muted);
 }
