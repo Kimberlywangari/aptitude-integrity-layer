@@ -19,6 +19,10 @@
   --danger: #a31515;
   --warn-bg: #fff6d6;
   --warn-line: #d9b94c;
+  --on-accent: #fff; /* text on an accent or ok fill */
+  --field-line: #8a8a8a; /* borders of inputs and selects, which need to be easy to see */
+  --chip: #ecece6;
+  --chip-ai: #dce8f7;
   --radius: 8px;
   --radius-sm: 6px;
 
@@ -27,6 +31,31 @@
 
   color: var(--text);
   background: var(--bg);
+}
+
+/* Dark theme. index.html sets data-theme before the first paint (the stored choice, else the
+   system setting) and the corner button flips it. Every screen takes its colours from these
+   tokens, so this block is the whole theme. Text and accent pairs are at least 4.5:1. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --text: #ececea;
+  --muted: #a8a8a3;
+  --bg: #121314;
+  --surface: #1c1d1f;
+  --line: #4a4b4e;
+  --line-soft: #2c2d30;
+  --accent: #7db2ff;
+  --accent-strong: #a3c8ff;
+  --accent-tint: #1b2a3f;
+  --on-accent: #0a1424;
+  --field-line: #8a8c90;
+  --chip: #2b2c2f;
+  --chip-ai: #1f3350;
+  --ok: #5fd08a;
+  --danger: #ff8a8a;
+  --warn-bg: #3a3112;
+  --warn-line: #8a7326;
 }
 
 body {
@@ -70,7 +99,7 @@ textarea {
   font: inherit;
   color: inherit;
   background: var(--surface);
-  border: 1px solid #8a8a8a;
+  border: 1px solid var(--field-line);
   border-radius: var(--radius-sm);
   transition: border-color 150ms var(--ease-out);
 }
@@ -87,7 +116,7 @@ button {
   padding: 0.6rem 1.25rem;
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   cursor: pointer;
   transition:
@@ -327,6 +356,29 @@ progress {
 
 .entry .entry-cards li:nth-child(3) {
   animation-delay: 90ms;
+}
+
+/* ---- Theme toggle: small, fixed in the corner. .page keeps 4rem of bottom padding, so it never
+   covers the last line of a screen. */
+
+.theme-toggle {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 10;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .theme-toggle:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--accent-tint);
+    border-color: var(--accent);
+  }
 }
 
 /* Bigger targets on a touch screen. */

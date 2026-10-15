@@ -8,7 +8,7 @@ select {
   font: inherit;
   padding: 0.5rem;
   margin: 0.25rem 0 1rem;
-  border: 1px solid #8a8a8a;
+  border: 1px solid var(--field-line);
   border-radius: var(--radius-sm);
   background: var(--surface);
 }
@@ -128,12 +128,12 @@ h2 {
   padding: 0.1rem 0.5rem;
   margin: 0 0.3rem 0.3rem 0;
   font-size: 0.85rem;
-  background: #ecece6;
+  background: var(--chip);
   border-radius: 999px;
 }
 
 .badge.ai {
-  background: #dce8f7;
+  background: var(--chip-ai);
 }
 
 .detail-header {
@@ -214,7 +214,7 @@ h2 {
 .breadcrumbs li + li::before {
   content: '/';
   margin-right: 0.4rem;
-  color: #8a8a8a;
+  color: var(--field-line);
 }
 
 .breadcrumbs [aria-current='page'] {
