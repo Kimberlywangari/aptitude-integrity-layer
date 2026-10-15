@@ -11,6 +11,7 @@ import TestRunner from './candidate/TestRunner'
 import UploadStatus from './candidate/UploadStatus'
 import { setSebRequiredHandler } from './lib/api'
 import { CANDIDATE_PATH } from './lib/routes'
+import ThemeToggle from './ThemeToggle'
 
 // Sign-in, reviewer and recruiter screens are a separate chunk: a candidate on a weak connection
 // never downloads them.
@@ -30,6 +31,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <SebRedirect />
+      <ThemeToggle />
       <Suspense
         fallback={
           <main className="page">

@@ -25,14 +25,14 @@
   place-items: center;
   width: 1.6rem;
   height: 1.6rem;
-  border: 1px solid #8a8a8a;
+  border: 1px solid var(--field-line);
   border-radius: 50%;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
 
 .setup-step.done .setup-mark {
-  color: #fff;
+  color: var(--on-accent);
   background: var(--ok);
   border-color: var(--ok);
 }

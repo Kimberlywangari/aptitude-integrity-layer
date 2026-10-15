@@ -4,7 +4,23 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>Aptitude Test</title>
+    <script>
+      // Choose the theme before the first paint so the page never flashes the wrong one. The
+      // stored choice wins, then the system setting. src/lib/theme.ts keeps it in step afterwards.
+      ;(function () {
+        var theme = null
+        try {
+          theme = window.localStorage.getItem('theme')
+        } catch (e) {}
+        if (theme !== 'light' && theme !== 'dark') {
+          var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          theme = dark ? 'dark' : 'light'
+        }
+        document.documentElement.dataset.theme = theme
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
