@@ -21,12 +21,13 @@ class Reviewer(Base):
 
 
 class AuditLog(Base):
-    """What staff did: sign-ins now, decisions and video views from D13."""
+    """What staff did: sign-ins and admin actions now, decisions and video views from D13."""
 
     __tablename__ = "audit_log"
     __table_args__ = (
         CheckConstraint(
-            "action in ('login', 'decision', 'video_view', 'video_purged')", name="action"
+            "action in ('login', 'decision', 'video_view', 'video_purged', 'admin')",
+            name="action",
         ),
     )
 

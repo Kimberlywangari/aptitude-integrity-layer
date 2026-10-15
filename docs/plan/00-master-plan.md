@@ -195,7 +195,7 @@ aptitude-integrity-layer/
 | `rankings` | `session_id`, `rule_score`, `rule_rank`, `ai_status` (`not_run`/`ok`/`retried`/`fallback`), `ai_json`, `ai_attempts`, `ai_seconds`, `final_rank` |
 | `reviewers` | `id`, `email` (lower-case, unique), `password_hash` (bcrypt), `role` (`reviewer`/`admin`), `is_active`, `created_at` |
 | `decisions` | `session_id`, `reviewer_id`, `outcome`, `reason`, `decided_at` |
-| `audit_log` | `id`, `reviewer_id` (null if the account is removed), `action` (`decision`/`video_view`/`video_purged`/`login`), `session_id`, `ts`, `detail` |
+| `audit_log` | `id`, `reviewer_id` (null if the account is removed), `action` (`decision`/`video_view`/`video_purged`/`login`/`admin`; `detail` says what an admin did), `session_id`, `ts`, `detail` |
 | `complaints` | `session_id`, `category`, `text`, `created_at`, `status` |
 
 ### 7.2 Endpoints

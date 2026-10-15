@@ -143,7 +143,7 @@ codes are generated (a later small change to the seed), not the SEB config you a
   one indexed lookup) so it does not slow the start path.
 - **SEB config:** one `exam.seb`, start URL = site root. Nothing per candidate.
 
-### Admin backend (needed by rows 17-19; none of it exists yet)
+### Admin backend (needed by rows 17-19; built, see staff-login-and-navigation.md)
 
 - **Auth:** reuse the reviewer login (D13). Add an `admin` role so reviewers cannot create
   sittings or invites; one `require_admin` dependency on `/api/admin/*`.

@@ -35,9 +35,16 @@ def authenticate(db: Session, email: str, password: str) -> Reviewer | None:
     return reviewer if verify_password(password, reviewer.password_hash) else None
 
 
-def record_login(db: Session, clock: Clock, reviewer: Reviewer) -> None:
-    db.add(AuditLog(reviewer_id=reviewer.id, action="login", ts=clock.now()))
+def record_action(
+    db: Session, clock: Clock, reviewer: Reviewer, action: str, detail: str | None = None
+) -> None:
+    """One audit row for something a signed-in person did. Flushed, committed by the caller."""
+    db.add(AuditLog(reviewer_id=reviewer.id, action=action, ts=clock.now(), detail=detail))
     db.flush()
+
+
+def record_login(db: Session, clock: Clock, reviewer: Reviewer) -> None:
+    record_action(db, clock, reviewer, "login")
 
 
 def _check_password(password: str) -> None:
