@@ -118,7 +118,9 @@ export default function CandidateDetail() {
         <p role="alert" className="error">
           {notFound ? 'That candidate is not in the review queue.' : 'Could not load the candidate.'}
         </p>
-        <Link to="/review">Back to the queue</Link>
+        <p>
+          <Link to="/review">Back to the queue</Link>
+        </p>
       </>
     )
   }
@@ -129,9 +131,6 @@ export default function CandidateDetail() {
 
   return (
     <>
-      <p>
-        <Link to="/review">Back to the queue</Link>
-      </p>
       <header className="detail-header">
         <h1>Candidate {d.candidate_id}</h1>
         <span className="badge">Rank {d.rank}</span>

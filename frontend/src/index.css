@@ -1,12 +1,46 @@
+/* Base styles for every screen. This file is in the candidate's download, so it stays small:
+   plain CSS, no web fonts, and motion only where it earns its place (see the notes below). */
+
 :root {
+  color-scheme: light;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
-  color: #1a1a1a;
-  background: #f6f6f4;
+
+  --text: #1a1a1a;
+  --muted: #555;
+  --bg: #f6f6f4;
+  --surface: #fff;
+  --line: #c9c9c4;
+  --line-soft: #e4e4df;
+  --accent: #1f4f8b;
+  --accent-strong: #173c6b;
+  --accent-tint: #eef3fa;
+  --ok: #0b6b2e;
+  --danger: #a31515;
+  --warn-bg: #fff6d6;
+  --warn-line: #d9b94c;
+  --radius: 8px;
+  --radius-sm: 6px;
+
+  /* One strong ease-out for anything that responds to a person: it moves at once, then settles. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+  color: var(--text);
+  background: var(--bg);
 }
 
 body {
   margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .page {
@@ -18,7 +52,9 @@ body {
 
 h1 {
   font-size: 1.5rem;
+  line-height: 1.25;
   margin: 0 0 1rem;
+  text-wrap: balance;
 }
 
 label {
@@ -32,29 +68,60 @@ textarea {
   margin: 0.25rem 0 1rem;
   padding: 0.6rem;
   font: inherit;
+  color: inherit;
+  background: var(--surface);
   border: 1px solid #8a8a8a;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+  transition: border-color 150ms var(--ease-out);
 }
 
+input:not([type='checkbox']):not([type='radio']):focus-visible,
+textarea:focus-visible {
+  border-color: var(--accent);
+  outline-offset: 0;
+}
+
+/* Buttons answer a press at once (a small squeeze), and only animate the properties that change. */
 button {
   font: inherit;
   padding: 0.6rem 1.25rem;
-  border: 0;
-  border-radius: 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
   color: #fff;
-  background: #1f4f8b;
+  background: var(--accent);
   cursor: pointer;
+  transition:
+    transform 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    opacity 150ms var(--ease-out);
 }
 
 button.secondary {
-  color: #1f4f8b;
-  background: #fff;
-  border: 1px solid #1f4f8b;
+  color: var(--accent);
+  background: var(--surface);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Hover is for a mouse; on a touch screen it would stick after a tap. */
+@media (hover: hover) and (pointer: fine) {
+  button:hover:not(:disabled) {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+  }
+
+  button.secondary:hover:not(:disabled) {
+    background: var(--accent-tint);
+    border-color: var(--accent);
+  }
 }
 
 fieldset {
@@ -70,10 +137,26 @@ fieldset {
   align-items: flex-start;
   padding: 0.6rem 0.75rem;
   margin-bottom: 0.5rem;
-  background: #fff;
-  border: 1px solid #c9c9c4;
-  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  transition:
+    border-color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
+
+.option:has(input:checked),
+.check:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .option:hover,
+  .check:hover {
+    border-color: var(--accent);
+  }
 }
 
 .statement {
@@ -96,7 +179,7 @@ fieldset {
 .section {
   margin: 0;
   text-transform: capitalize;
-  color: #555;
+  color: var(--muted);
 }
 
 .question-text {
@@ -110,12 +193,12 @@ fieldset {
 }
 
 .muted {
-  color: #555;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
 .error {
-  color: #a31515;
+  color: var(--danger);
 }
 
 .sr-only {
@@ -127,7 +210,7 @@ fieldset {
 }
 
 .ok {
-  color: #0b6b2e;
+  color: var(--ok);
 }
 
 .steps {
@@ -138,7 +221,7 @@ fieldset {
 
 .steps > li {
   padding: 1rem 0;
-  border-top: 1px solid #d8d8d3;
+  border-top: 1px solid var(--line-soft);
 }
 
 .steps h2 {
@@ -150,7 +233,7 @@ fieldset {
   width: 100%;
   max-width: 20rem;
   background: #000;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 meter {
@@ -166,19 +249,23 @@ progress {
 .banner {
   padding: 0.6rem 0.75rem;
   margin: 1rem 0;
-  background: #fff6d6;
-  border: 1px solid #d9b94c;
-  border-radius: 6px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius-sm);
 }
 
-/* Entry page and sign-in pages */
+/* ---- Entry page and sign-in pages */
+
 .page.narrow {
   max-width: 26rem;
 }
 
-.back,
-.switch {
+.back {
   margin: 0 0 1rem;
+}
+
+.switch {
+  margin: 1.5rem 0 0;
 }
 
 .entry-cards {
@@ -195,17 +282,68 @@ progress {
   padding: 1rem 1.1rem;
   color: inherit;
   text-decoration: none;
-  background: #fff;
-  border: 1px solid #c9c9c4;
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition:
+    transform 150ms var(--ease-out),
+    border-color 150ms var(--ease-out);
 }
 
 .entry-card strong {
-  color: #1f4f8b;
+  color: var(--accent);
   font-size: 1.1rem;
 }
 
-.entry-card:hover,
-.entry-card:focus-visible {
-  border-color: #1f4f8b;
+.entry-card:active {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .entry-card:hover {
+    border-color: var(--accent);
+  }
+}
+
+/* The entry and sign-in pages are seen once or twice, so they may arrive with a short rise. The
+   test screens never animate: they are used all day and a candidate is on the clock. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.entry .entry-cards li,
+.page.narrow form {
+  animation: rise 240ms var(--ease-out) both;
+}
+
+.entry .entry-cards li:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.entry .entry-cards li:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+/* Bigger targets on a touch screen. */
+@media (pointer: coarse) {
+  button,
+  input:not([type='checkbox']):not([type='radio']) {
+    min-height: 2.75rem;
+  }
+}
+
+/* Fewer and gentler: no movement, but colour changes still say what happened. */
+@media (prefers-reduced-motion: reduce) {
+  .entry .entry-cards li,
+  .page.narrow form {
+    animation: none;
+  }
+
+  button:active:not(:disabled),
+  .entry-card:active {
+    transform: none;
+  }
 }
