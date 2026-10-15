@@ -54,21 +54,34 @@ describe('fixture mode', () => {
     clearStaff()
   })
 
-  it('sends sign-in and me to the real server while the rest of /api/review is mocked', async () => {
+  it('sends sign-in and every reviewer screen to the real server', async () => {
+    const { api: fixtureApi } = await import('../src/lib/api')
+
+    await fixtureApi('/api/review/login', { method: 'POST', body: { email: 'a', password: 'b' } })
+    await fixtureApi('/api/review/me')
+    await fixtureApi('/api/review/queue?sitting=2')
+    await fixtureApi('/api/review/candidates/sim-001')
+    await fixtureApi('/api/review/audit')
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/review/login',
+      '/api/review/me',
+      '/api/review/queue?sitting=2',
+      '/api/review/candidates/sim-001',
+      '/api/review/audit',
+    ])
+    expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe('Bearer staff-token')
+  })
+
+  it('still serves the pre-check from fixtures, which the server does not have yet', async () => {
     const { api: fixtureApi } = await import('../src/lib/api')
     const { setMockLatency } = await import('../src/lib/mock')
     setMockLatency(0)
 
-    await fixtureApi('/api/review/login', { method: 'POST', body: { email: 'a', password: 'b' } })
-    await fixtureApi('/api/review/me')
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      '/api/review/login',
-      '/api/review/me',
-    ])
-
-    fetchMock.mockClear()
-    await fixtureApi('/api/review/queue') // still a fixture: no request leaves the page
-    expect(fetchMock).not.toHaveBeenCalled()
+    await fixtureApi('/api/precheck/result', {
+      method: 'POST',
+      body: { camera_ok: true, mic_ok: true },
+    })
+    expect(fetchMock).not.toHaveBeenCalled() // no request leaves the page
   })
 
   it('sends the setup screens to the real server', async () => {
