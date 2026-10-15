@@ -28,7 +28,11 @@ function importMessage(error: unknown): string {
     }
     if (error.code === 'missing_columns') {
       const columns = Array.isArray(error.body.columns) ? error.body.columns.join(', ') : ''
-      return `The file is missing these columns: ${columns}.`
+      const which = error.body.file === 'bank' ? 'The question-bank file' : 'The file'
+      return `${which} is missing these columns: ${columns}.`
+    }
+    if (error.code === 'too_many_rows') {
+      return `That file has too many rows. Split it into files of at most ${String(error.body.max ?? 5000)}.`
     }
   }
   return 'Could not import the file.'

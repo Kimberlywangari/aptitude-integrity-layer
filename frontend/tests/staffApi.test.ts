@@ -70,6 +70,20 @@ describe('fixture mode', () => {
     await fixtureApi('/api/review/queue') // still a fixture: no request leaves the page
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('sends the setup screens to the real server', async () => {
+    const { api: fixtureApi } = await import('../src/lib/api')
+
+    await fixtureApi('/api/admin/sittings')
+    await fixtureApi('/api/admin/invites', { method: 'POST', body: { count: 2 } })
+    await fixtureApi('/api/admin/questions/summary')
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/admin/sittings',
+      '/api/admin/invites',
+      '/api/admin/questions/summary',
+    ])
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer staff-token')
+  })
 })
 
 describe('error routing', () => {
