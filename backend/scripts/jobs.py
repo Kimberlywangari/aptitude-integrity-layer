@@ -6,11 +6,21 @@ Later days register more jobs here (compute_flags, build_packets, rank, purge_vi
 import sys
 from collections.abc import Callable
 
-from scripts import load_question_bank, reviewers, seed_synthetic
+from scripts import (
+    compute_flags,
+    load_question_bank,
+    measure_false_flags,
+    reviewers,
+    seed_synthetic,
+    simulate_cohort,
+)
 
 JOBS: dict[str, Callable[[list[str]], None]] = {
     "seed_synthetic": seed_synthetic.main,
     "load_question_bank": load_question_bank.main,
+    "simulate_cohort": simulate_cohort.main,
+    "compute_flags": compute_flags.main,
+    "measure_false_flags": measure_false_flags.main,
     "create_reviewer": reviewers.create_main,
     "deactivate_reviewer": reviewers.deactivate_main,
 }
