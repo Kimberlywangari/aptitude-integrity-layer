@@ -116,6 +116,9 @@ export interface FinishResponse {
 export interface PrecheckRequest {
   camera_ok: boolean
   mic_ok: boolean
+  /** False when the microphone step was left out (testing). `mic_ok` is then false and means
+   *  "not checked", never "failed", so a reviewer can tell the two apart. */
+  mic_checked?: boolean
   device_labels: { camera: string; mic: string }
   mic_peak: number
   video_size: { width: number; height: number }

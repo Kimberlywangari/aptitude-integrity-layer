@@ -8,6 +8,10 @@ export const MIC_NOTICE =
   'Keep your microphone on for the whole test. If it is muted for a while you will see a ' +
   'warning which will be shown to your reviewer.'
 
+/** Shown in place of the microphone step while that check is switched off for testing. */
+export const MIC_CHECK_OFF_NOTE =
+  'The microphone check is switched off for this test run, so your microphone is not tested.'
+
 export const INTEGRITY_TITLE = 'Before you begin'
 
 export const INTEGRITY_POINTS: string[] = [
@@ -58,8 +62,9 @@ export const DEVICE_NOTICE_TITLE = 'Check your camera and microphone'
 export const DEVICE_NOTICE_POINTS: string[] = [
   'Use a Windows or Mac computer, or an iPad, with a working webcam and microphone. ' +
     'Android phones and Chromebooks cannot sit this test. It has been tested on Windows.',
-  'Your camera and microphone record for the whole test. Recording uses about 80 MB an ' +
-    'hour, so please use Wi-Fi rather than mobile data.',
+  'Your camera and microphone record for the whole test. Recording uses about 40 to 50 MB ' +
+    'an hour, and never more than about 80 MB an hour, so please use Wi-Fi rather than ' +
+    'mobile data.',
   MIC_NOTICE,
 ]
 

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { micCheckEnabled } from '../lib/features'
 import { getMicSilent, subscribeMicSilent } from '../lib/micStatus'
 import { MIC_BANNER } from './copy'
 
@@ -8,6 +9,8 @@ import { MIC_BANNER } from './copy'
  */
 export default function MicBanner() {
   const silent = useSyncExternalStore(subscribeMicSilent, getMicSilent)
+  // The warning belongs to the microphone check: nothing to show while that check is switched off.
+  if (!micCheckEnabled()) return null
   // The live region stays mounted so a screen reader announces the text when it appears.
   return <div role="status">{silent && <p className="banner">{MIC_BANNER}</p>}</div>
 }

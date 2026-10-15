@@ -34,8 +34,9 @@ export function classifyDeviceError(error: unknown): DeviceErrorKind {
 }
 
 export async function acquireDevices(): Promise<DeviceHandle> {
-  // Low resolution on purpose (about 80 MB an hour), and no audio processing, so a live
-  // microphone keeps a faint noise floor and a muted one stays flat (master plan 7.8).
+  // Low resolution on purpose (measured about 40 to 50 MB an hour, 80 at most), and no audio
+  // processing, so a live microphone keeps a faint noise floor and a muted one stays flat
+  // (master plan 7.8).
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { width: 320, height: 240, frameRate: 15 },
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
