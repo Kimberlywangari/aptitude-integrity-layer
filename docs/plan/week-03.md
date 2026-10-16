@@ -15,7 +15,7 @@ Reviewers can work a ranked queue and jump to the right moment in the video. A l
 | D11 Thu 22 | Per-question check; `Ranker` interface; Ollama ranker; model benchmark | One packet in, valid JSON out; seconds per packet known |
 | D12 Fri 23 | Fact check, retry, fallback, batch runner; Claude adapter | Hallucinations rejected; Ollama down → rule order, nobody lost |
 | D13 Mon 26 | Reviewer app: queue, packet, video at flag − 5 s, decisions, audit | Click a flag, land in the video; decision needs a reason |
-| D14 Tue 27 | 30-day deletion; full SEB scripted run; **dry run and freeze** | Backdated-decision test passes; pilot checklist ticked |
+| D14 Tue 27 | 30-day deletion; full scripted run in a real browser; **dry run and freeze** | Backdated-decision test passes; pilot checklist ticked |
 | D15 Wed 28 | **Pilot sitting and measurement** | `eval/reports/pilot-report.md`; tag `week-3` |
 | Thu 29 | Handover walkthrough with Douglas; then integration questions and bug fixes only | `docs/handover.md` |
 
@@ -133,13 +133,13 @@ git commit -m "feat(eval): AI explanation accuracy script and hand-check sheet"
 - [ ] **3. Video endpoint (60 min):** `GET /api/review/candidates/{id}/video?segment=n` streams the assembled file (call `ensure_assembled` from D8 on first use) with HTTP Range support so the player can seek. Verify that scrubbing in a browser works; if Starlette's `FileResponse` doesn't honour Range in your version, write a small Range handler. Log a `video_view` audit entry on the first request for a (reviewer, session, segment) in a 5-minute window, plus an explicit `POST …/video-view {flag_id}` when the reviewer jumps to a flag.
 - [ ] **4. Decisions (45 min):** `POST /api/review/decisions {session_id, outcome, reason}`. Outcomes (placeholders until Cytonn confirms): `no_concern`, `concern_noted`, `refer_for_follow_up`. `reason` is required, at least 20 characters (422 otherwise). Store `decided_at = clock.now()`; audit-log it. A newer decision supersedes an older one, and **the 30 days run from the latest `decided_at`** (write this rule in `docs/handover.md`).
 - [ ] **5. Reviewer UI (150 min)**, routes under `/review`:
-  - `Login.tsx`.
-  - `Queue.tsx`: table (rank, candidate ID, flag chips, an "AI advisory" badge with strength or "rules only", decision status); filter by sitting.
-  - `CandidateDetail.tsx`: packet summary (flags with times and question numbers; how the candidate compares with the sitting; score and pace labelled *context only*; innocent signals highlighted; muted or silent mic stretches from `mic_silence[]` listed as context with their times and a **Jump to video** button using the same seek maths), the explanation text with a clear "AI-generated, advisory, not a verdict" label, complaints, past decisions.
-  - `VideoPlayer.tsx`: an HTML `<video controls>`; each flag has a **Jump to video** button that sets `currentTime` to `seek_s`, shows "starting 5 s before the moment", and handles `no_video_at_moment`.
-  - `DecisionForm.tsx`: outcome select + required reason + confirm.
+  - `Login.vue`.
+  - `Queue.vue`: table (rank, candidate ID, flag chips, an "AI advisory" badge with strength or "rules only", decision status); filter by sitting.
+  - `CandidateDetail.vue`: packet summary (flags with times and question numbers; how the candidate compares with the sitting; score and pace labelled *context only*; innocent signals highlighted; muted or silent mic stretches from `mic_silence[]` listed as context with their times and a **Jump to video** button using the same seek maths), the explanation text with a clear "AI-generated, advisory, not a verdict" label, complaints, past decisions.
+  - `VideoPlayer.vue`: an HTML `<video controls>`; each flag has a **Jump to video** button that sets `currentTime` to `seek_s`, shows "starting 5 s before the moment", and handles `no_video_at_moment`.
+  - `DecisionForm.vue`: outcome select + required reason + confirm.
   - Plain, readable styling only. Function over looks (cut-list item 3).
-- [ ] **6. Seek accuracy rehearsal (45 min):** this is the "flag lands within 2 seconds" criterion, practised before the pilot. Run a test yourself in SEB. At 5 planted moments (a focus loss, a copy attempt, a long hold, etc.), say "mark" out loud and wave at the camera, and write down the real wall-clock time. Then open the candidate in the reviewer app, jump to each flag, and use `eval/metrics/video_offset.py` to compare the time of the cue in the video with `seek_s + 5`. Record the error for each. **Target ≤ 2 s.** If it's off, check the anchor (D7 step 3) and for event-queue delay (D4 `age_ms`).
+- [ ] **6. Seek accuracy rehearsal (45 min):** this is the "flag lands within 2 seconds" criterion, practised before the pilot. Run a test yourself in Chrome. At 5 planted moments (a focus loss, a copy attempt, a long hold, etc.), say "mark" out loud and wave at the camera, and write down the real wall-clock time. Then open the candidate in the reviewer app, jump to each flag, and use `eval/metrics/video_offset.py` to compare the time of the cue in the video with `seek_s + 5`. Record the error for each. **Target ≤ 2 s.** If it's off, check the anchor (D7 step 3) and for event-queue delay (D4 `age_ms`).
 - [x] **7. Admin backend (90 min):** **built early** on `feat/staff-login-and-nav` (admin screens now call the real server; the question-bank export's columns are provisional, see `staff-login-and-navigation.md`). the recruiter's setup screens (`frontend/src/admin/`, already built on fixtures) need their endpoints. Add an `admin` role to `reviewers` and a `require_admin` dependency on `/api/admin/*`. Endpoints are thin wrappers over the CLI job functions, so no logic is duplicated: `GET/POST /api/admin/sittings` (list with finished / in-progress / not-started counts, create), `POST /api/admin/sittings/{id}/close {force}` (409 `sessions_unfinished {unfinished}` unless forced; a forced close is audited), `POST /api/admin/invites {count 1-500}` (generates opaque candidate IDs and short codes with `new_invite_code`, returns them once, stores only the hash), `GET /api/admin/questions/summary`, `POST /api/admin/questions/import {filename, summary_csv, bank_csv}` (same checks and report as `import_question_summary`; 409 `sitting_open` while a sitting is open), `POST /api/admin/questions/retire-synthetic` (keeps any question an earlier session points at). Every admin action goes in the audit log. **Then flip the screens off the fixtures:** remove `/api/admin` and `/api/review` from `MOCKED_PREFIXES` in `frontend/src/lib/api.ts`.
   - **Test:** non-admin token → 403; import during an open sitting → 409; forced close is audited; invite codes are returned once and only hashes are stored.
 
@@ -160,9 +160,9 @@ git commit -m "test(review): auth, validation, audit and seek accuracy script"
 
 ---
 
-## D14: Tuesday 27 Oct. Deletion, real-SEB scripted run, dry run, freeze
+## D14: Tuesday 27 Oct. Deletion, real-browser scripted run, dry run, freeze
 
-**Goal:** deletion is proven, the scripted-action run has been done in real SEB, and the whole pilot has been rehearsed. At the end of today the code is **frozen** (bug fixes only).
+**Goal:** deletion is proven, the scripted-action run has been done in a real browser, and the whole pilot has been rehearsed. At the end of today the code is **frozen** (bug fixes only).
 
 ### Steps
 
@@ -173,28 +173,28 @@ git commit -m "test(review): auth, validation, audit and seek accuracy script"
   - `python -m scripts.jobs purge_videos [--report]`: `--report` also lists undecided sessions with video older than a configurable number of days (default 60), so a human decides what to do (master plan R9; question for Cytonn).
   - The `worker` container runs `scripts.jobs loop`, which runs `purge_videos` hourly.
   - **Test (this is the "deletion works" criterion):** with a `FakeClock`, create decisions at day −31, −30 (boundary) and −29; run purge; the −31 and −30 cases are deleted and the −29 case is kept; files are gone from disk; a second run does nothing; the video endpoint returns 410. **Real-clock version:** `update decisions set decided_at = now() - interval '31 days' where …;` then run the CLI.
-- [ ] **2. Remove dev-only bits (15 min):** delete `GET /api/spike/echo`; make sure `CHUNK_FAIL_RATE` and `?sim=drop-events` are off by default and ignored when `ENV=production`; `SEB_MODE=enforce`.
-- [ ] **3. Full scripted run in real SEB (75 min):** everything in `eval/scripted_actions.md`, performed by hand inside SEB through `http://localhost:8080`, once. For each action write down *whether SEB lets the action happen at all* (Alt+Tab is probably blocked, in which case the action cannot occur and cannot be "caught"; list those as "prevented by SEB"). Include:
+- [ ] **2. Remove dev-only bits (15 min):** delete the D2 spike page (`frontend/public/spike`); make sure `CHUNK_FAIL_RATE` and `?sim=drop-events` are off by default and ignored when `ENV=production`; build the frontend without `VITE_MOCK_API` and without `VITE_MIC_CHECK=off`.
+- [ ] **3. Full scripted run in a real browser (75 min):** everything in `eval/scripted_actions.md`, performed by hand in Chrome and then in Edge, at full screen, through `http://localhost:8080`, once. For each action write down *whether the page can see the action at all* (Print Screen and some operating-system shortcuts are invisible to a page; list those as "not observable"). Include:
   - a long hold, a copy attempt, an idle gap, a correct run.
-  Then `close_sitting`, `compute_flags`, `rank`; confirm every performed action produced its flag. Save the result in `eval/reports/scripted-run-seb.md`.
-- [ ] **4. Dry run of the pilot (120 min):** use 2–3 people (or you on two machines) and run the **entire** pilot procedure with the real SEB config and the Compose stack:
+  Then `close_sitting`, `compute_flags`, `rank`; confirm every performed action produced its flag. Save the result in `eval/reports/scripted-run-browser.md`.
+- [ ] **4. Dry run of the pilot (120 min):** use 2–3 people (or you on two machines) and run the **entire** pilot procedure with the Compose stack:
   1. start the stack: `docker compose up -d`; start Ollama; check `/api/health`;
-  2. hand out invite tokens, start SEB with the config, sit the test;
+  2. hand out invite links, sit the test in Chrome or Edge at full screen;
   3. observers log planted actions with wall-clock time;
   4. close the sitting, compute flags (cohort checks are skipped below 8 — expected), run the silence scan, build packets, rank with Ollama;
   5. log in as a reviewer, check each flag's video jump, record decisions;
   6. time every step.
   Fix anything that blocks. Anything that doesn't block goes to the post-pilot list.
-- [ ] **5. Prepare pilot-day material (60 min):** `eval/pilot/runbook.md` (start-up checklist, network check, what to do if SEB won't start, who does what), `eval/pilot/cheater-scripts.md` (6 scripts, below), `eval/pilot/observer-sheet.md` (per planted action: candidate ID, action, **wall-clock time to the second**), `eval/pilot/volunteer-brief.md` (what is recorded, data use ≈ 80 MB/h, Wi-Fi, consent wording, where to complain, and the `MIC_NOTICE` line from master plan §7.8: keep the mic on for the whole test, and the warning is shown to the reviewer).
+- [ ] **5. Prepare pilot-day material (60 min):** `eval/pilot/runbook.md` (start-up checklist, network check, what to do if a camera or microphone permission is blocked, who does what), `eval/pilot/cheater-scripts.md` (6 scripts, below), `eval/pilot/observer-sheet.md` (per planted action: candidate ID, action, **wall-clock time to the second**), `eval/pilot/volunteer-brief.md` (what is recorded, data use ≈ 80 MB/h, Wi-Fi, consent wording, where to complain, and the `MIC_NOTICE` line from master plan §7.8: keep the mic on for the whole test, and the warning is shown to the reviewer).
   - Suggested scripted roles: **C1** tab-out to look something up on 4 questions; **C2** copy the question text on 3 questions; **C3** go idle for 90 s, then answer 4 questions quickly and correctly; **C4** answer every question in a near-identical short time; **C5** answer many questions correctly in a fraction of the usual time; **C6** a mixed set (one tab-out, one copy, one long hold). Each also performs 5–6 timed, observer-logged actions for the video-timing check.
   - Also assign two honest volunteers to go offline for 2 minutes (the chunk-loss criterion).
 - [ ] **6. Freeze (30 min):** `pg_dump` a backup; run the whole test suite; tag `rc-pilot`; from now on, only fixes for blockers.
 
 ### How to test the day
-Backdated deletion test passes (fake clock **and** real SQL clock). The SEB scripted run file is complete. The dry run completes end to end with no blocker open.
+Backdated deletion test passes (fake clock **and** real SQL clock). The scripted run file is complete. The dry run completes end to end with no blocker open.
 
 ### If behind
-Do steps 1, 3 and 4 in that order; step 5 can be done on the evening of D14 or the morning of D15 before volunteers arrive. Virtual-camera (OBS) and muted-mic runs are out of scope and are not part of the SEB run.
+Do steps 1, 3 and 4 in that order; step 5 can be done on the evening of D14 or the morning of D15 before volunteers arrive. Virtual-camera (OBS) and muted-mic runs are out of scope and are not part of the browser run.
 
 ### Commits
 ```
@@ -202,7 +202,7 @@ git commit -m "feat(video): 30-day purge job with audit trail and undecided-sess
 git commit -m "chore(worker): hourly purge loop in the worker container"
 git commit -m "test(video): backdated-decision deletion on fake and real clocks"
 git commit -m "chore: remove spike echo route and disable fault injection outside dev"
-git commit -m "docs(eval): scripted run in real SEB, pilot runbook, observer sheet and cheater scripts"
+git commit -m "docs(eval): scripted run in a real browser, pilot runbook, observer sheet and cheater scripts"
 git commit -m "fix: issues found in pilot dry run"
 git tag rc-pilot
 ```
@@ -215,7 +215,7 @@ git tag rc-pilot
 
 ### Steps
 
-- [ ] **1. Pre-flight (45 min before volunteers):** `docker compose up -d`; `/api/health` ok; Ollama running with the chosen model; SEB config distributed; each volunteer's invite token ready and **their role (honest or C1–C6) recorded in `eval/pilot/truth.csv`** (candidate ID, role, planted actions); observers have their sheets; Wi-Fi checked; disk space checked (≈ 80 MB/h × 16).
+- [ ] **1. Pre-flight (45 min before volunteers):** `docker compose up -d`; `/api/health` ok; Ollama running with the chosen model; each volunteer's invitation link ready and **their role (honest or C1–C6) recorded in `eval/pilot/truth.csv`** (candidate ID, role, planted actions); observers have their sheets; Wi-Fi checked; disk space checked (≈ 80 MB/h × 16).
 - [ ] **2. Run the sitting (≈ 60–90 min):** volunteers pre-check, test, upload. You are watching `/api/health`, the chunk counts and the heartbeat table for trouble; don't fix code mid-sitting. Two honest volunteers go offline for 2 minutes (as briefed).
 - [ ] **3. Wait for uploads:** check each candidate's manifest until `complete`, or note which ones aren't (and why).
 - [ ] **4. Process the sitting (time each step):**
@@ -230,7 +230,7 @@ git tag rc-pilot
 
   | Criterion | Target | How measured | Result | Pass? |
   |---|---|---|---|---|
-  | Rule-based checks catch scripted actions | 100% | `scripted_actions.md` register + the real-SEB run (D14) | | |
+  | Rule-based checks catch scripted actions | 100% | `scripted_actions.md` register + the real-browser run (D14) | | |
   | Honest volunteers wrongly flagged | ≤ 1 in 10 | honest volunteers with score ≥ 1.0 ÷ honest total; plus the 500-candidate synthetic result (D10) | | |
   | Planted cheating caught | ≥ 8 in 10 | cheaters in the queue ÷ 6 | | |
   | Planted cheaters ranked in top third | ≥ 8 in 10 | cheaters in the top third of queued candidates ÷ 6 | | |
@@ -274,7 +274,7 @@ git tag week-3
   - what was built and how to run it (`docker compose up`, Ollama, create a reviewer, import a question summary, run a sitting, run the jobs);
   - the environment variables (master plan §3) and what each does;
   - the decision log: thresholds in `flags/config.py` and why, "flagged" = rule score ≥ 1.0, the 30 days run from the **latest** decision, queue/video visibility rules, packet contents;
-  - **known limits**, from the proposal (phone photos, second device or person, earpiece, steady low-level cheating, memorised/shared questions) plus the ones found while building: the mic-muting limits in master plan §7.8 (which mutes the page can see, a faint-hiss mic, background noise played into the mic), SEB key verification can be spoofed by anyone who holds the key, heartbeats and chunks are not SEB-verified, only Windows was tested, what the page cannot observe inside SEB (from the D2 findings), what happens if upload can't finish (your D2 plan);
+  - **known limits**, from the proposal (phone photos, second device or person, earpiece, steady low-level cheating, memorised/shared questions) plus the ones found while building: the mic-muting limits in master plan §7.8 (which mutes the page can see, a faint-hiss mic, background noise played into the mic), a browser page cannot stop screenshots, a second monitor, other applications or the developer tools, honest focus loss from notifications and pop-ups, only Windows with Chrome and Edge was tested, what the page cannot observe (from the D2 findings), what happens if upload can't finish (your D2 plan);
   - **untested items:** Mac and iPad, `ClaudeRanker` live (mocked only), HTTPS hosting, scale beyond the pilot;
   - **open sign-offs from Cytonn:** DPIA, consent wording, storage location, retention (including what deletes video for candidates with no decision), complaint process, reviewer outcomes;
   - the pilot results and the changes you propose.
@@ -283,13 +283,13 @@ git tag week-3
 
 ### Walkthrough agenda (45–60 min with Douglas)
 
-1. 5 min: the problem and the two automatic outcomes.
-2. 10 min: live walk through the candidate flow in SEB: pre-check → test → upload.
+1. 5 min: the problem and the one automatic outcome (the camera and microphone gate).
+2. 10 min: live walk through the candidate flow in the browser: permissions → test → upload.
 3. 10 min: what is logged, the flag list, how a packet looks.
 4. 10 min: the ranker: rules, AI, fact check, fallback; show a rejected hallucination.
 5. 10 min: the reviewer app: queue → flag → video 5 s early → decision with reason → audit log.
 6. 5 min: deletion and the audit trail.
-7. 10 min: SEB setup on Cytonn's side (Douglas's task from the proposal): the config, the key, the URL.
+7. 10 min: hosting on Cytonn's side (Douglas's task from the proposal): the server, the HTTPS address and the URL candidates open.
 8. 5 min: pilot numbers, known limits, open sign-offs.
 
 ### After the meeting

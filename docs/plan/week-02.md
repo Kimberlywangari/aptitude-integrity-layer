@@ -13,7 +13,7 @@ Every sitting produces a **complete video record** (webcam + microphone) that su
 | Day | Focus | You can demo at the end of the day |
 |---|---|---|
 | D6 Thu 15 | Pre-check page and camera/mic gate | The test won't start until camera and mic work; retry works |
-| D7 Fri 16 | Recorder, local chunk queue, ordered upload, chunk endpoint | A full sitting in SEB leaves every chunk on the server, ~80 MB/h |
+| D7 Fri 16 | Recorder, local chunk queue, ordered upload, chunk endpoint | A full sitting in Chrome or Edge leaves every chunk on the server, ~80 MB/h |
 | D8 Mon 19 | Resilience: retries, 48 h resume, manifest, camera drops, assembly, complaint | Offline for 2 minutes → zero chunks missing; video seeks |
 | D9 Tue 20 | Question summary ingest, cohort checks, full Docker stack | Importer report; cohort flags only when the sitting is closed and ≥ 8 |
 | D10 Wed 21 | Evidence packets, rule scoring and ranking, honest false-flag measurement, S1 go/no-go | Ranked list from a synthetic cohort; false-flag rate measured; tag `week-2` |
@@ -27,23 +27,26 @@ Every sitting produces a **complete video record** (webcam + microphone) that su
 
 ## D6: Thursday 15 Oct. Pre-check page and gate
 
-**Goal:** a candidate sees the device requirement and data-use notice, proves their camera and microphone work (with retry), and only then can start. This is one of the proposal's two automatic outcomes.
+**Goal:** a candidate sees the device requirement and data-use notice, is asked for every permission the exam needs (camera, microphone, full screen), is told to turn off notifications, proves their camera and microphone work (with retry), and only then can start. The camera and microphone gate is the proposal's one automatic outcome.
 
 ### Steps
 
 - [ ] **1. Branch (2 min):** `git switch main`, then one branch per task, for example `git switch -c feat/precheck-gate`. Merge each into `main` with `--no-ff` when its tests pass. Suggested names: `feat/precheck-gate` (D6), `feat/video-recorder-upload` (D7), `feat/resilient-upload` (D8), `feat/question-import-cohort` (D9), `chore/docker-stack` (D9), `feat/packets-rule-ranking` (D10), `feat/blueprint-generator` (D10 stretch).
-- [ ] **2. Candidate notice text (30 min):** `frontend/src/candidate/copy.ts` gets: the **device requirement** (Windows or Mac computer, or an iPad, with a working webcam and microphone; Android phones and Chromebooks cannot sit the test), the **data-use** notice (about 80 MB per hour; use Wi-Fi), and what is recorded. Say "tested on Windows" (master plan R18). Also save the same text as `docs/candidate-notice.md` so Cytonn can show it on the registration page, as the proposal says it must be shown *before they register*. Add the `MIC_NOTICE` line (master plan §7.8) to both: the microphone must stay on for the whole test, and the warning is shown to the reviewer.
+- [ ] **2. Candidate notice text (30 min):** `frontend/src/candidate/copy.ts` gets: the **device requirement** (a Windows or Mac laptop or desktop with a working webcam and microphone and a current Chrome or Edge; phones, tablets and Chromebooks cannot sit the test, and a private window is not supported), the **data-use** notice (about 80 MB per hour; use Wi-Fi), and what is recorded. Say "tested on Windows" (master plan R18). Also save the same text as `docs/candidate-notice.md` so Cytonn can show it on the registration page, as the proposal says it must be shown *before they register*. Add the `MIC_NOTICE` line (master plan §7.8) to both: the microphone must stay on for the whole test, and the warning is shown to the reviewer.
 - [ ] **3. Media helper (45 min):** `lib/media.ts` owns the one `MediaStream` for the whole test: `acquire()` calls `getUserMedia({ video: { width: 320, height: 240, frameRate: 15 }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })` (so a live mic keeps a noise floor and a muted one stays flat, master plan §7.8), the stream is reused by the recorder on D7 (no second permission prompt), and it exposes `onTrackEnded`, `onMute`, `onUnmute` callbacks. It records `device_info {camera_label, mic_label}`, `mic_muted`/`mic_unmuted` and `track_ended` events through the logger from D4.
-- [ ] **4. `PreCheck.tsx` (120 min):** a four-step page.
-  1. Device and data notice with an "I understand" checkbox.
-  2. **Camera check**: live preview, a green tick when the video track is live and `readyState === 'live'`.
-  3. **Microphone check**: an `AudioContext` + `AnalyserNode` level meter; "say your name"; passes when the RMS level goes above a small threshold for 1 s within 10 s. A muted mic (`track.muted` or no signal) fails with a clear message. Retry buttons on every failure; handle `NotAllowedError` ("allow the camera in SEB's settings / system privacy settings") and `NotFoundError` ("no camera found") separately.
-  4. **Start** button, enabled only when 2 and 3 pass.
+- [ ] **4. `PreCheck.vue` (120 min):** a guided page that asks for everything the exam needs, one step at a time, with a step indicator.
+  1. **Before you start**: device and data notice with an "I understand" checkbox.
+  2. **Turn off notifications**: a warning card with how to do it (Windows Focus Assist or Do Not Disturb, macOS Focus; close Teams, Slack, WhatsApp and email; pause browser notifications from other sites) and a checkbox, "I have turned off notifications". A web page cannot read the system's notification settings, so this is the candidate's own confirmation, stored in `precheck_report.notifications_off_confirmed` for the reviewer. The page does not ask for the browser's notification permission.
+  3. **Allow camera and microphone**: one button asks for both in a single prompt. The step shows the state (not asked, waiting, allowed, blocked); a blocked state explains how to unblock it from the address bar and from the operating system's privacy settings, then retries.
+  4. **Camera check**: live preview, a green tick when the video track is live and `readyState === 'live'`.
+  5. **Microphone check**: an `AudioContext` + `AnalyserNode` level meter; "say your name"; passes when the RMS level goes above a small threshold for 1 s within 10 s. A muted mic (`track.muted` or no signal) fails with a clear message. Retry buttons on every failure; handle `NotAllowedError` ("allow the camera in the address bar and in your system privacy settings") and `NotFoundError` ("no camera found") separately.
+  6. **Full screen**: a button press asks for full screen (a browser only allows it from a click) and the step passes once `document.fullscreenElement` is set. During the test, if the candidate leaves full screen, a "Return to full screen" cover hides the question until they return (the server clock keeps running, and this is said on the cover), and `fullscreen_exited` / `fullscreen_entered` are logged as context, never as a flag.
+  7. **Start** button, enabled only when every step above has passed.
   - Screen order becomes: Start → PreCheck → Integrity → Test → SelfReport.
-- [ ] **5. Server side (45 min):** migration adds `sessions.precheck_passed_at` and `precheck_report`. `POST /api/precheck/result {camera_ok, mic_ok, device_labels, mic_peak, video_size}` stores the report and sets `precheck_passed_at` only if both are true. `POST …/begin` (from D3) now returns 409 `precheck_required` until it is set. **This is client-reported for now; D7 tightens it so the server verifies a real recording.**
+- [ ] **5. Server side (45 min):** migration adds `sessions.precheck_passed_at` and `precheck_report`. `POST /api/precheck/result {camera_ok, mic_ok, mic_checked, notifications_off_confirmed, fullscreen_ok, device_labels, mic_peak, video_size, browser}` stores the report and sets `precheck_passed_at` only if the camera is ok and the microphone is ok (or its step is switched off for testing). The confirmation and the full-screen result are kept in the report for the reviewer and are not part of the gate: the camera and microphone are the proposal's one automatic outcome. `POST …/begin` (from D3) now returns 409 `precheck_required` until it is set. **This is client-reported for now; D7 tightens it so the server verifies a real recording.**
 - [ ] ~~**6. Scripted-run rehearsal (20 min):** select the OBS Virtual Camera as the camera…~~ **Out of scope:** testing with a virtual camera is not part of this build (master plan R12). Skip. The `device_info` event still records whatever camera label the browser reports.
-- [ ] **7. Mic watch and warning banner (90 min):** `lib/micWatch.ts` is layer 2 of master plan §7.8. It reads the level from the shared stream with an `AnalyserNode` every 250 ms (reuse the pre-check's level helper) and starts when the test begins and stops at `finish`. Defaults in one config object, set from the D2 check 12 numbers: `MIC_FLAT_PEAK = 0.0005`, `MIC_SILENCE_SECONDS = 60`.
-  - After `MIC_SILENCE_SECONDS` (1 minute) of flat signal or mute: emit `mic_silent_start` (time back-dated to when the flat run began) and show `MicBanner.tsx`. When signal is back for 1 s: emit `mic_silent_end {duration_s}` and hide it.
+- [ ] **7. Mic watch and warning banner (90 min):** `lib/micWatch.ts` is layer 2 of master plan §7.8. It reads the level from the shared stream with an `AnalyserNode` every 250 ms (reuse the pre-check's level helper) and starts when the test begins and stops at `finish`. Defaults in one config object, set from the D2 check 11 numbers: `MIC_FLAT_PEAK = 0.0005`, `MIC_SILENCE_SECONDS = 60`.
+  - After `MIC_SILENCE_SECONDS` (1 minute) of flat signal or mute: emit `mic_silent_start` (time back-dated to when the flat run began) and show `MicBanner.vue`. When signal is back for 1 s: emit `mic_silent_end {duration_s}` and hide it.
   - Layer 1: the helper's `onMute` / `onUnmute` emit `mic_muted` / `mic_unmuted` at once and count a mute toward the same 1-minute timer. An unmute before then shows no banner.
   - **The banner never blocks.** `role="status"`, above the question, clear of the options and Submit, no change to the countdown or to any request. Text (placeholder): "Your microphone looks muted or silent. Please unmute it and keep it on for the whole test. Your test continues."
 
@@ -51,7 +54,7 @@ Every sitting produces a **complete video record** (webcam + microphone) that su
 - **Vitest (mock `navigator.mediaDevices`):** success path; `NotAllowedError`; `NotFoundError`; a muted audio track; recovery on retry.
 - **Vitest (fake `AnalyserNode` and fake timers):** zeros for 59 s → no banner; zeros for 60 s → banner shown and `mic_silent_start` back-dated to the start of the flat run; signal returns → banner hidden and `mic_silent_end` carries the right `duration_s`; faint noise above `MIC_FLAT_PEAK` never triggers it; a `mute` event is logged at once and shows the banner after 60 s, while an `unmute` before then shows none and a later one clears it; while the banner shows, answering, skipping and the countdown all still work.
 - **pytest:** `begin` before pre-check → 409; after a passing result → 200; a result with `mic_ok=false` does not set `precheck_passed_at`.
-- **Manual in SEB:** deny/disable the camera in Windows privacy settings → blocked with guidance; re-enable → retry passes; mute the mic in Windows → blocked; unmute → passes; check `events` for `device_info`. Then start a test and mute the mic in Windows: `mic_muted` shows in `events` at once if the event fires, the banner appears after 1 minute, the test keeps running, and `events` shows `mic_silent_start`; unmute → the banner clears and `mic_silent_end` appears. Tune `MIC_FLAT_PEAK` from what you see, in a quiet room as well as a noisy one.
+- **Manual in Chrome and Edge:** block the camera in the address bar and in Windows privacy settings → blocked with guidance; re-enable → retry passes; mute the mic in Windows → blocked; unmute → passes; check `events` for `device_info`. Then start a test and mute the mic in Windows: `mic_muted` shows in `events` at once if the event fires, the banner appears after 1 minute, the test keeps running, and `events` shows `mic_silent_start`; unmute → the banner clears and `mic_silent_end` appears. Tune `MIC_FLAT_PEAK` from what you see, in a quiet room as well as a noisy one.
 
 ### Commits
 ```
@@ -85,7 +88,7 @@ git commit -m "test(media): mic watch with fake analyser and timers"
 ### How to test the day
 - **Vitest:** `chunkQueue` returns pending chunks in `seq` order; `uploader` with a fake `fetch` that fails twice then succeeds sends each chunk once and in order; a `duplicate` reply counts as done.
 - **pytest:** chunk endpoint cases above; `begin` blocked without chunk 0; blocked when chunk 0 has no audio stream (use a fixture file made with `ffmpeg -f lavfi -i testsrc -t 5 video-only.webm`).
-- **Manual in SEB:** run a 10-minute test. Then:
+- **Manual in Chrome and Edge:** run a 10-minute test. Then:
   ```powershell
   Get-ChildItem data\video\<session_id> -Recurse -File | Measure-Object Length -Sum
   ```
@@ -106,15 +109,15 @@ git commit -m "test(video): chunk endpoint, queue ordering and uploader retries"
 
 ## D8: Monday 19 Oct. Resilient upload, 48 h resume, camera drops, complaint
 
-**Goal:** no chunk is ever lost, a dropped camera doesn't end the test, and the uploader can finish up to 48 hours after the test. Apply the plan you chose on D2.
+**Goal:** no chunk is ever lost, a dropped camera doesn't end the test, and the uploader can finish up to 48 hours after the test. Apply the resume plan you chose on D2.
 
 ### Steps
 
 - [ ] **1. Manifest (45 min):** `GET /api/chunks/{session}/manifest` → `{segments: [{segment, received: [..], missing: [..], expected}], bytes, complete}`. `expected` comes from `chunks_total` sent with `finish` (and for in-progress sessions, from the highest `seq` seen). `complete` is true when nothing is missing and `finish` has been received.
-- [ ] **2. Candidate-side completion (45 min):** `UploadStatus.tsx` polls the manifest, shows progress, and
-  - **Plan A (from D2):** keeps the candidate on the page until `complete`, then navigates to the SEB **Quit URL** (so SEB can close). If the connection is bad for too long, a "Quit anyway" button logs `upload_incomplete` and explains the complaint route.
-  - **Plan B (from D2):** shows "you can close SEB; reopen your test link within 48 hours to finish uploading"; add `POST /api/session/resume {token}` which issues an **upload-only** bearer token if `now − finished_at ≤ 48 h` (else 410), and the `/resume` route that reopens the IndexedDB queue and uploads.
-  - **Plan C:** just log `upload_incomplete` and show the complaint link.
+- [ ] **2. Candidate-side completion (45 min):** `UploadStatus.vue` polls the manifest, shows progress, and
+  - keeps the candidate on the page until `complete`, then says "Everything has been uploaded. You can close this window." The page asks before the tab is closed while the upload is unfinished (`beforeunload`). If the connection is bad for too long, a "Finish anyway" button logs `upload_incomplete` and explains the complaint route.
+  - **Resume (from D2 check 4):** shows "if you close this tab, reopen your test link within 48 hours to finish uploading"; add `POST /api/session/resume {token}` which issues an **upload-only** bearer token if `now − finished_at ≤ 48 h` (else 410), and the `/resume` route that reopens the IndexedDB queue and uploads.
+  - **If check 4 failed:** just log `upload_incomplete` and show the complaint link.
 - [ ] **3. Incomplete-upload job (20 min):** `python -m scripts.jobs mark_incomplete_uploads`: for sessions finished more than 48 h ago whose manifest isn't complete, insert an `upload_incomplete` event (once). Reviewers see it as context; it never disqualifies.
 - [ ] **4. Camera drop handling (75 min):** in `recorder.ts`/`media.ts`, on a video or audio `track.onended`, `MediaRecorder.onerror` or inactive stream:
   - emit `camera_dropped`/`track_ended`, show a non-blocking banner ("camera lost, reconnecting…"), keep the test running;
@@ -131,8 +134,8 @@ git commit -m "test(video): chunk endpoint, queue ordering and uploader retries"
 
 ### How to test the day (this is the "no video chunks lost" criterion)
 - **Fault injection:** `CHUNK_FAIL_RATE=0.3` — run a 5-minute test; every chunk still arrives; `chunk_integrity.py` reports 0 missing, 0 mismatched.
-- **Offline for 2 minutes (automated):** Playwright `context.setOffline(true)` for 120 s mid-test, then back online; manifest ends `complete`, nothing missing; the events table shows `connection_lost` and `connection_restored`; **then run it for real**: unplug Wi-Fi on your laptop for 2 minutes in SEB.
-- **Close and resume (Plan B only):** close the browser tab or SEB mid-upload, reopen via `/resume`, finish. For Plan A: try to quit before completion and confirm the warning.
+- **Offline for 2 minutes (automated):** Playwright `context.setOffline(true)` for 120 s mid-test, then back online; manifest ends `complete`, nothing missing; the events table shows `connection_lost` and `connection_restored`; **then run it for real**: unplug Wi-Fi on your laptop for 2 minutes in Chrome.
+- **Close and resume:** close the browser tab mid-upload, reopen via `/resume`, finish. Also try to close the tab before completion and confirm the warning.
 - **Camera drop:** unplug the USB camera (or disable it in Device Manager) mid-test: `camera_dropped` logged, test continues, plug back: segment 1 starts. `ensure_assembled` produces two playable files; `ffprobe` durations are within ±2 s of expected.
 - **Seek:** open an assembled file in a browser `<video>` and scrub to the middle; it must seek instantly.
 - **pytest:** manifest with gaps and duplicates; resume token expires after 48 h (use `FakeClock`); `mark_incomplete_uploads` inserts once.
@@ -141,7 +144,7 @@ git commit -m "test(video): chunk endpoint, queue ordering and uploader retries"
 ### Commits
 ```
 git commit -m "feat(video): chunk manifest with missing-chunk detection"
-git commit -m "feat(upload): completion screen with quit-URL / resume flow per SEB spike decision"
+git commit -m "feat(upload): completion screen with resume flow per the D2 decision"
 git commit -m "feat(upload): 48-hour resume token and incomplete-upload marker job"
 git commit -m "feat(recorder): survive camera drops with new recorder segments and retry"
 git commit -m "feat(video): assemble and remux segments so recordings are seekable"
@@ -176,11 +179,11 @@ git commit -m "test(video): fault injection, offline resume and chunk integrity 
 - [ ] **5. Full Docker stack (60 min):**
   - `backend/Dockerfile` (Python 3.13 slim + `ffmpeg`), `frontend/Dockerfile` (build with Node, serve with nginx), `frontend/nginx.conf` (serve the SPA, proxy `/api` to `api:8000`, pass `Host` and `X-Forwarded-*`, allow large request bodies for chunks, `proxy_request_buffering off` is optional).
   - Compose services: `db`, `api`, `web` (port 8080), `worker` (runs `python -m scripts.jobs loop`, which later runs the purge job on D14; for now it just stays up).
-  - Set `PUBLIC_BASE_URL=http://localhost:8080` for this mode and re-check the SEB hash works through nginx (this is the proxy risk, master plan R7).
-  - **Test:** `docker compose up --build`; open `http://localhost:8080`; run a short test through the proxy in SEB with `SEB_MODE=enforce`.
+  - Set `PUBLIC_BASE_URL=http://localhost:8080` for this mode and check that invitation links, the API and the camera all work through nginx.
+  - **Test:** `docker compose up --build`; open `http://localhost:8080`; run a short test through the proxy in Chrome.
 
 ### How to test the day
-`pytest -q` green. Importer report matches a hand count on a 5-row sample file. A cohort of 10 shows exactly the expected flags; a cohort of 7 shows none. The proxy run in SEB passes the hash check.
+`pytest -q` green. Importer report matches a hand count on a 5-row sample file. A cohort of 10 shows exactly the expected flags; a cohort of 7 shows none. A short test through the proxy works from the invitation link to the finish page.
 
 ### If behind
 Drop step 5 to the weekend buffer or D10 morning, but do it before D11; the pilot environment must be tested through nginx.
@@ -223,7 +226,7 @@ git commit -m "chore(docker): API, web (nginx) and worker images with single-ori
   - `services/blueprint/validator.py::validate_paper(paper, blueprint)`: counts per section and difficulty match, no duplicate question, all IDs exist. Also `bank_can_satisfy(blueprint, bank)` so an impossible blueprint fails early with a clear message.
   - **Test:** generate 500 papers, validate each: **500 of 500 must pass**; two papers for different candidates are not identical; an impossible blueprint raises.
   - If you skip it, write "S1 not built" in `docs/spikes/threshold-tuning.md`; the proposal says the related criterion then doesn't apply.
-- [ ] **7. Full real run in SEB (30 min):** take one complete sitting yourself in SEB through `http://localhost:8080`: pre-check → test → upload → finish; then `close_sitting`, `compute_flags`, `rank`. Confirm: recording present, flags computed, packet readable.
+- [ ] **7. Full real run in Chrome (30 min):** take one complete sitting yourself in Chrome through `http://localhost:8080`: pre-check → test → upload → finish; then `close_sitting`, `compute_flags`, `rank`. Confirm: recording present, flags computed, packet readable.
 - [ ] **8. Merge and tag (15 min).**
 
 ### How to test the day

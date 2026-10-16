@@ -25,15 +25,14 @@
 The pages work one at a time but do not connect. `/` is the candidate code page and nothing
 leads from it to staff; staff have to know `/review/login`. Reviewers and admins share one form,
 the header title is not a link, sign-out always lands on the reviewer login, and the dead ends
-(`/not-seb`, errors) give the candidate no next step. The staff login is also still a mock: the
+(errors) give the candidate no next step. The staff login is also still a mock: the
 backend has no staff accounts, no login endpoint and no `require_*` dependency.
 
 ## Decisions (settled)
 
-1. **Entry page.** `/` is a chooser for everyone. The page does no SEB detection (no user-agent
-   or version check); the server's config-key check stays the only gate. The SEB config's start
-   URL becomes `<site>/candidate`, so candidates in SEB land straight on code entry. The config
-   is still being built, so no key has to be re-issued.
+1. **Entry page.** `/` is a chooser for everyone. A candidate's personal link opens
+   `<site>/candidate?t=<code>` and lands straight on code entry; a candidate who reaches `/`
+   anyway just presses Candidate.
 2. **Separate cards.** Candidate, Reviewer and Admin each have their own card and sign-in page.
 3. **Real login now.** Staff accounts, login endpoint, token checks and the admin dependency are
    built in this task, not left for D13.
@@ -50,7 +49,7 @@ backend has no staff accounts, no login endpoint and no `require_*` dependency.
 | Route | Who | What |
 |---|---|---|
 | `/` | all | Chooser with three cards. `/?t=...` forwards to `/candidate?t=...` so old links work |
-| `/candidate` | candidate | Code entry (what `/` is today); `?t=` still auto-starts. The SEB start URL |
+| `/candidate` | candidate | Code entry (what `/` is today); `?t=` still auto-starts. The address invitation links open |
 | `/login/reviewer` | reviewer, admin | Reviewer sign-in; lands on `/review` |
 | `/login/admin` | admin | Admin sign-in; lands on `/admin`; a reviewer account is refused with a clear message |
 | `/review/login` | | Redirects to `/login/reviewer`, keeping `?next=` |
@@ -59,25 +58,20 @@ backend has no staff accounts, no login endpoint and no `require_*` dependency.
 An admin account may sign in on the Reviewer card (it can see the review pages anyway); a
 reviewer account on the Admin card is told to use the Reviewer sign-in.
 
-**No SEB detection in the page.** An earlier idea (skip the chooser when the user agent says SEB)
-is dropped: the SEB version is not factored in, and the config key already decides who may start
-a test. A candidate who reaches `/` anyway just presses Candidate. `seb/README.md` ("start URL
-set to the site root") changes to `/candidate` with the frontend step below.
-
 ## Frontend work
 
-- `frontend/src/entry/Entry.tsx`: chooser with three cards, plus the `?t=` forward. Small and in
+- `frontend/src/entry/Entry.vue`: chooser with three cards, plus the `?t=` forward. Small and in
   the main chunk, so keep it dependency-free.
-- Split `reviewer/Login.tsx` into a shared `staff/SignIn.tsx` that takes the area (`reviewer` or
+- Split `reviewer/Login.vue` into a shared `staff/SignIn.vue` that takes the area (`reviewer` or
   `admin`); `safeNext` stays, and now allows `/review` and `/admin` only.
 - `StaffLayout`: brand is a `Link` to the role's home; `Sign out` goes to `/`; admin sees the
   area switch it has today.
-- `staff/Breadcrumbs.tsx`: Review > Candidate C-0042, Admin > Invites, and so on, driven from the
+- `staff/Breadcrumbs.vue`: Review > Candidate C-0042, Admin > Invites, and so on, driven from the
   route; the candidate detail page keeps its "Back to the queue".
 - Admin Sittings: a setup strip (1 Questions, 2 Sitting, 3 Invites, 4 Close) with links, built
   from data the page already has.
-- Candidate dead ends: `/not-seb` says how to open the exam file and how to get help; expired
-  or unknown code, and "not open right now", say what to do next.
+- Candidate dead ends: an expired or unknown code, and "not open right now", say what to do
+  next and who to contact.
 - Visual pass with the Emil Kowalski guidance: transitions on named properties only, a strong
   ease-out curve, a pressed state on buttons, `prefers-reduced-motion` respected, visible focus,
   no animation on repeated actions (queue navigation, form submit).
@@ -117,8 +111,7 @@ set to the site root") changes to `/candidate` with the frontend step below.
 One branch, `feat/staff-login-and-nav`, one commit per step, each with green tests:
 
 1. Backend: migration, models, security helpers, deps, login and me, create_reviewer, tests.
-2. Frontend: routes, Entry, shared SignIn, layout, breadcrumbs, mock switch-over, tests; update
-   the start URL in `seb/README.md`.
+2. Frontend: routes, Entry, shared SignIn, layout, breadcrumbs, mock switch-over, tests.
 3. Candidate dead ends and the admin setup strip.
 4. Visual pass; bundle-size comparison for the candidate chunk.
 
@@ -127,10 +120,10 @@ One branch, `feat/staff-login-and-nav`, one commit per step, each with green tes
 - `pytest` (login ok, wrong password, unknown email, deactivated account, rate limit,
   expired token with the fake clock, tampered token, reviewer on an admin route is 403, audit
   row written, `create_reviewer` rejects a short password) and `ruff check`.
-- `npm test` and `npm run lint` (chooser, SEB skip, `?t=` passthrough, role mismatch message,
+- `npm test` and `npm run lint` (chooser, `?t=` passthrough, role mismatch message,
   old `/review/login` redirect, sign-out destination, breadcrumbs).
 - By hand with the real backend and the mock flag on: `/` shows three cards; `/?t=<code>` lands
-  on `/candidate` and starts; SEB opened with start URL `/candidate` shows code entry; reviewer and
+  on `/candidate` and starts; `/candidate` shows code entry; reviewer and
   admin sign in on their own cards; a signed-out visit to `/admin/invites` returns there after
   sign-in.
 - Candidate bundle size before and after; any increase is reported with the reason.

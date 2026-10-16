@@ -8,14 +8,9 @@ The Full Solution
 
 Securing the session
 
-•  Safe Exam Browser locks the test screen. The server accepts answers only from a veriﬁed Safe Exam Browser session and
+•  The test runs in a normal browser, full screen. Before it starts, the candidate is asked for the permissions the exam needs (camera, microphone and full screen), is told to turn off notifications, and confirms they have. A web page cannot lock a computer, so nothing is blocked: leaving full screen, losing focus, and copy, cut or paste attempts are logged and shown to the reviewer, and a person decides what they mean. Questions are served one at a time, in order, with no going back.
 
-rejects the rest. Copying, pasting and screenshots are blocked, and every blocked attempt is logged.
-
-•  Candidate device requirement: the test must be taken on a Windows or Mac computer or an iPad with a working webcam
-
-and microphone, which must stay on for the whole test. Safe Exam Browser does not run on Android phones or Chromebooks, so candidates using them cannot sit
-the test. This is shown to candidates before they register.
+•  Candidate device requirement: the test must be taken on a Windows or Mac laptop or desktop with a current Chrome or Edge browser and a working webcam and microphone, which must stay on for the whole test. Phones, tablets and Chromebooks cannot sit the test, and a private (incognito) window is not supported. This is shown to candidates before they register.
 
 •  Webcam and microphone are recorded for every candidate. The test does not start until the camera and microphone work,
 
@@ -88,7 +83,7 @@ aside, so every ﬂagged candidate still reaches a reviewer.
 
 •  The AI sits behind one interface, so it can switch from local Ollama models to the Claude API if Cytonn pays for it later. The
 
-system is built with FastAPI, PostgreSQL, React and Docker.
+system is built with FastAPI, PostgreSQL, Vue and Docker.
 
 Review
 
@@ -106,7 +101,7 @@ candidates, and watermarking of question screens. (Out of scope for now)
 
 into Cytonn's recruitment system. (Out of scope for now)
 
-•  Verifying every request, including heartbeats and video chunks; testing on a Mac and an iPad (only Windows is tested in this
+•  Verifying every request, including heartbeats and video chunks; testing on a Mac, an iPad or any browser other than Chrome and Edge (only Windows with Chrome and Edge is tested in this
 
 build); and a check for questions whose success rate jumps, which would suggest a leak. (Out of scope for now)
 
@@ -115,12 +110,12 @@ build); and a check for questions whose success rate jumps, which would suggest 
    above are built and unit-tested, but no scripted cheater run or pilot role is built around a virtual camera or a muted
    microphone. (Out of scope for now)
 
-Every ﬂag is evidence for a human reviewer, never an automatic rejection. Only two outcomes are automatic: the test does not
-start until the camera and microphone work, and requests not sent from a veriﬁed Safe Exam Browser session are rejected. The
+Every ﬂag is evidence for a human reviewer, never an automatic rejection. Only one outcome is automatic: the test does not
+start until the camera and microphone work. The
 cash cost is close to zero: the tools are free, the AI runs locally, and video storage is under Ksh 5 per candidate before deletion.
-Known limits remain: a candidate photographing the screen with a phone, a second device or person kept out of frame, help
+Known limits remain: a candidate photographing the screen with a phone, a second monitor, another application or a screenshot (a web page cannot stop any of these), a second device or person kept out of frame, help
 through a hidden earpiece, a microphone muted in a way the checks do not catch, steady low-level cheating that avoids timing outliers, and questions memorised and shared after the
-test. These are reduced, not eliminated.
+test. Notifications and pop-ups that take focus can make an honest candidate look as if they left the page, which is why candidates are told to turn them off and the reviewer sees focus loss as evidence, not as a verdict. These are reduced, not eliminated.
 
 How We Will Know It Works
 Measured in a pilot sitting at the end of week 3 with 12 to 16 volunteers, at least 8 honest and 6 following scripted cheating. With
@@ -133,7 +128,7 @@ How it is tested
 
 Rule-based checks catch scripted actions
 
-Scripted tests, one run inside real Safe Exam Browser
+Scripted tests, one run in a real browser at full screen
 (virtual-camera and muted-microphone scenarios are out of scope)
 
 Honest volunteers wrongly ﬂagged
@@ -198,7 +193,7 @@ candidate (proposed)
 
 What I Will Need From Cytonn
 
-•  Douglas to set up Safe Exam Browser on Cytonn's side once it works locally.
+•  A server at Cytonn for the system to run on, with a domain name and HTTPS (the camera and microphone only work over HTTPS), once it works locally.
 •  A per-question summary from past sittings, with no candidate-level data: question ID, section, correct option, difficulty tag,
 
 number of candidates, percentage correct, and median and 25th and 75th percentile times. If that is not possible, the
@@ -213,7 +208,7 @@ retention period. These do not block the volunteer pilot.
 
 What I Will Do In The Next 3 Weeks
 
-•  • Week 1 (8 to 14 October): scaffold and synthetic seed data; test recording and local storage inside Safe Exam Browser (day
+•  • Week 1 (8 to 14 October): scaffold and synthetic seed data; test recording and local storage in Chrome and Edge (day
 
 2); test ﬂow with the server timer; action logger and heartbeat; rule-based ﬂags with scripted tests.
 
