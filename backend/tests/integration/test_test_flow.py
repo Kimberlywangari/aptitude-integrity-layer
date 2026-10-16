@@ -3,14 +3,11 @@
 from collections import Counter
 
 import pytest
-from sqlalchemy import select
 
-from app.core.seb import REQUEST_HASH_HEADER, request_hash
 from app.core.security import format_invite_code, hash_token
 from app.models import Candidate as CandidateRow
 from app.models import Question, SessionQuestion, TestSession
 from app.services import test_flow
-from tests.conftest import TEST_PUBLIC_URL
 
 DURATION = 1800
 TOTAL = 12
@@ -29,11 +26,10 @@ class Candidate:
         self.session_id = None
         self.headers = {}
 
-    def start(self, extra_headers=None):
+    def start(self):
         response = self.client.post(
             "/api/session/start",
             json={"token": self.invite_token},
-            headers=extra_headers or {},
         )
         if response.status_code == 200:
             body = response.json()
@@ -52,18 +48,18 @@ class Candidate:
     def question(self):
         return self.client.get(self.url("question"), headers=self.headers)
 
-    def answer(self, position, option_id, extra_headers=None):
+    def answer(self, position, option_id):
         return self.client.post(
             self.url("answer"),
             json={"position": position, "option_id": option_id},
-            headers={**self.headers, **(extra_headers or {})},
+            headers=self.headers,
         )
 
-    def skip(self, position, extra_headers=None):
+    def skip(self, position):
         return self.client.post(
             self.url("skip"),
             json={"position": position},
-            headers={**self.headers, **(extra_headers or {})},
+            headers=self.headers,
         )
 
     def finish(self):
@@ -101,10 +97,6 @@ def running(candidate):
     assert candidate.start().status_code == 200
     assert candidate.begin().status_code == 200
     return candidate
-
-
-def seb_headers(path, key):
-    return {REQUEST_HASH_HEADER: request_hash(f"{TEST_PUBLIC_URL}{path}", key)}
 
 
 # ------------------------------------------------------------------------------ start
@@ -505,81 +497,3 @@ def test_missing_or_bad_authorization_is_refused(candidate, header):
 def test_unknown_session_looks_the_same_as_a_wrong_token(client, seeded):
     response = client.get("/api/session/nope/question", headers={"Authorization": "Bearer x"})
     assert response.status_code == 401
-
-
-# ------------------------------------------------------------------------------ SEB gate
-
-
-KEY = "test-browser-exam-key"
-
-
-def test_enforce_refuses_a_plain_browser_on_start(client, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    response = client.post("/api/session/start", json={"token": seeded.invites[0].token})
-    assert response.status_code == 403
-    assert response.json() == {"code": "seb_required"}
-
-
-def test_enforce_accepts_a_correct_seb_hash_and_records_it(client, db, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    response = person.start(extra_headers=seb_headers("/api/session/start", KEY))
-    assert response.status_code == 200
-    assert person.session().seb_verified is True
-
-
-def test_enforce_refuses_a_hash_made_for_another_url(client, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    headers = seb_headers("/api/session/other", KEY)
-    response = client.post(
-        "/api/session/start", json={"token": seeded.invites[0].token}, headers=headers
-    )
-    assert response.status_code == 403
-
-
-def test_enforce_guards_answer_and_skip_but_not_the_read_routes(client, db, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    person.start(extra_headers=seb_headers("/api/session/start", KEY))
-    person.begin()
-
-    assert person.question().status_code == 200  # plain GET is not verified (proposal)
-    assert person.skip(1).status_code == 403
-    assert person.answer(1, person.correct_option_id(1)).status_code == 403
-    assert person.row(1).answered_at is None
-
-    path = f"/api/session/{person.session_id}/skip"
-    assert person.skip(1, extra_headers=seb_headers(path, KEY)).status_code == 200
-
-
-def test_log_mode_lets_everything_through_but_records_not_verified(client, db, seeded, settings):
-    settings.seb_mode = "log"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    assert person.start().status_code == 200
-    assert person.session().seb_verified is False
-
-
-def test_off_mode_never_blocks(client, db, seeded, settings):
-    settings.seb_mode = "off"
-    person = Candidate(client, db, seeded.invites[0].token)
-    assert person.start().status_code == 200
-    person.begin()
-    assert person.skip(1).status_code == 200
-
-
-def test_one_unverified_answer_clears_seb_verified_for_good(client, db, seeded, settings):
-    settings.seb_mode = "log"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    person.start(extra_headers=seb_headers("/api/session/start", KEY))
-    person.begin()
-    assert person.session().seb_verified is True
-
-    person.skip(1)  # no SEB header on this one
-    assert person.session().seb_verified is False
-    assert db.scalar(select(TestSession.seb_verified)) is False

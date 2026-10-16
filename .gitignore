@@ -17,7 +17,6 @@ playwright-report/
 # Local config and data (never commit)
 .env
 data/
-*.seb
 docs/spikes/laptop-specs.md
 .claude/
 .agents/

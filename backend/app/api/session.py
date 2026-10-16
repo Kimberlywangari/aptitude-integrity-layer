@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.api.deps import client_key, get_clock, get_start_limiter
 from app.clock import Clock
 from app.config import Settings, get_settings
-from app.core.seb import require_seb
 from app.core.security import tokens_match
 from app.db import get_db
 from app.errors import ApiError
@@ -58,7 +57,6 @@ def start(
     request: Request,
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-    seb_verified: bool = Depends(require_seb),
     limiter: AttemptLimiter = Depends(get_start_limiter),
     settings: Settings = Depends(get_settings),
 ) -> StartResponse:
@@ -67,7 +65,7 @@ def start(
     if wait > 0:
         raise ApiError(429, "too_many_attempts", retry_after_s=wait)
     try:
-        result = test_flow.start_session(db, clock, body.token, seb_verified)
+        result = test_flow.start_session(db, clock, body.token)
     except ApiError as exc:
         if exc.code == "invalid_invitation":
             limiter.record_failure(key, clock.now())
@@ -114,11 +112,8 @@ def answer(
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-    seb_verified: bool = Depends(require_seb),
 ) -> ResolveResponse:
-    done, remaining = test_flow.answer(
-        db, clock, session, body.position, body.option_id, seb_verified
-    )
+    done, remaining = test_flow.answer(db, clock, session, body.position, body.option_id)
     return ResolveResponse(done=done, remaining_s=remaining)
 
 
@@ -128,9 +123,8 @@ def skip(
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-    seb_verified: bool = Depends(require_seb),
 ) -> ResolveResponse:
-    done, remaining = test_flow.skip(db, clock, session, body.position, seb_verified)
+    done, remaining = test_flow.skip(db, clock, session, body.position)
     return ResolveResponse(done=done, remaining_s=remaining)
 
 

@@ -80,10 +80,8 @@ def clock() -> FakeClock:
 
 @pytest.fixture
 def settings() -> Settings:
-    """Test settings: SEB gate off, public URL fixed. Tests replace fields as they need."""
+    """Test settings: public URL fixed. Tests replace fields as they need."""
     return Settings(
-        seb_mode="off",
-        seb_allowed_keys="",
         public_base_url=TEST_PUBLIC_URL,
         session_secret="test-secret",
     )

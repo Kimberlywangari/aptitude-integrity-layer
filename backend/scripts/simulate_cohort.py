@@ -267,7 +267,6 @@ def _write_session(
             started_at=started_at,
             ends_at=started_at + timedelta(seconds=DURATION_S),
             finished_at=finished_at,
-            seb_verified=True,
             integrity_accepted_at=started_at,
             precheck_passed_at=started_at - timedelta(seconds=40),
             recording_started_at=started_at,

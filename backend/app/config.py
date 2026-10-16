@@ -19,12 +19,9 @@ class Settings(BaseSettings):
         "postgresql+psycopg://integrity:integrity@localhost:5433/integrity_test"
     )
 
-    # The URL the browser sees. SEB's request hash covers the exact URL (D3).
+    # The address candidates open. Used to build the invitation links in the CSV the seed writes.
     public_base_url: str = "http://localhost:5173"
     session_secret: str = "change-me-dev-only"
-
-    seb_mode: str = "off"  # off | log | enforce
-    seb_allowed_keys: str = ""  # comma-separated Config Key / Browser Exam Key values
 
     # Wrong invitation codes allowed per client in the window before /session/start answers 429.
     start_max_failures: int = 20
@@ -50,10 +47,6 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:latest"
     claude_model: str = "claude-sonnet-5-5"
     anthropic_api_key: str = ""
-
-    @property
-    def seb_keys(self) -> list[str]:
-        return [k.strip() for k in self.seb_allowed_keys.split(",") if k.strip()]
 
 
 @lru_cache

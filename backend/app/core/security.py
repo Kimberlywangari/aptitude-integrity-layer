@@ -3,9 +3,9 @@ import hmac
 import re
 import secrets
 
-# Invitation codes are typed by hand inside SEB (clipboard is off), so they are short and forgiving:
-# 8 characters from Crockford's base32 alphabet (no I, L, O or U), shown as XXXX-XXXX. The browser
-# applies the same normalisation (frontend/src/lib/inviteCode.ts); keep the two in step.
+# Invitation codes are often typed by hand from an email or a message, so they are short and
+# forgiving: 8 characters from Crockford's base32 alphabet (no I, L, O or U), shown as XXXX-XXXX.
+# The browser applies the same normalisation (frontend/src/lib/inviteCode.ts); keep the two in step.
 INVITE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 INVITE_LENGTH = 8
 _SEPARATORS = re.compile(r"[\s_-]")

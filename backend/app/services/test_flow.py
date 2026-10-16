@@ -94,7 +94,7 @@ def _find_open_sitting(db: Session, now: datetime) -> Sitting:
     raise ApiError(403, "no_open_sitting")
 
 
-def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bool) -> StartResult:
+def start_session(db: Session, clock: Clock, invite_token: str) -> StartResult:
     """Exchange an invitation token for a session and a fresh bearer token.
 
     Calling it again with the same invitation returns the same session (a reload or a restart
@@ -133,7 +133,6 @@ def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bo
                 sitting_id=sitting.id,
                 status="created",
                 created_at=now,
-                seb_verified=seb_verified,
             )
             db.add(session)
             db.flush()
@@ -141,8 +140,6 @@ def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bo
 
     access_token = new_token()
     session.access_token_hash = hash_token(access_token)
-    if session.status != "finished":
-        session.seb_verified = session.seb_verified and seb_verified
     db.commit()
     return StartResult(session, access_token)
 
@@ -239,13 +236,10 @@ def _open_for(
     return sq, now
 
 
-def _mark_resolved(
-    session: TestSession, sq: SessionQuestion, now: datetime, seb_verified: bool
-) -> None:
+def _mark_resolved(sq: SessionQuestion, now: datetime) -> None:
     if sq.opened_at is None:
         sq.opened_at = now
     sq.answered_at = now
-    session.seb_verified = session.seb_verified and seb_verified
 
 
 def _after_resolve(db: Session, session: TestSession, now: datetime) -> tuple[bool, float]:
@@ -263,7 +257,6 @@ def answer(
     session: TestSession,
     position: int,
     option_id: int,
-    seb_verified: bool,
 ) -> tuple[bool, float]:
     """Record an answer for the current question. Returns (test_finished, remaining_s)."""
     sq, now = _open_for(db, clock, session, position)
@@ -271,17 +264,15 @@ def answer(
         raise ApiError(422, "invalid_option")
     option = db.get(Option, option_id)
     question = db.get(Question, sq.question_id)
-    _mark_resolved(session, sq, now, seb_verified)
+    _mark_resolved(sq, now)
     sq.selected_option = option_id
     sq.correct = option.label == question.correct_option
     return _after_resolve(db, session, now)
 
 
-def skip(
-    db: Session, clock: Clock, session: TestSession, position: int, seb_verified: bool
-) -> tuple[bool, float]:
+def skip(db: Session, clock: Clock, session: TestSession, position: int) -> tuple[bool, float]:
     sq, now = _open_for(db, clock, session, position)
-    _mark_resolved(session, sq, now, seb_verified)
+    _mark_resolved(sq, now)
     sq.skipped = True
     return _after_resolve(db, session, now)
 

@@ -40,7 +40,6 @@ class TestSession(Base):
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    seb_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     integrity_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     precheck_passed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     precheck_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
