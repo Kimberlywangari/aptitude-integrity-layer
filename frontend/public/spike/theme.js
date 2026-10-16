@@ -1,4 +1,4 @@
-// Theme and toggle for the temporary spike pages (plain script, no build). Same attribute and
+// Theme and toggle for the temporary spike page (plain script, no build). Same attribute and
 // storage key as the app (src/lib/theme.ts). Deleted with the rest of /spike/ before the pilot.
 (function () {
   var KEY = 'theme';
@@ -24,7 +24,8 @@
   window.addEventListener('DOMContentLoaded', function () {
     var button = document.createElement('button');
     button.type = 'button';
-    button.className = 'theme-toggle';
+    button.className = 'btn secondary';
+    button.style.cssText = 'position:fixed;right:1rem;bottom:1rem;z-index:30;border-radius:999px;min-height:2.5rem;padding:0.4rem 0.85rem;';
 
     function label() {
       button.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';

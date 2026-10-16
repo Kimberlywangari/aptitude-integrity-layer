@@ -3,8 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page use the whole screen; the CSS pads content away from the
+         notch with env(safe-area-inset-*). Zoom stays on: inputs are 16px so a phone never needs
+         it turned off. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f6f9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1014" />
     <title>Aptitude Test</title>
     <script>
       // Choose the theme before the first paint so the page never flashes the wrong one. The
@@ -23,7 +31,7 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

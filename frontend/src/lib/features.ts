@@ -13,3 +13,12 @@
 export function micCheckEnabled(): boolean {
   return import.meta.env.VITE_MIC_CHECK !== 'off'
 }
+
+/**
+ * The full-screen step of the pre-check and the "return to full screen" cover during the test.
+ * Set VITE_FULLSCREEN=off only for automated browser runs, where full screen is not available.
+ * Like every switch here it defaults to ON, which is how the pilot runs.
+ */
+export function fullscreenRequired(): boolean {
+  return import.meta.env.VITE_FULLSCREEN !== 'off'
+}

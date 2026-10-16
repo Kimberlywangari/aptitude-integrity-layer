@@ -33,13 +33,6 @@ export class ApiError extends Error {
   }
 }
 
-let onSebRequired: (() => void) | null = null
-
-/** The app registers where to go when the server says this request did not come from SEB. */
-export function setSebRequiredHandler(handler: (() => void) | null): void {
-  onSebRequired = handler
-}
-
 interface RequestOptions {
   method?: 'GET' | 'POST'
   body?: unknown
@@ -66,7 +59,6 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok) {
     const code = typeof data.code === 'string' ? data.code : 'unknown'
-    if (response.status === 403 && code === 'seb_required') onSebRequired?.()
     throw new ApiError(response.status, code, data)
   }
   return data as T
@@ -114,6 +106,12 @@ export interface FinishResponse {
 export interface PrecheckRequest {
   camera_ok: boolean
   mic_ok: boolean
+  /** The candidate ticked "I have turned off notifications". A page cannot read the system's
+   *  notification settings, so this is the candidate's own confirmation, kept for the reviewer. */
+  notifications_off_confirmed: boolean
+  /** Whether the browser was in full screen when the candidate left the pre-check. */
+  fullscreen_ok: boolean
+  browser: { name: string; version: string }
   /** False when the microphone step was left out (testing). `mic_ok` is then false and means
    *  "not checked", never "failed", so a reviewer can tell the two apart. */
   mic_checked?: boolean

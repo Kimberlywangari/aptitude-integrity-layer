@@ -1,0 +1,558 @@
+/* Base styles for every screen. This file is in the candidate's download, so it stays small: plain
+   CSS, no web fonts, no icon library, and motion only where it earns its place.
+
+   Motion rules (from the animation skills this app was built with):
+   - Screens a candidate sees once or twice (entry, pre-check, finish) may arrive with a short rise.
+   - The test screen is used under a clock: colour changes and a 120 ms fade, nothing more.
+   - Staff screens are used all day: colour changes only.
+   - Only transform, opacity and colour are animated. Press feedback is instant (a small squeeze).
+   - Hover is for a mouse and is gated; a touch screen would keep it stuck after a tap. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--text);
+  background: var(--page-glow) no-repeat top center, var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Layout */
+
+.page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: max(1.75rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    calc(5rem + env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+}
+
+.page.narrow {
+  max-width: 27rem;
+}
+
+.page.wide {
+  max-width: 76rem;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.6rem, 4.5vw, 2.15rem);
+  line-height: 1.15;
+  letter-spacing: -0.022em; /* large type wants tighter tracking */
+  text-wrap: balance;
+}
+
+h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+p {
+  margin: 0 0 0.9rem;
+}
+
+.lead {
+  font-size: 1.05rem;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* ---- Surfaces */
+
+.card {
+  padding: 1.25rem 1.4rem;
+  margin: 0 0 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.panel {
+  padding: 1rem 1.1rem;
+  margin: 0 0 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+/* ---- Buttons (BaseButton.vue) */
+
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.3rem;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform 140ms var(--ease-out),
+    background-color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    opacity 140ms var(--ease-out);
+}
+
+.btn.secondary {
+  color: var(--accent);
+  background: var(--surface);
+  border-color: var(--field-line);
+}
+
+.btn.ghost {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn.danger {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn.lg {
+  min-height: 3.1rem;
+  padding: 0.8rem 1.6rem;
+  font-size: 1.05rem;
+}
+
+.btn.block {
+  display: flex;
+  width: 100%;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn[aria-busy='true'] {
+  cursor: progress;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    background: var(--accent-strong);
+    border-color: var(--accent-strong);
+  }
+
+  .btn.secondary:hover:not(:disabled) {
+    color: var(--accent-strong);
+    background: var(--accent-tint);
+    border-color: var(--accent);
+  }
+
+  .btn.ghost:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--chip);
+  }
+
+  .btn.danger:hover:not(:disabled) {
+    background: var(--danger);
+    border-color: var(--danger);
+    opacity: 0.9;
+  }
+}
+
+.spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+/* ---- Form controls */
+
+label.field {
+  display: block;
+  margin: 0 0 0.3rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='file']),
+textarea,
+select {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  font-size: max(16px, 1rem); /* below 16px a phone zooms the page when the field is focused */
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+
+input[type='file'] {
+  display: block;
+  width: 100%;
+  margin: 0 0 1rem;
+  font: inherit;
+  color: var(--text);
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='file']):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+textarea {
+  resize: vertical;
+}
+
+fieldset {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0 0 1rem;
+  border: 0;
+}
+
+legend {
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+/* ---- Choice cards: radio options and checkboxes. The real input stays focusable; the mark is
+   drawn by CSS from its checked state. */
+
+.option,
+.check {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.8rem 0.95rem;
+  margin: 0 0 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+
+.option input,
+.check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.option .mark,
+.check .mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-top: 0.1rem;
+  background: var(--surface);
+  border: 2px solid var(--field-line);
+  transition:
+    border-color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
+
+.option .mark {
+  border-radius: 50%;
+}
+
+.check .mark {
+  border-radius: 6px;
+}
+
+.option .mark::after {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  background: var(--on-accent);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+
+.check .mark::after {
+  content: '';
+  width: 0.32rem;
+  height: 0.62rem;
+  margin-top: -0.1rem;
+  border: solid var(--on-accent);
+  border-width: 0 2.5px 2.5px 0;
+  opacity: 0;
+  transform: rotate(45deg) scale(0.6);
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
+}
+
+.option:has(input:checked),
+.check:has(input:checked) {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+
+.option:has(input:checked) .mark,
+.check:has(input:checked) .mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.option:has(input:checked) .mark::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.check:has(input:checked) .mark::after {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+.option:has(input:focus-visible),
+.check:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.option:active,
+.check:active {
+  transform: scale(0.992);
+}
+
+fieldset:disabled .option,
+fieldset:disabled .check {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .option:hover,
+  .check:hover {
+    border-color: var(--accent);
+  }
+}
+
+/* ---- Banners, chips and badges */
+
+.banner {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.9rem;
+  margin: 1rem 0;
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+}
+
+.banner p {
+  margin: 0;
+}
+
+.banner.info {
+  color: var(--text);
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+
+.banner.bad {
+  color: var(--danger);
+  background: var(--danger-tint);
+  border-color: var(--danger);
+}
+
+.banner.good {
+  color: var(--ok);
+  background: var(--ok-tint);
+  border-color: var(--ok);
+}
+
+.chip,
+.badge {
+  display: inline-block;
+  padding: 0.12rem 0.6rem;
+  margin: 0 0.3rem 0.3rem 0;
+  font-size: 0.85rem;
+  background: var(--chip);
+  border-radius: 999px;
+}
+
+.badge.ai {
+  background: var(--chip-ai);
+}
+
+/* ---- Motion */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Arrives with a short rise; --d staggers siblings by 30 to 80 ms. */
+.rise {
+  animation: rise 260ms var(--ease-out) both;
+  animation-delay: var(--d, 0ms);
+}
+
+/* Bigger targets on a touch screen. */
+@media (pointer: coarse) {
+  .option,
+  .check {
+    padding-block: 0.95rem;
+  }
+}
+
+/* Fewer and gentler: no movement, but colour changes still say what happened. */
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: fade-in 160ms ease both;
+  }
+
+  .btn:active:not(:disabled),
+  .option:active,
+  .check:active {
+    transform: none;
+  }
+
+  .spinner {
+    animation-duration: 1.6s;
+  }
+}

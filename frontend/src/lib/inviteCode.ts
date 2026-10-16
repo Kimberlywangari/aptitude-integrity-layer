@@ -1,5 +1,5 @@
 // Invitation codes are 8 characters from Crockford's base32 alphabet (no I, L, O or U), shown as
-// XXXX-XXXX. Candidates type them by hand inside SEB (clipboard is off), so input is forgiving:
+// XXXX-XXXX. Candidates sometimes type them by hand from an email or a message, so input is forgiving:
 // case, spaces, dashes and underscores are ignored and the look-alikes O, I and L are read as
 // 0, 1 and 1. The server applies the same rule before it hashes the code
 // (backend/app/core/security.py, normalise_invite_code), so keep the two in step. Anything that

@@ -1,0 +1,85 @@
+/* Design tokens. Every colour, radius, shadow and curve in the app comes from here, so the light
+   and dark themes are the two blocks below and nothing else. index.html sets data-theme before the
+   first paint (the stored choice, else the system setting) and the corner button flips it.
+   Text and accent pairs are at least 4.5:1 in both themes. */
+
+:root {
+  color-scheme: light;
+
+  /* System font: no download, and it already carries the platform's optical sizing. */
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+
+  --text: #14161a;
+  --muted: #566070;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --line: #cdd2dc;
+  --line-soft: #e5e8ee;
+  --field-line: #8c95a5; /* borders of inputs, which need to be easy to see */
+
+  --accent: #2358d6;
+  --accent-strong: #1a44ab;
+  --accent-tint: #e9effd;
+  --on-accent: #ffffff; /* text on an accent or ok fill */
+
+  --ok: #0a7a3a;
+  --ok-tint: #e6f5ec;
+  --danger: #b42318;
+  --danger-tint: #fdecea;
+  --warn-bg: #fff6dc;
+  --warn-line: #d9b44a;
+  --warn-text: #5c4200;
+
+  --chip: #ebeef3;
+  --chip-ai: #dbe7fb;
+  --overlay: rgb(12 16 24 / 55%);
+
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
+  --shadow-md: 0 4px 12px rgb(16 24 40 / 8%), 0 12px 32px rgb(16 24 40 / 10%);
+  --page-glow: radial-gradient(60rem 26rem at 50% -9rem, rgb(35 88 214 / 11%), transparent 72%);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+
+  /* One strong ease-out for anything that responds to a person: it moves at once, then settles.
+     The built-in curves are too weak. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --text: #eceef2;
+  --muted: #a3a9b6;
+  --bg: #0e1014;
+  --surface: #171a20;
+  --surface-2: #1d2128;
+  --line: #3a404c;
+  --line-soft: #262b34;
+  --field-line: #7d8594;
+
+  --accent: #7aa7ff;
+  --accent-strong: #a5c4ff;
+  --accent-tint: #1a2740;
+  --on-accent: #071225;
+
+  --ok: #59d38a;
+  --ok-tint: #12281c;
+  --danger: #ff8f86;
+  --danger-tint: #33181a;
+  --warn-bg: #33290e;
+  --warn-line: #8a7326;
+  --warn-text: #f2d98a;
+
+  --chip: #2b2f38;
+  --chip-ai: #1f3350;
+  --overlay: rgb(0 0 0 / 66%);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 8px 28px rgb(0 0 0 / 50%);
+  --page-glow: radial-gradient(60rem 26rem at 50% -9rem, rgb(122 167 255 / 13%), transparent 72%);
+}
