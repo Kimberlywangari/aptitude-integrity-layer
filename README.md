@@ -61,6 +61,18 @@ cd backend;  .\.venv\Scripts\python.exe -m pytest -q     # uses the integrity_te
 cd frontend; npm test; npm run lint; npm run build   # Vitest, oxlint, type-check and build
 ```
 
+One whole candidate journey in a real browser (Chromium with a fake camera and a generated tone), against a
+running stack: invitation, permissions, the recording, a reload, a spell offline, the finish and the
+upload to the last chunk. It uses up the invitation and leaves a recording behind, so point it at a
+scratch database, and start the API with `PRECHECK_GATE=recording` (what production requires):
+
+```powershell
+cd frontend
+$env:E2E_BASE_URL = "http://localhost:8080"   # where the app is served (the default)
+$env:E2E_TOKEN    = "<an unused invitation code>"
+npm run e2e
+```
+
 ## Layout
 
 `backend/` FastAPI app, migrations, seed and jobs · `frontend/` Vue 3 app and the D2 browser
