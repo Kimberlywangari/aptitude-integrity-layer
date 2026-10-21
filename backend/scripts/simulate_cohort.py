@@ -19,6 +19,7 @@ those apart from the scripted cases is not worth using.
 """
 
 import argparse
+import hashlib
 import math
 import random
 from dataclasses import dataclass, field
@@ -45,6 +46,7 @@ from app.services.flags.config import DEFAULTS
 from app.services.flags.engine import FlagRun, compute_sitting_flags
 
 SITTING_NAME = "Simulated cohort 1 (made up)"
+SIM_PREFIX = "sim"  # candidates are `sim-001` ...; another prefix keeps a second cohort apart
 DEFAULT_START = datetime(2026, 10, 14, 9, 0, tzinfo=UTC)
 QUESTION_COUNT = 12
 DURATION_S = 1800
@@ -161,18 +163,22 @@ def _write_session(
     questions: list[Question],
     stats: dict[str, QuestionStats],
     options: dict[str, list[Option]],
+    prefix: str,
 ) -> None:
-    candidate_id = f"sim-{number:03d}"
+    candidate_id = f"{prefix}-{number:03d}"
     db.add(
         Candidate(
             id=candidate_id,
             # an unusable hash: nobody has the code, so nobody can start this session
-            invite_token_hash=hash_token(f"simulated-{rng.getrandbits(96):x}"),
+            invite_token_hash=hash_token(f"simulated-{candidate_id}-{rng.getrandbits(96):x}"),
         )
     )
 
     started_at = start_base + timedelta(seconds=rng.uniform(0, 150))
-    session_id = f"{rng.getrandbits(128):032x}"
+    # Drawn from the seed, then tied to this sitting and candidate, so a second cohort made with
+    # the same seed (the measurement job does this) can never reuse an ID.
+    raw = f"{sitting.id}:{candidate_id}:{rng.getrandbits(128):032x}"
+    session_id = hashlib.sha256(raw.encode()).hexdigest()[:32]
     items = _draw_paper(rng, questions, stats, archetype)
 
     events: list[tuple[datetime, str, dict]] = [(started_at, "page_load", {})]
@@ -310,7 +316,7 @@ def _write_session(
 # ------------------------------------------------------------------------------- the job itself
 
 
-def purge(db: Session, name: str = SITTING_NAME) -> int:
+def purge(db: Session, name: str = SITTING_NAME, prefix: str = SIM_PREFIX) -> int:
     """Delete the simulated sitting and everything attached. Returns the sessions removed."""
     sitting = db.scalar(select(Sitting).where(Sitting.name == name))
     if sitting is None:
@@ -321,7 +327,7 @@ def purge(db: Session, name: str = SITTING_NAME) -> int:
     candidate_ids = list(
         db.scalars(
             select(TestSession.candidate_id).where(
-                TestSession.sitting_id == sitting.id, TestSession.candidate_id.like("sim-%")
+                TestSession.sitting_id == sitting.id, TestSession.candidate_id.like(f"{prefix}-%")
             )
         )
     )
@@ -342,6 +348,7 @@ def simulate(
     seed: int = 1,
     name: str = SITTING_NAME,
     start: datetime = DEFAULT_START,
+    prefix: str = SIM_PREFIX,
 ) -> SimSummary:
     """Write the cohort and compute its flags. Does nothing if the sitting already exists."""
     existing = db.scalar(select(Sitting).where(Sitting.name == name))
@@ -379,9 +386,9 @@ def simulate(
             number += 1
             paper = _pick_questions(rng, by_section)
             _write_session(
-                db, rng, number, archetype, ordinal, sitting, start, paper, stats, options
+                db, rng, number, archetype, ordinal, sitting, start, paper, stats, options, prefix
             )
-            summary.by_archetype[f"sim-{number:03d}"] = archetype
+            summary.by_archetype[f"{prefix}-{number:03d}"] = archetype
     summary.candidates = number
     summary.flags = compute_sitting_flags(db, sitting.id, DEFAULTS)
     return summary

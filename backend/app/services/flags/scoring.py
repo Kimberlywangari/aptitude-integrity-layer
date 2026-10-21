@@ -32,6 +32,12 @@ def is_logging_only(kinds: list[str]) -> bool:
     return bool(kinds) and all(k == LOGGING_PROBLEM for k in kinds)
 
 
+def is_flagged(score: float, kinds: list[str], cfg: FlagConfig = DEFAULTS) -> bool:
+    """Whether a candidate enters the queue: enough evidence on the score, or a gap in the record
+    (which goes in a lane of its own, below everyone with evidence)."""
+    return score >= cfg.flagged_score or LOGGING_PROBLEM in kinds
+
+
 def score_flags(flags: list[ScoredFlag], cfg: FlagConfig = DEFAULTS) -> tuple[float, list[Line]]:
     lines: list[Line] = []
     total = 0.0
