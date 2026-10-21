@@ -38,6 +38,7 @@ const fullscreen = useFullscreen()
 let refreshing = false
 let ticker: number | undefined
 let lastOpened = 0 // the question already logged as opened, so a re-sync does not log it again
+let runtimeStarted = false
 
 function format(seconds: number): string {
   const whole = Math.max(0, Math.ceil(seconds))
@@ -86,6 +87,12 @@ async function load() {
     selected.value = null
     error.value = null
     sync(q.remaining_s)
+    // Only once the server has handed over a question, so a test that is already over never turns
+    // the camera and the recording back on.
+    if (!runtimeStarted) {
+      runtimeStarted = true
+      startTestRuntime(sessionId)
+    }
     if (q.position !== lastOpened) {
       lastOpened = q.position
       void logEvent('question_opened', { position: q.position })
@@ -119,8 +126,8 @@ function askBeforeLeaving(event: BeforeUnloadEvent) {
 }
 
 onMounted(() => {
-  // The log, heartbeat, microphone watch and recording run from here until the finish page ends them.
-  if (sessionId) startTestRuntime(sessionId)
+  // The log, heartbeat, microphone watch and recording start with the first question (see load) and
+  // run until the finish page ends them.
   void load()
   keepHere()
   window.addEventListener('popstate', keepHere)

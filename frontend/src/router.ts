@@ -10,6 +10,7 @@ import TestRunner from './candidate/TestRunner.vue'
 import UploadStatus from './candidate/UploadStatus.vue'
 import Entry from './entry/Entry.vue'
 import { CANDIDATE_PATH, homeFor, LOGIN_PATH, loginPathFor } from './lib/routes'
+import { getStage, setStage } from './lib/session'
 import { getStaff } from './lib/staffSession'
 
 // The candidate's screens are in the main bundle on purpose: a chunk that has to be fetched in the
@@ -89,9 +90,34 @@ export function staffGuard(to: RouteLocationNormalized) {
   return true
 }
 
+const BEFORE_THE_END = new Set(['/precheck', '/integrity', '/test'])
+
+/**
+ * A candidate who has finished cannot go back into the test. Reaching the finish page marks the tab
+ * as finished and sending the closing answers marks it as reported; from then on the browser's Back
+ * button (or a typed address) for any earlier test screen lands on the screen the candidate has
+ * reached instead. Without this, Back from the upload page restarted the camera on a finished test.
+ * The server independently refuses every question and answer once the test is over.
+ */
+export function candidateGuard(to: RouteLocationNormalized) {
+  if (to.path === '/done') {
+    if (getStage() === 'reported') return '/uploading'
+    setStage('finished')
+    return true
+  }
+  if (to.path === '/uploading') {
+    setStage('reported')
+    return true
+  }
+  const stage = getStage()
+  if (stage && BEFORE_THE_END.has(to.path)) return stage === 'reported' ? '/uploading' : '/done'
+  return true
+}
+
 export function createAppRouter(history = createWebHistory()) {
   const router = createRouter({ history, routes })
   router.beforeEach(staffGuard)
+  router.beforeEach(candidateGuard)
   return router
 }
 

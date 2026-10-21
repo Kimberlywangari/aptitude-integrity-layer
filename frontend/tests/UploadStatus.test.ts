@@ -145,6 +145,15 @@ describe('UploadStatus', () => {
     expect(hasButton(w, 'Finish anyway')).toBe(false)
   })
 
+  it('never shows more than 100%, even if the server holds more parts than it was told to expect', async () => {
+    vi.mocked(api).mockResolvedValue({ expected: 15, received: 20, missing: 0, bytes: 0, complete: true })
+    const w = await renderPage()
+    await wait(0)
+    expect(w.text()).toContain('Uploaded 15 of 15 parts (100%)')
+    expect(w.text()).not.toContain('133')
+    expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBe('15')
+  })
+
   it('stops polling once the upload is complete', async () => {
     await renderPage()
     await wait(3000 * 6)

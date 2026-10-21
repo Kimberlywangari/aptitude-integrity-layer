@@ -4,6 +4,7 @@
 
 const SESSION_ID = 'integrity.session_id'
 const ACCESS_TOKEN = 'integrity.access_token'
+const STAGE = 'integrity.stage'
 
 function read(key: string): string | null {
   try {
@@ -30,12 +31,29 @@ export function getAccessToken(): string | null {
   return read(ACCESS_TOKEN)
 }
 
+/** How far past the questions this tab has got: the test is over (`finished`), or the closing
+ *  question has been answered and only the upload is left (`reported`). Kept so the router can
+ *  refuse a way back to the test after Back is pressed. */
+export type Stage = 'finished' | 'reported'
+
+export function getStage(): Stage | null {
+  const stage = read(STAGE)
+  return stage === 'finished' || stage === 'reported' ? stage : null
+}
+
+export function setStage(stage: Stage): void {
+  write(STAGE, stage)
+}
+
+// A new or resumed session starts its own journey, so an earlier one's stage must not carry over.
 export function saveSession(sessionId: string, accessToken: string): void {
   write(SESSION_ID, sessionId)
   write(ACCESS_TOKEN, accessToken)
+  write(STAGE, null)
 }
 
 export function clearSession(): void {
   write(SESSION_ID, null)
   write(ACCESS_TOKEN, null)
+  write(STAGE, null)
 }
