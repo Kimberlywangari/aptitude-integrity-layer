@@ -1,13 +1,22 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import client_key, get_clock, get_login_limiter, require_reviewer
+from app.api.deps import (
+    client_key,
+    current_staff,
+    get_clock,
+    get_login_limiter,
+    get_video_store,
+    require_reviewer,
+)
 from app.clock import Clock
 from app.config import Settings, get_settings
 from app.core.staff_token import issue_staff_token
+from app.core.video_url import read_video_token
 from app.db import get_db
 from app.errors import ApiError
-from app.models import Reviewer
+from app.models import Reviewer, TestSession, VideoSegment
 from app.schemas.review import (
     AuditResponse,
     CandidateDetail,
@@ -23,6 +32,9 @@ from app.schemas.review import (
 from app.services import review as review_service
 from app.services import staff_auth
 from app.services.rate_limit import AttemptLimiter
+from app.services.video import ffmpeg
+from app.services.video.assemble import ensure_assembled
+from app.services.video.store import VideoStore
 
 router = APIRouter(prefix="/review", tags=["review"])
 
@@ -78,11 +90,75 @@ def get_queue(
 def get_candidate(
     candidate_id: str,
     sitting: int | None = None,
-    _: Reviewer = Depends(require_reviewer),
+    reviewer: Reviewer = Depends(require_reviewer),
     db: Session = Depends(get_db),
+    store: VideoStore = Depends(get_video_store),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
 ) -> CandidateDetail:
-    detail = review_service.candidate_detail(db, candidate_id, sitting)
+    video = review_service.VideoContext(store, clock, settings, reviewer.id)
+    detail = review_service.candidate_detail(
+        db, candidate_id, sitting, video=video, retention_days=settings.retention_days
+    )
     return CandidateDetail.model_validate(detail)
+
+
+@router.get("/candidates/{candidate_id}/video")
+def get_video(
+    candidate_id: str,
+    segment: int = 0,
+    t: str | None = None,
+    sitting: int | None = None,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+    store: VideoStore = Depends(get_video_store),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    """One part of a candidate's recording, with range support so the player can scrub.
+
+    A <video> element cannot send an Authorization header, so the candidate's page carries links
+    signed for the reviewer (`t`); the staff token works too, for anything that can send it.
+    """
+    claims = read_video_token(settings.session_secret, clock, t) if t else None
+    if t and claims is None:
+        raise ApiError(401, "unauthorized")
+    if claims is not None:
+        reviewer = db.get(Reviewer, claims["r"])
+        session = db.get(TestSession, claims["s"])
+        if (
+            reviewer is None
+            or not reviewer.is_active
+            or session is None
+            or session.candidate_id != candidate_id
+            or claims["g"] != segment
+        ):
+            raise ApiError(401, "unauthorized")
+    else:
+        reviewer = current_staff(authorization=authorization, db=db, clock=clock, settings=settings)
+        session = review_service._find_session(db, candidate_id, sitting)
+
+    if not review_service.can_view_video(db, session):
+        raise ApiError(403, "video_not_available")
+    if session.video_deleted_at is not None:
+        raise ApiError(410, "video_deleted")
+
+    row = db.get(VideoSegment, (session.id, segment))
+    if row is None or row.path is None or not store.exists(row.path):
+        try:
+            ensure_assembled(db, store, clock, settings, session.id)
+        except ffmpeg.FfmpegMissing as missing:
+            raise ApiError(503, "ffmpeg_missing") from missing
+        row = db.get(VideoSegment, (session.id, segment), populate_existing=True)
+        if row is None or row.path is None:
+            raise ApiError(404, "no_such_segment")
+
+    review_service.note_video_playback(db, clock, reviewer.id, session, segment)
+    return FileResponse(
+        store.local_path(row.path),
+        media_type="video/webm",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.post("/candidates/{candidate_id}/shortlist", response_model=ShortlistResponse)
