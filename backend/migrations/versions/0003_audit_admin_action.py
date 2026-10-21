@@ -8,6 +8,7 @@ Create Date: 2026-10-15 09:00:00.000000
 from typing import Sequence, Union
 
 from alembic import op
+from sqlalchemy.schema import conv
 
 # revision identifiers, used by Alembic.
 revision: str = '0003'
@@ -15,7 +16,9 @@ down_revision: Union[str, Sequence[str], None] = '0002'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-CONSTRAINT = op.f('ck_audit_log_action')
+# Not op.f(): that needs a running migration, and `alembic heads` and `history` import this file
+# without one. conv is what op.f returns (a name that is already final).
+CONSTRAINT = conv('ck_audit_log_action')
 
 
 def upgrade() -> None:
