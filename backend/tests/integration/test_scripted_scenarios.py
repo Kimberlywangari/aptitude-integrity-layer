@@ -87,7 +87,10 @@ class Script:
     def flags(self) -> dict[str, list[Flag]]:
         compute_session_flags(self.db, self.live.session_id)
         by_kind: dict[str, list[Flag]] = {}
-        for flag in self.db.scalars(select(Flag).where(Flag.session_id == self.live.session_id)):
+        # in time order: without an ORDER BY the rows come back in whatever order the table's pages
+        # happen to hold them, and the assertions below read the flags by position
+        found = select(Flag).where(Flag.session_id == self.live.session_id)
+        for flag in self.db.scalars(found.order_by(Flag.server_ts, Flag.id)):
             by_kind.setdefault(flag.kind, []).append(flag)
         return by_kind
 
