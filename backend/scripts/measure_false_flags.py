@@ -24,6 +24,7 @@ from app.services.flags.config import DEFAULTS, FlagConfig
 from app.services.flags.engine import compute_sitting_flags
 from scripts.simulate_cohort import purge, simulate
 
+MEASURE_PREFIX = "measure"
 HONEST = {"honest", "honest_fast", "honest_tech"}
 EXPECTED = {
     "tab_lookup": "LONG_HOLD_CORRECT",
@@ -52,7 +53,8 @@ def measure(db, cohorts: int, cfg: FlagConfig) -> dict:
 
     for seed in range(1, cohorts + 1):
         name = f"measure-false-flags {seed}"
-        result = simulate(db, seed=seed, name=name)
+        # its own candidate names, so it can run beside a simulated sitting that already exists
+        result = simulate(db, seed=seed, name=name, prefix=MEASURE_PREFIX)
         compute_sitting_flags(db, result.sitting_id, cfg)  # simulate() used the defaults
         by_candidate: dict[str, set[str]] = defaultdict(set)
         for candidate, kind in db.execute(
@@ -74,7 +76,7 @@ def measure(db, cohorts: int, cfg: FlagConfig) -> dict:
             elif archetype in EXPECTED:
                 recall[archetype][1] += 1
                 recall[archetype][0] += EXPECTED[archetype] in kinds
-        purge(db, name)
+        purge(db, name, prefix=MEASURE_PREFIX)
     return {
         "honest_n": honest_n,
         "honest_beyond_focus": honest_beyond,

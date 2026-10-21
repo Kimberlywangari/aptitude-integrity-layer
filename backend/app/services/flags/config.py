@@ -40,12 +40,18 @@ class FlagConfig:
     fast_hard_multiplier: float = 1.5
     fast_min_questions: int = 2
     fast_weight: float = 2.0
+    # A question's history counts only when it comes from at least this many past candidates.
+    fast_min_history_n: int = 30
 
     # PACE_OUTLIER / SPREAD_OUTLIER: robust z across a closed sitting of enough candidates.
     cohort_min_candidates: int = 8
     cohort_z: float = 3.0
     pace_weight: float = 1.5
     spread_weight: float = 1.5
+
+    # Who enters the queue: a rule score at or above this, or any LOGGING_PROBLEM (master plan
+    # A10, to be confirmed with Cytonn). A lone loss of focus (0.5) is not enough on its own.
+    flagged_score: float = 1.0
 
     # Rule score extras.
     extra_kind_points: float = 1.0

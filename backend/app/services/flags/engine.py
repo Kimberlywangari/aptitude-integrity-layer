@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.clock import Clock, SystemClock
 from app.models import (
     Event,
     Flag,
@@ -20,6 +21,7 @@ from app.models import (
     QuestionStats,
     SessionQuestion,
     Sitting,
+    SittingStat,
     TestSession,
 )
 from app.services.flags import rules
@@ -46,7 +48,13 @@ class FlagRun:
 
 def load_record(db: Session, session: TestSession) -> SessionRecord:
     rows = db.execute(
-        select(SessionQuestion, Question.difficulty, QuestionStats.p25_s)
+        select(
+            SessionQuestion,
+            Question.difficulty,
+            QuestionStats.p25_s,
+            QuestionStats.n,
+            QuestionStats.source,
+        )
         .join(Question, Question.id == SessionQuestion.question_id)
         .outerjoin(QuestionStats, QuestionStats.question_id == SessionQuestion.question_id)
         .where(SessionQuestion.session_id == session.id)
@@ -62,8 +70,10 @@ def load_record(db: Session, session: TestSession) -> SessionRecord:
             correct=sq.correct,
             skipped=sq.skipped,
             p25_s=p25,
+            stats_n=n,
+            stats_source=source,
         )
-        for sq, difficulty, p25 in rows
+        for sq, difficulty, p25, n, source in rows
     ]
     events = [
         rules.Ev(e.type, e.server_ts, e.payload or {})
@@ -142,8 +152,33 @@ def _store(db: Session, session_id: str, drafts: list[rules.FlagDraft]) -> None:
         )
 
 
+def _store_baselines(
+    db: Session, sitting_id: int, members: list[rules.CohortMember], now: datetime, cfg: FlagConfig
+) -> None:
+    """Keep the median and MAD each cohort check measured against, so a flag can be traced back to
+    the baseline it was judged on. Cleared when the group is too small to have one."""
+    db.execute(delete(SittingStat).where(SittingStat.sitting_id == sitting_id))
+    if len(members) < cfg.cohort_min_candidates:
+        return
+    for metric, values in (
+        ("pace", [m.mean_s for m in members]),
+        ("spread", [m.spread_s for m in members]),
+    ):
+        median, mad = rules.baseline(values)
+        db.add(
+            SittingStat(
+                sitting_id=sitting_id,
+                metric=metric,
+                median=median,
+                mad=mad,
+                n=len(values),
+                computed_at=now,
+            )
+        )
+
+
 def compute_sitting_flags(
-    db: Session, sitting_id: int, cfg: FlagConfig = DEFAULTS
+    db: Session, sitting_id: int, cfg: FlagConfig = DEFAULTS, clock: Clock | None = None
 ) -> FlagRun:
     """Recompute every finished session's flags in a sitting. The cohort rules (pace, spread)
     only run once the sitting is closed and has enough candidates, because a comparison with an
@@ -151,6 +186,7 @@ def compute_sitting_flags(
     sitting = db.get(Sitting, sitting_id)
     if sitting is None:
         raise ValueError(f"no sitting {sitting_id}")
+    now = (clock or SystemClock()).now()
 
     sessions = list(
         db.scalars(
@@ -167,6 +203,7 @@ def compute_sitting_flags(
         members = [m for m in (cohort_member(r) for r in records) if m is not None]
         extra = rules.cohort_flags(members, cfg)
         run.cohort_applied = len(members) >= cfg.cohort_min_candidates
+        _store_baselines(db, sitting_id, members, now, cfg)
         for session_id, more in extra.items():
             drafts[session_id] = sorted([*drafts[session_id], *more], key=lambda d: d.ts)
 

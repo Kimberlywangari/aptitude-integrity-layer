@@ -37,6 +37,8 @@ class Answer:
     correct: bool | None
     skipped: bool = False
     p25_s: float | None = None  # how quickly the fastest quarter answered it in past sittings
+    stats_n: int | None = None  # how many past candidates that figure comes from (None: unknown)
+    stats_source: str | None = None  # 'cytonn' or 'synthetic'
 
     @property
     def time_s(self) -> float | None:
@@ -291,10 +293,13 @@ def logging_problem_flags(
 
 def fast_correct_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> list[FlagDraft]:
     """Correct answers far faster than the usual fast time for that question in past sittings.
-    One flag, and only when there are at least `fast_min_questions` such answers."""
+    One flag, and only when there are at least `fast_min_questions` such answers. A question whose
+    history comes from fewer than `fast_min_history_n` candidates is not compared against."""
     hits = []
     for answer in answers:
         if answer.correct is not True or answer.time_s is None or answer.p25_s is None:
+            continue
+        if answer.stats_n is not None and answer.stats_n < cfg.fast_min_history_n:
             continue
         factor = cfg.fast_p25_factor
         if answer.difficulty == "hard":
@@ -304,6 +309,9 @@ def fast_correct_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> lis
     if len(hits) < cfg.fast_min_questions:
         return []
     first = min(hits, key=lambda a: a.position)
+    # a baseline that is partly estimated must say so, so a reviewer does not lean on it as if
+    # it were Cytonn's own history
+    source = "cytonn" if all(a.stats_source == "cytonn" for a in hits) else "synthetic"
     return [
         FlagDraft(
             FAST_CORRECT_VS_HISTORY,
@@ -314,6 +322,7 @@ def fast_correct_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> lis
                 "questions": [a.position for a in hits],
                 "times_s": [round(a.time_s or 0) for a in hits],
                 "p25_s": [round(a.p25_s or 0) for a in hits],
+                "history_source": source,
             },
         )
     ]
@@ -328,6 +337,13 @@ class CohortMember:
     mean_s: float  # mean time per answered question
     spread_s: float  # standard deviation of those times
     ts: datetime  # where a flag on this member is placed
+
+
+def baseline(values: list[float]) -> tuple[float, float]:
+    """The median and the raw median absolute deviation of a group's values. (A z score divides
+    by this MAD scaled by 1.4826, which is what `robust_z` does.)"""
+    median = statistics.median(values)
+    return median, statistics.median(abs(v - median) for v in values)
 
 
 def robust_z(values: list[float], x: float) -> float | None:
