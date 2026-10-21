@@ -1,0 +1,7 @@
+node_modules
+dist
+test-results
+playwright-report
+.git
+# Personal switches for one laptop (for example VITE_MIC_CHECK=off) must never reach an image
+.env*.local

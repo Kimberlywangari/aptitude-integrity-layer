@@ -33,6 +33,25 @@ npm run dev                                 # http://localhost:5173 (proxies /ap
 Open `http://localhost:5173/candidate?t=<token>` in Chrome or Edge with a token from
 `data/invites.csv`. The first screens ask for the camera, the microphone and full screen.
 
+### The whole thing in containers (what the pilot runs)
+
+```powershell
+docker compose up -d --build                # db, api, worker and web (nginx)
+```
+
+Open `http://localhost:8080`. nginx serves the built app and proxies `/api` to the API, so there is
+one address for the page and the server, as the camera needs once it is on HTTPS. This is a
+production build: no `VITE_*` switches from `.env.development*`. The API is also
+on `127.0.0.1:8000` for this machine only. Stop the local `uvicorn` first; they share that port.
+
+The `worker` runs the hourly housekeeping (delete video 30 days after a decision, note uploads that
+never finished). Against the made-up cohort it marks every session as an incomplete upload, because
+those sessions have no video: `docker compose stop worker` while working with simulated data.
+
+On Docker Desktop for Windows every browser appears to the API as one address (the Docker
+gateway), so the limit of 20 wrong invitation codes per five minutes is shared between them. On a
+Linux host the real addresses come through.
+
 Switches for testing (put them in `frontend/.env.development.local`, which git ignores; every one is
 on unless set to `off`, and all must be on for the pilot): `VITE_MIC_CHECK=off` leaves out the
 microphone level check, `VITE_FULLSCREEN=off` leaves out the full-screen step (for automated browser
