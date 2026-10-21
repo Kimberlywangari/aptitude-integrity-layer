@@ -3,11 +3,14 @@
 from app.models.candidate import Candidate
 from app.models.evidence import Complaint, Decision, Event, Flag, Heartbeat
 from app.models.question import Option, Question, QuestionStats
+from app.models.ranking import Packet, Ranking, SittingStat
 from app.models.session import SessionQuestion, TestSession
 from app.models.sitting import Sitting
 from app.models.staff import AuditLog, Reviewer
+from app.models.video import AudioSilence, VideoChunk, VideoSegment
 
 __all__ = [
+    "AudioSilence",
     "AuditLog",
     "Candidate",
     "Complaint",
@@ -16,10 +19,15 @@ __all__ = [
     "Flag",
     "Heartbeat",
     "Option",
+    "Packet",
     "Question",
     "QuestionStats",
+    "Ranking",
     "Reviewer",
     "SessionQuestion",
     "Sitting",
+    "SittingStat",
     "TestSession",
+    "VideoChunk",
+    "VideoSegment",
 ]
