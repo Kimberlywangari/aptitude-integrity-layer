@@ -22,7 +22,9 @@ from app.core import passwords
 from app.db import get_db
 from app.main import app
 from app.services.rate_limit import AttemptLimiter
+from app.services.staff_auth import create_reviewer
 from scripts.seed_synthetic import SeedSummary, seed
+from scripts.simulate_cohort import simulate
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_PUBLIC_URL = "http://localhost:5173"
@@ -79,11 +81,13 @@ def clock() -> FakeClock:
 
 
 @pytest.fixture
-def settings() -> Settings:
-    """Test settings: public URL fixed. Tests replace fields as they need."""
+def settings(tmp_path) -> Settings:
+    """Test settings: public URL fixed, video kept in a throwaway folder. Tests replace fields
+    as they need."""
     return Settings(
         public_base_url=TEST_PUBLIC_URL,
         session_secret="test-secret",
+        video_root=str(tmp_path / "video"),
     )
 
 
@@ -111,3 +115,25 @@ def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestCl
 @pytest.fixture
 def seeded(db: Session) -> SeedSummary:
     return seed(db, seed=42, secret="test-secret", public_base_url=TEST_PUBLIC_URL)
+
+
+@pytest.fixture
+def sim(db: Session, seeded: SeedSummary):
+    """The made-up closed sitting of sixteen finished candidates, flags already computed."""
+    result = simulate(db, seed=1)
+    db.flush()
+    return result
+
+
+STAFF_PASSWORD = "correct horse battery"
+
+
+@pytest.fixture
+def staff(client: TestClient, db: Session, clock: FakeClock) -> dict[str, str]:
+    """Authorization headers for a signed-in reviewer."""
+    create_reviewer(db, clock, email="rev@example.com", password=STAFF_PASSWORD)
+    db.flush()
+    token = client.post(
+        "/api/review/login", json={"email": "rev@example.com", "password": STAFF_PASSWORD}
+    ).json()["token"]
+    return {"Authorization": f"Bearer {token}"}

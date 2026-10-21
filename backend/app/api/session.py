@@ -11,6 +11,7 @@ from app.core.security import tokens_match
 from app.db import get_db
 from app.errors import ApiError
 from app.models import TestSession
+from app.schemas.recording import FinishRequest, ResumeRequest, ResumeResponse
 from app.schemas.session import (
     AnswerRequest,
     BeginRequest,
@@ -24,6 +25,7 @@ from app.schemas.session import (
     StartRequest,
     StartResponse,
 )
+from app.services import resume as resume_service
 from app.services import test_flow
 from app.services.rate_limit import AttemptLimiter
 
@@ -77,14 +79,44 @@ def start(
     )
 
 
+@router.post("/resume", response_model=ResumeResponse)
+def resume(
+    body: ResumeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    limiter: AttemptLimiter = Depends(get_start_limiter),
+    settings: Settings = Depends(get_settings),
+) -> ResumeResponse:
+    """Finish uploading after the test: an invitation code in, an upload-only token out, for up to
+    48 hours after finishing. Wrong codes count against the same limit as the start page."""
+    key = client_key(request, settings)
+    wait = limiter.retry_after_s(key, clock.now())
+    if wait > 0:
+        raise ApiError(429, "too_many_attempts", retry_after_s=wait)
+    try:
+        result = resume_service.issue_upload_token(db, clock, body.token, settings.resume_window_s)
+    except ApiError as exc:
+        if exc.code == "invalid_invitation":
+            limiter.record_failure(key, clock.now())
+        raise
+    return ResumeResponse(
+        session_id=result.session.id,
+        access_token=result.upload_token,
+        status="finished",
+        expires_at=result.expires_at,
+    )
+
+
 @router.post("/{session_id}/begin", response_model=BeginResponse)
 def begin(
     body: BeginRequest,
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
 ) -> BeginResponse:
-    test_flow.begin(db, clock, session, body.accepted)
+    test_flow.begin(db, clock, session, body.accepted, settings.precheck_gate)
     remaining = (session.ends_at - clock.now()).total_seconds()
     return BeginResponse(status=session.status, remaining_s=max(0.0, round(remaining, 1)))
 
@@ -130,11 +162,12 @@ def skip(
 
 @router.post("/{session_id}/finish", response_model=FinishResponse)
 def finish(
+    body: FinishRequest | None = None,
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
 ) -> FinishResponse:
-    summary = test_flow.finish(db, clock, session)
+    summary = test_flow.finish(db, clock, session, body.chunks_total if body else None)
     return FinishResponse(status=session.status, **asdict(summary))
 
 
