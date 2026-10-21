@@ -8,8 +8,10 @@ from collections.abc import Callable
 
 from scripts import (
     ai_cost,
+    assemble_videos,
     build_packets,
     compute_flags,
+    detect_silence,
     load_question_bank,
     measure_false_flags,
     rank,
@@ -23,6 +25,8 @@ JOBS: dict[str, Callable[[list[str]], None]] = {
     "load_question_bank": load_question_bank.main,
     "simulate_cohort": simulate_cohort.main,
     "compute_flags": compute_flags.main,
+    "assemble_videos": assemble_videos.main,
+    "detect_silence": detect_silence.main,
     "build_packets": build_packets.main,
     "rank": rank.main,
     "ai_cost": ai_cost.main,
