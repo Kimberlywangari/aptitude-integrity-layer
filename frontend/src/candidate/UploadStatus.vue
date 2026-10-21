@@ -109,9 +109,15 @@ function finishAnyway() {
   void flushEvents()
   finished.value = true
 }
+// Never more than was expected: a stray extra part must not read as "133%".
+const uploaded = computed(() =>
+  manifest.value && manifest.value.expected !== null
+    ? Math.min(manifest.value.received, manifest.value.expected)
+    : 0,
+)
 const percent = computed(() =>
   manifest.value && manifest.value.expected
-    ? Math.round((manifest.value.received / manifest.value.expected) * 100)
+    ? Math.round((uploaded.value / manifest.value.expected) * 100)
     : null,
 )
 </script>
@@ -140,12 +146,12 @@ const percent = computed(() =>
         <template v-if="manifest && manifest.expected !== null">
           <ProgressBar
             label="Upload progress"
-            :value="manifest.received"
+            :value="uploaded"
             :max="manifest.expected"
             :tone="complete ? 'ok' : 'accent'"
           />
           <p class="muted detail">
-            Uploaded {{ manifest.received }} of {{ manifest.expected }} parts
+            Uploaded {{ uploaded }} of {{ manifest.expected }} parts
             <template v-if="percent !== null">({{ percent }}%)</template>.
           </p>
         </template>

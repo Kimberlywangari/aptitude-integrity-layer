@@ -287,6 +287,20 @@ describe('TestRunner and the record of the test', () => {
     expect(startTestRuntime).toHaveBeenCalledWith('s1')
   })
 
+  it('does not turn the camera back on for a test the server says is over', async () => {
+    vi.mocked(api).mockRejectedValue(new ApiError(409, 'finished', {}))
+    const { w } = await renderPage()
+    expect(w.text()).toContain('done page')
+    expect(startTestRuntime).not.toHaveBeenCalled()
+  })
+
+  it('starts it once, however many times the question is fetched', async () => {
+    await renderPage()
+    remaining = 0
+    await wait(1000) // the clock at zero asks the server again
+    expect(startTestRuntime).toHaveBeenCalledTimes(1)
+  })
+
   it('does not start any of it without a session', async () => {
     clearSession()
     await renderPage()
