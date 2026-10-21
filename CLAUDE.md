@@ -40,6 +40,7 @@ cd backend;  .\.venv\Scripts\python.exe -m pytest -q                  # uses the
 cd backend;  .\.venv\Scripts\python.exe -m ruff check app scripts tests
 cd frontend; npm test                                                 # Vitest
 cd frontend; npm run lint                                             # oxlint
+cd frontend; npm run e2e    # a real browser, whole journey; needs a stack, E2E_TOKEN (see README)
 ```
 
 ## Working method
