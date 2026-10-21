@@ -151,13 +151,55 @@ export const SELF_REPORT_QUESTION = 'Did you have any technical problems during 
 export const SELF_REPORT_NOTE_LABEL = 'What happened? (optional, up to 300 characters)'
 export const SELF_REPORT_NOTE_HINT = 'Please do not write your name or contact details.'
 
+// ---- starting the recording, and a camera lost during the test
+
+export const RECORDING_STARTING = 'Starting your recording...'
+// Shown on the "start the test" page. None of them has started the clock: the test begins only
+// once the recording is safely with us.
+export const RECORDING_PROBLEMS = {
+  no_devices:
+    'We could not reach your camera and microphone. Go back to the check, allow them, and try ' +
+    'again. Your time has not started.',
+  unsupported:
+    'This browser cannot record. Please open the test in the latest Chrome or Edge on a Windows ' +
+    'or Mac computer. Your time has not started.',
+  slow:
+    'Your recording has not reached us yet. Check your connection and press the button again. ' +
+    'Your time has not started.',
+  not_confirmed:
+    'We could not confirm your recording yet. Make sure your camera is on, then press the ' +
+    'button again. Your time has not started.',
+} as const
+export const CAMERA_LOST_BANNER =
+  'Your camera or microphone stopped. We are trying to reconnect. Your test carries on and the ' +
+  'clock keeps running. Check the cable, and that no other program is using the camera.'
+
 // ---- upload and complaints (D8)
 
 export const UPLOAD_TITLE = 'Sending your recording'
 export const UPLOAD_KEEP_OPEN =
   'Please keep this tab open until the upload finishes. It can take a few minutes on a slow ' +
   'connection.'
+export const UPLOAD_RESUME_HINT =
+  'If you close this tab first, open your invitation link again within 48 hours and the rest ' +
+  'will be sent from this computer.'
+export const UPLOAD_CLOSED =
+  'The time for sending this recording has passed, so no more can be sent. You can tell us ' +
+  'what happened with the form below.'
 export const UPLOAD_DONE = 'Everything has been uploaded. You can finish now.'
+
+export const RESUME_TITLE = 'Finish sending your recording'
+export const RESUME_LEAD =
+  'Enter the invitation code you used for the test. Use the same computer and browser, so the ' +
+  'rest of your recording can be found and sent.'
+export const RESUME_ERRORS: Record<string, string> = {
+  nothing_to_resume:
+    'There is no finished test waiting for this code. If your test has not opened yet, come ' +
+    'back at the time on your invitation.',
+  resume_window_closed:
+    'The 48 hours for sending a recording have passed. Please contact the person who sent your ' +
+    'invitation and tell them what happened.',
+}
 export const UPLOAD_STUCK =
   'The upload is not moving. You can finish now. A person will see that your upload was ' +
   'incomplete, and you can tell us what happened with the form below.'

@@ -5,11 +5,18 @@ import Banner from '../components/Banner.vue'
 import BaseButton from '../components/BaseButton.vue'
 import BrandMark from '../components/BrandMark.vue'
 import Icon from '../components/Icon.vue'
-import { api, pathForError } from '../lib/api'
+import { api, ApiError, pathForError } from '../lib/api'
 import type { BeginResponse } from '../lib/api'
+import { prepareRecording } from '../lib/runtime'
 import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
-import { INTEGRITY_CHECKBOX, INTEGRITY_POINTS, INTEGRITY_TITLE } from './copy'
+import {
+  INTEGRITY_CHECKBOX,
+  INTEGRITY_POINTS,
+  INTEGRITY_TITLE,
+  RECORDING_PROBLEMS,
+  RECORDING_STARTING,
+} from './copy'
 
 const router = useRouter()
 const sessionId = getSessionId()
@@ -21,11 +28,24 @@ onMounted(() => {
   if (!sessionId) void router.replace(CANDIDATE_PATH)
 })
 
+const starting = ref(false)
+
 async function begin() {
   if (!sessionId) return
   busy.value = true
   error.value = null
   try {
+    // Recording comes first. The test begins only once a real recording is safely with the server,
+    // so a candidate is never timed while nothing is being recorded.
+    starting.value = true
+    const prepared = await prepareRecording(sessionId)
+    starting.value = false
+    if (prepared !== 'ready') {
+      error.value = RECORDING_PROBLEMS[prepared]
+      busy.value = false
+      return
+    }
+
     // The server starts the timer now, not when the page was opened.
     await api<BeginResponse>(`/api/session/${sessionId}/begin`, {
       method: 'POST',
@@ -33,9 +53,13 @@ async function begin() {
     })
     await router.replace('/test')
   } catch (e) {
+    starting.value = false
     const route = pathForError(e)
     if (route && route !== '/integrity') await router.replace(route)
-    else error.value = 'Something went wrong. Please try again.'
+    else if (e instanceof ApiError && e.code === 'precheck_required') {
+      // the server has not seen a usable recording yet (the camera check cannot fix that)
+      error.value = RECORDING_PROBLEMS.not_confirmed
+    } else error.value = 'Something went wrong. Please try again.'
     busy.value = false
   }
 }
@@ -63,7 +87,7 @@ async function begin() {
 
     <p class="muted">Your time starts as soon as you press the button below.</p>
     <BaseButton size="lg" :disabled="!agreed" :busy="busy" @click="begin">
-      {{ busy ? 'Starting...' : 'I agree, start the test' }}
+      {{ starting ? RECORDING_STARTING : busy ? 'Starting...' : 'I agree, start the test' }}
     </BaseButton>
 
     <Banner v-if="error" tone="bad" role="alert"><p>{{ error }}</p></Banner>

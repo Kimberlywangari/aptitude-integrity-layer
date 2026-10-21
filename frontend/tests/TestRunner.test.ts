@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TestRunner from '../src/candidate/TestRunner.vue'
-import { FULLSCREEN_COVER_TITLE } from '../src/candidate/copy'
+import { CAMERA_LOST_BANNER, FULLSCREEN_COVER_TITLE } from '../src/candidate/copy'
 import { api, ApiError } from '../src/lib/api'
 import type { QuestionResponse } from '../src/lib/api'
+import { logEvent } from '../src/lib/eventLog'
+import { startTestRuntime } from '../src/lib/runtime'
 import { clearSession, saveSession } from '../src/lib/session'
 import { fs, resetFullscreen, setFullscreen } from './helpers/fakeFullscreen'
 import { mountPage, settle } from './helpers/render'
@@ -12,6 +14,23 @@ vi.mock('../src/lib/api', async (importOriginal) => {
   return { ...actual, api: vi.fn() }
 })
 vi.mock('../src/lib/fullscreen', async () => (await import('./helpers/fakeFullscreen')).fullscreenModule)
+// the background work has its own tests; here only that the page starts it and what it logs
+vi.mock('../src/lib/runtime', () => ({ startTestRuntime: vi.fn() }))
+vi.mock('../src/lib/eventLog', () => ({ logEvent: vi.fn(() => Promise.resolve()) }))
+
+// a recording whose state a test can change, for the camera-lost banner
+const rec = vi.hoisted(() => ({ state: 'off', listeners: new Set<() => void>() }))
+vi.mock('../src/lib/recording', () => ({
+  recordingState: () => rec.state,
+  onRecordingState: (listener: () => void) => {
+    rec.listeners.add(listener)
+    return () => rec.listeners.delete(listener)
+  },
+}))
+const setRecordingState = (state: string) => {
+  rec.state = state
+  rec.listeners.forEach((listener) => listener())
+}
 
 const TOTAL = 3
 const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms)
@@ -238,5 +257,106 @@ describe('TestRunner', () => {
       const { w } = await renderPage()
       expect(w.find('[role=dialog]').exists()).toBe(false)
     })
+  })
+})
+
+describe('TestRunner and the record of the test', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance', 'Date'] })
+    current = 1
+    remaining = 600
+    resetFullscreen()
+    setFullscreen(true)
+    saveSession('s1', 'tok')
+    vi.mocked(api).mockReset()
+    vi.mocked(logEvent).mockClear()
+    vi.mocked(startTestRuntime).mockClear()
+    serve()
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+    clearSession()
+    vi.useRealTimers()
+  })
+
+  const names = () => vi.mocked(logEvent).mock.calls.map((call) => [call[0], call[1]])
+
+  it('starts the log, the heartbeat, the watchers and the recording for this session', async () => {
+    await renderPage()
+    expect(startTestRuntime).toHaveBeenCalledWith('s1')
+  })
+
+  it('does not start any of it without a session', async () => {
+    clearSession()
+    await renderPage()
+    expect(startTestRuntime).not.toHaveBeenCalled()
+  })
+
+  it('logs each question as opened once, not again when the server only re-syncs', async () => {
+    const { w } = await renderPage()
+    expect(names()).toEqual([['question_opened', { position: 1 }]])
+
+    // the clock reaching zero asks the server again; it is the same question
+    remaining = 0
+    await wait(1000)
+    expect(names().filter((e) => e[0] === 'question_opened')).toHaveLength(1)
+    expect(w.text()).toContain('Question 1 of 3')
+  })
+
+  it('logs the answer, then the next question opening', async () => {
+    const { w } = await renderPage()
+    await choose(w, 'Option 1.2')
+    await button(w, 'Submit').trigger('click')
+    await wait()
+
+    expect(names()).toEqual([
+      ['question_opened', { position: 1 }],
+      ['answered', { position: 1 }],
+      ['question_opened', { position: 2 }],
+    ])
+  })
+
+  it('logs a skip as a skip', async () => {
+    const { w } = await renderPage()
+    await button(w, 'Skip').trigger('click')
+    await wait()
+    expect(names()).toContainEqual(['skipped', { position: 1 }])
+    expect(names()).not.toContainEqual(['answered', { position: 1 }])
+  })
+
+  it('logs the last answer before it leaves for the finish page', async () => {
+    current = TOTAL
+    const { w, router } = await renderPage()
+    await choose(w, `Option ${TOTAL}.1`)
+    await button(w, 'Submit').trigger('click')
+    await wait()
+
+    expect(names()).toContainEqual(['answered', { position: TOTAL }])
+    expect(router.currentRoute.value.path).toBe('/done')
+  })
+
+  it('logs nothing for an answer the server refused', async () => {
+    const { w } = await renderPage()
+    vi.mocked(api).mockImplementation((async (path: string) => {
+      if (path.endsWith('/question')) return question(1)
+      throw new ApiError(409, 'not_current', {})
+    }) as unknown as typeof api)
+    await choose(w, 'Option 1.1')
+    await button(w, 'Submit').trigger('click')
+    await wait()
+    expect(names().filter((e) => e[0] === 'answered')).toEqual([])
+  })
+
+  it('warns, without stopping anything, when the camera is lost', async () => {
+    const { w } = await renderPage()
+    expect(w.text()).not.toContain(CAMERA_LOST_BANNER)
+
+    setRecordingState('lost')
+    await wait()
+
+    expect(w.text()).toContain(CAMERA_LOST_BANNER)
+    expect(disabled(w, 'Skip')).toBe(false) // the test carries on
+    expect(timer(w).text()).not.toBe('--:--')
   })
 })

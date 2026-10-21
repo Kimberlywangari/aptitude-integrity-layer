@@ -4,6 +4,7 @@ import Complaint from './candidate/Complaint.vue'
 import Done from './candidate/Done.vue'
 import Integrity from './candidate/Integrity.vue'
 import PreCheck from './candidate/PreCheck.vue'
+import Resume from './candidate/Resume.vue'
 import Start from './candidate/Start.vue'
 import TestRunner from './candidate/TestRunner.vue'
 import UploadStatus from './candidate/UploadStatus.vue'
@@ -30,6 +31,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/test', component: TestRunner },
   { path: '/done', component: Done },
   { path: '/uploading', component: UploadStatus },
+  { path: '/resume', component: Resume },
   { path: '/complaint', component: Complaint },
 
   {
