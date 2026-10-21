@@ -529,6 +529,73 @@ def test_ranking_a_sitting_nobody_was_flagged_in_is_an_empty_run(db, seeded, clo
     assert run.flagged == 0 and run.rankings == []
 
 
+# -------------------------------------------------------------- what the reviewer then sees
+
+
+def test_the_queue_follows_the_stored_ranking_and_shows_the_ai_strength(
+    client, db, sim, clock, staff
+):
+    ordered = [o for o in rule_order(db, sim.sitting_id) if not o.logging_only]
+    last = ordered[-1].session.candidate_id
+    rank_sitting(
+        db,
+        sim.sitting_id,
+        Scripted(lambda p, a, v: passing(p, 5 if p["candidate_id"] == last else 2)),
+        clock,
+    )
+
+    items = client.get("/api/review/queue", headers=staff).json()["items"]
+
+    assert items[0]["candidate_id"] == last and items[0]["rank"] == 1
+    assert items[0]["ai_strength"] == 5 and items[0]["ai_status"] == "ok"
+    assert [i["rank"] for i in items] == list(range(1, len(items) + 1))
+    lanes = [i["logging_only"] for i in items]
+    assert lanes == sorted(lanes)
+
+
+def test_the_candidate_page_shows_the_ais_account_when_it_passed(client, db, sim, clock, staff):
+    rank_sitting(db, sim.sitting_id, Scripted(always(4)), clock)
+    candidate = client.get("/api/review/queue", headers=staff).json()["items"][0]["candidate_id"]
+
+    detail = client.get(f"/api/review/candidates/{candidate}", headers=staff).json()
+
+    assert detail["explanation"]["source"] == "ai" and detail["explanation"]["status"] == "ok"
+    assert detail["explanation"]["strength"] == 4
+    assert detail["explanation"]["text"] == "F1 is the first of the flags in this packet."
+    assert detail["rank"] == 1
+
+
+def test_the_candidate_page_says_so_when_the_ai_fell_back_and_shows_the_rules_account(
+    client, db, sim, clock, staff
+):
+    rank_sitting(db, sim.sitting_id, Scripted(hallucinating), clock)
+    candidate = client.get("/api/review/queue", headers=staff).json()["items"][0]["candidate_id"]
+
+    detail = client.get(f"/api/review/candidates/{candidate}", headers=staff).json()
+
+    assert (
+        detail["explanation"]["source"] == "rules" and detail["explanation"]["status"] == "fallback"
+    )
+    assert detail["explanation"]["text"].startswith("Rules only:")
+    assert detail["explanation"]["strength"] is None
+
+
+def test_a_stored_ranking_that_no_longer_matches_the_flags_is_not_trusted(
+    client, db, sim, clock, staff
+):
+    ordered = rule_order(db, sim.sitting_id)
+    rank_sitting(db, sim.sitting_id, Scripted(always(3)), clock)
+    victim = ordered[0].session
+    db.execute(delete(Flag).where(Flag.session_id == victim.id))  # they lose their only flags
+    db.flush()
+
+    items = client.get("/api/review/queue", headers=staff).json()["items"]
+
+    assert victim.candidate_id not in {i["candidate_id"] for i in items}
+    assert all(i["ai_status"] == "not_run" for i in items)  # the rules decide until it is re-ranked
+    assert len(items) == len(ordered) - 1
+
+
 @pytest.mark.parametrize("provider_status", ["ok", "fallback"])
 def test_the_final_order_is_a_strict_ranking_of_everyone_flagged(db, sim, clock, provider_status):
     ranker = Scripted(always(3) if provider_status == "ok" else hallucinating)

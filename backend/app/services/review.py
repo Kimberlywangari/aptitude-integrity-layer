@@ -1,82 +1,73 @@
 """What the reviewer screens read: the ranked queue, one candidate's page, and the few things a
 reviewer can write (a decision, the shortlist, a note that they opened the video).
 
-Everything is derived from stored sessions and flags when it is asked for. Ranks and scores are
-never stored, so they cannot go stale after a threshold or a flag changes. The order is a
-convenience for a person; nothing here sets anyone aside.
+The order comes from the stored ranking when one exists for the sitting (the AI step's result, or
+the rules-only run) and otherwise from the rules, worked out from the stored flags when asked for.
+Either way it is a convenience for a person; nothing here sets anyone aside.
 """
 
-import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.clock import Clock
+from app.config import Settings
+from app.core.video_url import issue_video_token
 from app.errors import ApiError
 from app.models import (
+    AudioSilence,
     AuditLog,
     Complaint,
     Decision,
     Event,
     Flag,
-    QuestionStats,
+    Ranking,
     Reviewer,
     SessionQuestion,
     Sitting,
     TestSession,
+    VideoChunk,
+    VideoSegment,
 )
 from app.schemas.review import MAX_REASON_CHARS, MIN_REASON_CHARS
-from app.services.flags import rules
+from app.services import evidence
+from app.services.evidence import rules_explanation  # noqa: F401  (the name other code imports)
 from app.services.flags.config import DEFAULTS, FlagConfig
-from app.services.flags.scoring import Line, ScoredFlag, is_logging_only, score_flags
+from app.services.flags.scoring import is_flagged
+from app.services.ranking.rules import Ranked, flags_by_session, rule_order, score_session
+from app.services.video import ffmpeg
+from app.services.video.assemble import ensure_assembled, known_segments
+from app.services.video.seek import SegmentSpan, seek_for
+from app.services.video.store import VideoStore
 
 OUTCOMES = ("no_concern", "concern_noted", "refer_for_follow_up")
-PURGE_AFTER = timedelta(days=30)  # video goes 30 days after a decision (the proposal's promise)
+VIDEO_VIEW_WINDOW = timedelta(minutes=5)  # one audit entry per reviewer, segment and window
+
+
+@dataclass(frozen=True)
+class VideoContext:
+    """What building a candidate's page needs to show video: where it is kept, the clock, and who
+    is looking (their links are made for them)."""
+
+    store: VideoStore
+    clock: Clock
+    settings: Settings
+    reviewer_id: int
 
 
 @dataclass
-class Ranked:
-    session: TestSession
-    flags: list[Flag]
-    score: float
-    lines: list[Line]
-    logging_only: bool
-    rank: int = 0
-    kinds: list[str] = field(default_factory=list)
+class Entry:
+    """One place in the queue: the rule result and, if the sitting was ranked, its ranking."""
+
+    ranked: Ranked
+    ranking: Ranking | None
+    rank: int
 
 
 # ------------------------------------------------------------------------------------ helpers
-
-
-def _elapsed(ts: datetime, start: datetime | None) -> int:
-    if start is None:
-        return 0
-    return round((ts - start).total_seconds())
-
-
-def seek_for(segments: list[dict[str, float]], elapsed_s: float) -> dict[str, float] | None:
-    """Where a moment sits in the saved video: the segment holding it and 5 s before. None when
-    nothing was recorded then (no video yet, or the moment falls in a gap between segments)."""
-    for index, segment in enumerate(segments):
-        start, length = segment["start_s"], segment["duration_s"]
-        if start <= elapsed_s <= start + length:
-            return {"segment": index, "seek_s": max(0.0, elapsed_s - start - 5)}
-    return None
-
-
-def _flags_for(db: Session, session_ids: list[str]) -> dict[str, list[Flag]]:
-    out: dict[str, list[Flag]] = {sid: [] for sid in session_ids}
-    if not session_ids:
-        return out
-    rows = db.scalars(
-        select(Flag).where(Flag.session_id.in_(session_ids)).order_by(Flag.server_ts, Flag.id)
-    )
-    for flag in rows:
-        out[flag.session_id].append(flag)
-    return out
 
 
 def _latest_decisions(db: Session, session_ids: list[str]) -> dict[str, Decision]:
@@ -93,35 +84,31 @@ def _latest_decisions(db: Session, session_ids: list[str]) -> dict[str, Decision
     return latest
 
 
+def rank_sitting(db: Session, sitting_id: int, cfg: FlagConfig = DEFAULTS) -> list[Ranked]:
+    return rule_order(db, sitting_id, cfg)
+
+
 # ---------------------------------------------------------------------------------- the queue
 
 
-def rank_sitting(db: Session, sitting_id: int, cfg: FlagConfig = DEFAULTS) -> list[Ranked]:
-    """Flagged, finished sessions in order: most evidence first, a gap in the record last."""
-    sessions = list(
-        db.scalars(
-            select(TestSession).where(
-                TestSession.sitting_id == sitting_id, TestSession.status == "finished"
-            )
-        )
-    )
-    flags = _flags_for(db, [s.id for s in sessions])
-    ranked: list[Ranked] = []
-    for session in sessions:
-        found = flags[session.id]
-        if not found:
-            continue
-        scored = [
-            ScoredFlag(f"F{i}", f.kind, f.weight, _elapsed(f.server_ts, session.started_at))
-            for i, f in enumerate(found, start=1)
-        ]
-        total, lines = score_flags(scored, cfg)
-        kinds = [f.kind for f in found]
-        ranked.append(Ranked(session, found, total, lines, is_logging_only(kinds), kinds=kinds))
-    ranked.sort(key=lambda r: (r.logging_only, -r.score, r.session.candidate_id))
-    for position, item in enumerate(ranked, start=1):
-        item.rank = position
-    return ranked
+def ordered_queue(db: Session, sitting_id: int, cfg: FlagConfig = DEFAULTS) -> list[Entry]:
+    """The queue in the order a reviewer works it.
+
+    A stored ranking is used only while it still covers exactly the candidates the flags say
+    are queued. If flags were recomputed since (someone gained or lost their last flag), the
+    stored order is out of date, so the rules decide until the sitting is ranked again.
+    """
+    ranked = rule_order(db, sitting_id, cfg)
+    rankings = {
+        r.session_id: r for r in db.scalars(select(Ranking).where(Ranking.sitting_id == sitting_id))
+    }
+    stored = bool(ranked) and set(rankings) == {r.session.id for r in ranked}
+    if stored:
+        ranked.sort(key=lambda r: rankings[r.session.id].final_rank)
+    return [
+        Entry(item, rankings.get(item.session.id) if stored else None, position)
+        for position, item in enumerate(ranked, start=1)
+    ]
 
 
 def default_sitting_id(db: Session) -> int:
@@ -137,28 +124,34 @@ def default_sitting_id(db: Session) -> int:
     return int(first) if first is not None else 0
 
 
+def _ai_strength(ranking: Ranking | None) -> int | None:
+    if ranking and ranking.ai_status in ("ok", "retried") and ranking.ai_json:
+        return int(ranking.ai_json["strength"])
+    return None
+
+
 def queue(db: Session, sitting_id: int | None, cfg: FlagConfig = DEFAULTS) -> dict[str, Any]:
     sittings = [
         {"id": s.id, "name": s.name} for s in db.scalars(select(Sitting).order_by(Sitting.id))
     ]
     known = {s["id"] for s in sittings}
     chosen = sitting_id if sitting_id in known else default_sitting_id(db)
-    ranked = rank_sitting(db, chosen, cfg) if chosen else []
-    decisions = _latest_decisions(db, [r.session.id for r in ranked])
+    entries = ordered_queue(db, chosen, cfg) if chosen else []
+    decisions = _latest_decisions(db, [e.ranked.session.id for e in entries])
     items = []
-    for item in ranked:
-        decision = decisions.get(item.session.id)
+    for entry in entries:
+        decision = decisions.get(entry.ranked.session.id)
         items.append(
             {
-                "candidate_id": item.session.candidate_id,
-                "rank": item.rank,
-                "rule_score": item.score,
-                "ai_strength": None,  # the AI step is not built; the order is rules only
-                "ai_status": "not_run",
-                "flag_kinds": item.kinds,
+                "candidate_id": entry.ranked.session.candidate_id,
+                "rank": entry.rank,
+                "rule_score": entry.ranked.score,
+                "ai_strength": _ai_strength(entry.ranking),
+                "ai_status": entry.ranking.ai_status if entry.ranking else "not_run",
+                "flag_kinds": entry.ranked.kinds,
                 "decision": decision.outcome if decision else None,
-                "shortlisted": item.session.shortlisted,
-                "logging_only": item.logging_only,
+                "shortlisted": entry.ranked.session.shortlisted,
+                "logging_only": entry.ranked.logging_only,
             }
         )
     return {"sittings": sittings, "sitting_id": chosen, "items": items}
@@ -178,179 +171,81 @@ def _find_session(db: Session, candidate_id: str, sitting_id: int | None) -> Tes
     return session
 
 
-def _answer_times(rows: list[Any]) -> list[float]:
-    return [
-        (r.answered_at - r.opened_at).total_seconds()
-        for r in rows
-        if r.opened_at is not None and r.answered_at is not None and not r.skipped
-    ]
-
-
-def _vs_sitting(
-    db: Session, session: TestSession, cfg: FlagConfig
-) -> tuple[dict[str, Any], float, int]:
-    """Percentiles against the sitting, plus this candidate's pace and score."""
-    rows = db.execute(
-        select(
-            SessionQuestion.session_id,
-            SessionQuestion.opened_at,
-            SessionQuestion.answered_at,
-            SessionQuestion.correct,
-            SessionQuestion.skipped,
-        )
-        .join(TestSession, TestSession.id == SessionQuestion.session_id)
-        .where(TestSession.sitting_id == session.sitting_id, TestSession.status == "finished")
-    ).all()
-    by_session: dict[str, list[Any]] = {}
-    for row in rows:
-        by_session.setdefault(row.session_id, []).append(row)
-
-    paces: dict[str, float] = {}
-    spreads: dict[str, float] = {}
-    scores: dict[str, float] = {}
-    for sid, items in by_session.items():
-        times = _answer_times(items)
-        scores[sid] = float(sum(1 for r in items if r.correct is True))
-        if times:
-            paces[sid] = statistics.fmean(times)
-            spreads[sid] = statistics.pstdev(times) if len(times) > 1 else 0.0
-
-    own_pace = paces.get(session.id, 0.0)
-    own_score = int(scores.get(session.id, 0))
-    if len(paces) < cfg.cohort_min_candidates:
-        return {"cohort_skipped": "too_small"}, own_pace, own_score
-    return (
-        {
-            "pace_percentile": rules.percentile_of(list(paces.values()), own_pace),
-            "spread_percentile": rules.percentile_of(
-                list(spreads.values()), spreads.get(session.id, 0.0)
-            ),
-            "score_percentile": rules.percentile_of(list(scores.values()), own_score),
-        },
-        own_pace,
-        own_score,
+def video_url(
+    video: VideoContext, candidate_id: str, session_id: str, segment: int
+) -> str:
+    token = issue_video_token(
+        video.settings.session_secret, video.clock, video.reviewer_id, session_id, segment
     )
+    return f"/api/review/candidates/{candidate_id}/video?segment={segment}&t={token}"
 
 
-def _signals(events: list[Event], start: datetime | None, end: datetime | None, cfg: FlagConfig):
-    """Context a reviewer should weigh: drops, reloads, device trouble, and mic silences."""
-    evs = [rules.Ev(e.type, e.server_ts, e.payload or {}) for e in events]
-    innocent: list[dict[str, Any]] = []
-    counter = 0
-
-    def add(**fields: Any) -> None:
-        nonlocal counter
-        counter += 1
-        innocent.append({"id": f"I{counter}", **fields})
-
-    for span in rules.connection_drops(evs, end):
-        add(
-            kind="connection_lost",
-            elapsed_s=_elapsed(span.start, start),
-            duration_s=round(span.duration_s),
+def _segments(
+    db: Session, session: TestSession, video: VideoContext | None
+) -> list[VideoSegment]:
+    """The recording's segments, assembling them the first time a reviewer opens the page.
+    Without ffmpeg only what was assembled before can be shown; nothing is shown for video that
+    has been deleted."""
+    if video is None:
+        return []
+    if session.video_deleted_at is not None:
+        return known_segments(db, session.id)
+    has_chunks = db.scalar(
+        select(
+            exists().where(VideoChunk.session_id == session.id, VideoChunk.deleted_at.is_(None))
         )
-    for event in evs:
-        if event.type == "reload":
-            add(kind="reload", elapsed_s=_elapsed(event.ts, start))
-        elif event.type in ("camera_dropped", "track_ended"):
-            add(
-                kind=event.type,
-                elapsed_s=_elapsed(event.ts, start),
-                duration_s=round(float(event.payload.get("duration_s", 0) or 0)),
-            )
-
-    silences: list[dict[str, Any]] = []
-    spans = rules.pair_spans(evs, "mic_silent_start", "mic_silent_end", end)
-    spans += rules.pair_spans(evs, "mic_muted", "mic_unmuted", end)
-    for span in sorted(spans, key=lambda s: s.start):
-        if span.duration_s < cfg.mic_silence_min_s:
-            continue
-        silences.append(
-            {
-                "id": f"M{len(silences) + 1}",
-                "start_s": _elapsed(span.start, start),
-                "end_s": _elapsed(span.end, start),
-                "duration_s": round(span.duration_s),
-                "layers": ["browser"],
-                "video_seek": None,
-            }
-        )
-    innocent.sort(key=lambda s: s.get("elapsed_s", 0))
-    return innocent, silences
+    )
+    if has_chunks:
+        try:
+            return ensure_assembled(
+                db, video.store, video.clock, video.settings, session.id
+            ).segments
+        except ffmpeg.FfmpegMissing:
+            pass
+    return known_segments(db, session.id)
 
 
-_DESCRIBE = {
-    "COPY_ATTEMPT": lambda d, q, on: f"a copy attempt{on} ({d.get('length', 0)} characters)",
-    "FOCUS_LOSS": lambda d, q, on: f"a {d.get('focus_lost_s', 0)} s loss of focus{on}",
-    "LONG_HOLD_CORRECT": lambda d, q, on: (
-        f"question {q} took {d.get('time_s')} s against the candidate's own median of "
-        f"{d.get('own_median_s')} s and was answered correctly"
-    ),
-    "CORRECT_RUN_AFTER_GAP": lambda d, q, on: (
-        f"{d.get('run_length')} correct answers in a row straight after a {d.get('gap_s')} s gap"
-    ),
-    "FAST_CORRECT_VS_HISTORY": lambda d, q, on: (
-        f"{len(d.get('questions', []))} correct answers much faster than the usual quick time "
-        "for those questions"
-    ),
-    "PACE_OUTLIER": lambda d, q, on: (
-        f"a mean time per question far {'faster' if d.get('direction') == 'fast' else 'slower'} "
-        "than the rest of the sitting"
-    ),
-    "SPREAD_OUTLIER": lambda d, q, on: (
-        f"answer times far {'narrower' if d.get('direction') == 'narrow' else 'wider'} "
-        "than the rest of the sitting"
-    ),
-    "LOGGING_PROBLEM": lambda d, q, on: (
-        f"no heartbeat for {d.get('heartbeat_gap_s')} s that a dropped connection or reload "
-        "does not explain"
-    ),
-}
-
-
-def rules_explanation(flags: list[dict[str, Any]], n_signals: int) -> str:
-    """A plain account of what the rules found, built only from the flags' own numbers. It names
-    what happened and never says what it means about the person."""
-    parts = []
-    for flag in flags:
-        q = flag["question_number"]
-        on = f" on question {q}" if q else ""
-        describe = _DESCRIBE.get(flag["kind"])
-        parts.append(describe(flag["detail"], q, on) if describe else flag["kind"].lower())
-    text = "Rules only: " + "; ".join(parts) + "."
-    if n_signals:
-        noun = "signal" if n_signals == 1 else "signals"
-        text += f" The record also shows {n_signals} {noun} with an ordinary explanation to weigh."
-    return text
+def _seek_to(spans: list[SegmentSpan], moment: datetime) -> dict[str, Any] | None:
+    found = seek_for(spans, moment)
+    return {"segment": found.segment, "seek_s": found.seek_s} if found else None
 
 
 def candidate_detail(
-    db: Session, candidate_id: str, sitting_id: int | None, cfg: FlagConfig = DEFAULTS
+    db: Session,
+    candidate_id: str,
+    sitting_id: int | None,
+    cfg: FlagConfig = DEFAULTS,
+    video: VideoContext | None = None,
+    retention_days: int = 30,
 ) -> dict[str, Any]:
     session = _find_session(db, candidate_id, sitting_id)
-    flags = _flags_for(db, [session.id])[session.id]
+    flags = flags_by_session(db, [session.id])[session.id]
 
-    ranked = {r.session.id: r for r in rank_sitting(db, session.sitting_id, cfg)}
-    this = ranked.get(session.id)
-    if this is not None:
-        score_total, lines, rank = this.score, this.lines, this.rank
+    entries = {e.ranked.session.id: e for e in ordered_queue(db, session.sitting_id, cfg)}
+    entry = entries.get(session.id)
+    if entry is not None:
+        score_total, lines, rank = entry.ranked.score, entry.ranked.lines, entry.rank
     else:
-        scored = [
-            ScoredFlag(f"F{i}", f.kind, f.weight, _elapsed(f.server_ts, session.started_at))
-            for i, f in enumerate(flags, start=1)
-        ]
-        score_total, lines = score_flags(scored, cfg)
+        score_total, lines = score_session(session, flags, cfg)
         rank = 0
+    ranking = entry.ranking if entry else None
+
+    segments = _segments(db, session, video)
+    spans = [
+        SegmentSpan(s.segment, s.started_at, s.duration_s)
+        for s in segments
+        if s.started_at is not None and s.path is not None
+    ]
 
     flag_items = [
         {
             "id": f"F{i}",
             "kind": f.kind,
             "server_ts": f.server_ts,
-            "elapsed_s": _elapsed(f.server_ts, session.started_at),
+            "elapsed_s": evidence.elapsed(f.server_ts, session.started_at),
             "question_number": f.position,
             "detail": f.detail,
-            "video_seek": None,  # no video is stored yet
+            "video_seek": _seek_to(spans, f.server_ts),
         }
         for i, f in enumerate(flags, start=1)
     ]
@@ -358,35 +253,26 @@ def candidate_detail(
     events = list(
         db.scalars(select(Event).where(Event.session_id == session.id).order_by(Event.server_ts))
     )
+    silences = list(db.scalars(select(AudioSilence).where(AudioSilence.session_id == session.id)))
     last_answer = db.scalar(
         select(func.max(SessionQuestion.answered_at)).where(
             SessionQuestion.session_id == session.id
         )
     )
     end = session.finished_at or last_answer
-    innocent, silences = _signals(events, session.started_at, end, cfg)
+    innocent, mic_silence = evidence.signals(events, session.started_at, end, cfg, silences)
+    if session.started_at is not None:
+        for stretch in mic_silence:
+            moment = session.started_at + timedelta(seconds=stretch["start_s"])
+            stretch["video_seek"] = _seek_to(spans, moment)
 
     report = session.self_report or None
-    if report and report.get("had_technical_issues"):
-        innocent.append(
-            {
-                "id": f"I{len(innocent) + 1}",
-                "kind": "self_report",
-                "category": "technical_issue",
-                "note": (report.get("note") or "")[:120],
-            }
-        )
+    note_signal = evidence.self_report_signal(report, include_note=True)
+    if note_signal:
+        innocent.append({"id": f"I{len(innocent) + 1}", **note_signal})
 
-    vs, pace, score = _vs_sitting(db, session, cfg)
-
-    sources = set(
-        db.scalars(
-            select(QuestionStats.source)
-            .join(SessionQuestion, SessionQuestion.question_id == QuestionStats.question_id)
-            .where(SessionQuestion.session_id == session.id)
-        )
-    )
-    history = "cytonn" if sources == {"cytonn"} else "synthetic"
+    ctx = evidence.load_sitting_context(db, session.sitting_id)
+    vs, pace, score = evidence.vs_sitting(ctx, session.id, cfg)
 
     complaints = [
         {
@@ -418,16 +304,26 @@ def candidate_detail(
     ]
     purge_on = None
     if decisions and session.video_deleted_at is None:
-        purge_on = decisions[-1]["decided_at"] + PURGE_AFTER
+        purge_on = decisions[-1]["decided_at"] + timedelta(days=retention_days)
 
-    explanation = {
-        "source": "rules",
-        "status": "not_run",
-        "text": rules_explanation(flag_items, len(innocent)) if flag_items else
-        "Rules only: no flags were raised for this candidate.",
-        "strength": None,
-        "flags_support_each_other": None,
-    }
+    anchor = session.recording_started_at or (spans[0].started_at if spans else None)
+    segment_items = [
+        {
+            "segment": s.segment,
+            "url": (
+                video_url(video, session.candidate_id, session.id, s.segment)
+                if video is not None and s.path is not None
+                else None
+            ),
+            "start_s": (
+                round((s.started_at - anchor).total_seconds(), 1)
+                if anchor is not None and s.started_at is not None
+                else 0.0
+            ),
+            "duration_s": s.duration_s,
+        }
+        for s in segments
+    ]
 
     return {
         "session_id": session.id,
@@ -437,11 +333,11 @@ def candidate_detail(
         "rule_breakdown": [{"label": ln.label, "points": ln.points} for ln in lines],
         "score": score,
         "pace_s_per_q": round(pace, 1),
-        "history_source": history,
+        "history_source": evidence.history_source(db, session.id),
         "flags": flag_items,
         "vs_sitting": vs,
         "innocent_signals": innocent,
-        "mic_silence": silences,
+        "mic_silence": mic_silence,
         "self_report": (
             {
                 "had_technical_issues": bool(report.get("had_technical_issues")),
@@ -450,14 +346,91 @@ def candidate_detail(
             if report
             else None
         ),
-        "explanation": explanation,
+        "explanation": _explanation(ranking, flag_items, len(innocent)),
         "complaints": complaints,
         "decisions": decisions,
         "shortlisted": session.shortlisted,
-        "segments": [],  # no video is stored yet
+        "segments": segment_items,
         "video_deleted_at": session.video_deleted_at,
         "video_purge_on": purge_on,
     }
+
+
+def _explanation(
+    ranking: Ranking | None, flag_items: list[dict[str, Any]], n_signals: int
+) -> dict[str, Any]:
+    """The AI's account when its answer passed the fact check; otherwise the plain account of what
+    the rules found, with the status that says why."""
+    if ranking is not None and ranking.ai_status in ("ok", "retried") and ranking.ai_json:
+        ai = ranking.ai_json
+        return {
+            "source": "ai",
+            "status": ranking.ai_status,
+            "text": ai["explanation"],
+            "strength": ai["strength"],
+            "flags_support_each_other": ai["flags_support_each_other"],
+        }
+    if ranking is not None:
+        text = ranking.explanation
+        status = ranking.ai_status
+    else:
+        text = evidence.rules_explanation(flag_items, n_signals)
+        status = "not_run"
+    return {
+        "source": "rules",
+        "status": status,
+        "text": text,
+        "strength": None,
+        "flags_support_each_other": None,
+    }
+
+
+# ------------------------------------------------------------------------------------ video
+
+
+def can_view_video(db: Session, session: TestSession, cfg: FlagConfig = DEFAULTS) -> bool:
+    """Video is for candidates who are in the queue (finished and flagged) or who a reviewer has
+    shortlisted. Everyone else's recording stays unopened."""
+    if session.shortlisted:
+        return True
+    if session.status != "finished":
+        return False
+    flags = flags_by_session(db, [session.id])[session.id]
+    if not flags:
+        return False
+    score, _ = score_session(session, flags, cfg)
+    return is_flagged(score, [f.kind for f in flags], cfg)
+
+
+def note_video_playback(
+    db: Session, clock: Clock, reviewer_id: int, session: TestSession, segment: int
+) -> None:
+    """Audit that this reviewer is watching, once per segment per five minutes: playing a video
+    fetches it in many pieces, and a log line for every piece would bury the real entries."""
+    now = clock.now()
+    detail = f"playing part {segment + 1}"
+    recent = db.scalar(
+        select(
+            exists().where(
+                AuditLog.reviewer_id == reviewer_id,
+                AuditLog.session_id == session.id,
+                AuditLog.action == "video_view",
+                AuditLog.detail == detail,
+                AuditLog.ts >= now - VIDEO_VIEW_WINDOW,
+            )
+        )
+    )
+    if not recent:
+        db.add(
+            AuditLog(
+                reviewer_id=reviewer_id,
+                action="video_view",
+                session_id=session.id,
+                ts=now,
+                detail=detail,
+            )
+        )
+        db.commit()
 
 
 # ------------------------------------------------------------------------------------ writing
