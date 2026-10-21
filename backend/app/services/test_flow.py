@@ -20,6 +20,7 @@ from app.clock import Clock
 from app.core.security import hash_token, new_token, normalise_invite_code
 from app.errors import ApiError
 from app.models import Candidate, Option, Question, SessionQuestion, Sitting, TestSession
+from app.services import precheck
 from app.services.shuffle import balanced_sample, session_rng, shuffle_options
 
 
@@ -144,13 +145,20 @@ def start_session(db: Session, clock: Clock, invite_token: str) -> StartResult:
     return StartResult(session, access_token)
 
 
-def begin(db: Session, clock: Clock, session: TestSession, accepted: bool) -> TestSession:
-    """Candidate accepted the integrity statement: the timer starts now. Idempotent."""
+def begin(
+    db: Session, clock: Clock, session: TestSession, accepted: bool, gate: str = "off"
+) -> TestSession:
+    """Candidate accepted the integrity statement: the timer starts now. Idempotent.
+
+    `gate` is the camera and microphone gate (Settings.precheck_gate): with it on, the test cannot
+    start until the pre-check has passed and, at `recording`, a real recording has arrived.
+    """
     if not accepted:
         raise ApiError(422, "integrity_not_accepted")
     if session.status == "finished":
         raise ApiError(409, "finished")
     if session.status == "created":
+        precheck.require_ready(db, session, gate)
         now = clock.now()
         sitting = db.get(Sitting, session.sitting_id)
         session.integrity_accepted_at = now
@@ -289,14 +297,23 @@ def score(session: TestSession) -> int:
     return sum(1 for sq in session.questions if sq.correct is True)
 
 
-def finish(db: Session, clock: Clock, session: TestSession) -> Summary:
-    """End the test (idempotent). Works after time-up too, so the page can collect its summary."""
+def finish(
+    db: Session, clock: Clock, session: TestSession, chunks_total: int | None = None
+) -> Summary:
+    """End the test (idempotent). Works after time-up too, so the page can collect its summary.
+
+    `chunks_total` is how many video chunks the page made. The upload is complete when every
+    chunk from 0 up to it has arrived, so it is kept (the latest value wins: the page may send it
+    again once the recorder has flushed its last chunk).
+    """
     if session.status == "created":
         raise ApiError(409, "not_started")
     if session.status == "in_progress":
         now = clock.now()
         _finish(session, min(now, session.ends_at))
-        db.commit()
+    if chunks_total is not None:
+        session.chunks_total = chunks_total
+    db.commit()
     return summarise(session)
 
 
