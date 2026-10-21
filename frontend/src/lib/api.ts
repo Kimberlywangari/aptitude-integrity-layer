@@ -2,18 +2,8 @@ import { CANDIDATE_PATH } from './routes'
 import { getAccessToken } from './session'
 import { getStaff } from './staffSession'
 
-// Endpoints the backend does not have yet are served from fixtures when VITE_MOCK_API=1 (set in
-// .env.development). Remove a prefix from this list on the day its real endpoint lands and that
-// screen talks to the server. The mock module is imported lazily, and the flag is a build-time
-// constant, so a production build carries none of it.
-const MOCK_ENABLED = import.meta.env.VITE_MOCK_API === '1'
-// /api/admin and /api/review are not here any more: the setup and review screens talk to the
-// real server. What is left is the candidate's pre-check, complaints and the upload manifest.
-const MOCKED_PREFIXES = ['/api/precheck', '/api/complaints', '/api/chunks']
-
-function isMocked(path: string): boolean {
-  return MOCKED_PREFIXES.some((prefix) => path.startsWith(prefix))
-}
+// Every screen talks to the real server. The in-memory fixtures in ./mock are for the screen
+// tests only (see tests/helpers/mockedApi.ts); nothing in the app imports them.
 
 /** Reviewer and admin calls carry the staff token; everything else carries the candidate's. */
 function isStaffPath(path: string): boolean {
@@ -34,26 +24,36 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT'
   body?: unknown
+  /** Raw bytes sent as they are, instead of JSON: one chunk of the recording. */
+  bytes?: Blob
+  headers?: Record<string, string>
+  /** Lets the request finish after the page has gone, for the last events when a tab is closed.
+   *  Browsers cap the body at 64 KB, so it is for events only, never for a chunk. */
+  keepalive?: boolean
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = isStaffPath(path) ? (getStaff()?.token ?? null) : getAccessToken()
-  if (MOCK_ENABLED && isMocked(path)) {
-    const { mockApi } = await import('./mock')
-    return mockApi<T>(path, options.method ?? 'GET', options.body, token)
-  }
 
-  const headers: Record<string, string> = {}
-  let body: string | undefined
-  if (options.body !== undefined) {
+  const headers: Record<string, string> = { ...options.headers }
+  let body: string | Blob | undefined
+  if (options.bytes !== undefined) {
+    headers['Content-Type'] = 'application/octet-stream'
+    body = options.bytes
+  } else if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
     body = JSON.stringify(options.body)
   }
   if (token) headers.Authorization = `Bearer ${token}`
 
-  const response = await fetch(path, { method: options.method ?? 'GET', headers, body })
+  const response = await fetch(path, {
+    method: options.method ?? 'GET',
+    headers,
+    body,
+    keepalive: options.keepalive,
+  })
   if (response.status === 204) return undefined as T
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>
@@ -99,6 +99,45 @@ export interface FinishResponse {
   answered: number
   skipped: number
   unanswered: number
+}
+
+/** How many chunks the recorder made. Say it again after the last flush if it changed. */
+export interface FinishRequest {
+  chunks_total?: number
+}
+
+// ---- the action log, the heartbeat, video chunks and resume (backend/app/schemas/recording.py)
+
+export interface EventIn {
+  client_seq: number
+  type: string
+  /** How long ago the page saw it. The server subtracts this from its own receive time. */
+  age_ms: number
+  payload?: Record<string, unknown>
+}
+
+export interface EventsResponse {
+  accepted: number
+  duplicates: number
+  rejected: number
+}
+
+export interface HeartbeatResponse {
+  server_time: string
+  remaining_s: number
+  status: SessionStatus
+}
+
+export interface ChunkResponse {
+  status: 'stored' | 'duplicate'
+}
+
+export interface ResumeResponse {
+  session_id: string
+  /** Upload-only: chunks, events and complaints, for 48 hours after the test finished. */
+  access_token: string
+  status: 'finished'
+  expires_at: string
 }
 
 // ---- pre-check, upload status and complaints (D6 and D8)
@@ -148,7 +187,9 @@ export function pathForError(error: unknown): string | null {
   if (!(error instanceof ApiError)) return null
   switch (error.code) {
     case 'precheck_required':
-      return '/precheck'
+      // "recording" means the camera check passed but no video has reached the server yet. The
+      // pre-check cannot fix that, so the page that asked stays put and waits.
+      return error.body.reason === 'recording' ? null : '/precheck'
     case 'not_started':
       return '/integrity'
     case 'finished':

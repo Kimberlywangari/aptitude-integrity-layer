@@ -15,6 +15,7 @@ import { captureProblem, detectBrowser, isSupportedBrowser } from '../lib/browse
 import { acquireDevices, classifyDeviceError } from '../lib/devices'
 import type { DeviceErrorKind, DeviceHandle } from '../lib/devices'
 import { fullscreenRequired, micCheckEnabled } from '../lib/features'
+import { holdDevices } from '../lib/media'
 import { INITIAL_MIC_CHECK, stepMicCheck } from '../lib/micCheck'
 import type { MicCheckState } from '../lib/micCheck'
 import { combine, queryPermission, watchPermission } from '../lib/permissions'
@@ -209,7 +210,9 @@ async function proceed() {
       busy.value = false
       return
     }
-    handle.stop()
+    // The camera and microphone carry on into the test: the recording uses this same stream, so
+    // there is no second prompt and nothing to switch on again.
+    holdDevices(handle)
     devices = null
     await router.replace('/integrity')
   } catch (e) {

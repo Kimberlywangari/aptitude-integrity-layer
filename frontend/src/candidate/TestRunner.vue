@@ -8,11 +8,14 @@ import ProgressBar from '../components/ProgressBar.vue'
 import { useFullscreen } from '../composables/useFullscreen'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { QuestionResponse, ResolveResponse } from '../lib/api'
+import { logEvent } from '../lib/eventLog'
 import { fullscreenRequired } from '../lib/features'
 import { CANDIDATE_PATH } from '../lib/routes'
+import { startTestRuntime } from '../lib/runtime'
 import { getSessionId } from '../lib/session'
 import FullscreenGate from './FullscreenGate.vue'
 import MicBanner from './MicBanner.vue'
+import RecordingBanner from './RecordingBanner.vue'
 
 interface Clock {
   remaining: number // seconds left, as the server said
@@ -34,6 +37,7 @@ const error = ref<string | null>(null)
 const fullscreen = useFullscreen()
 let refreshing = false
 let ticker: number | undefined
+let lastOpened = 0 // the question already logged as opened, so a re-sync does not log it again
 
 function format(seconds: number): string {
   const whole = Math.max(0, Math.ceil(seconds))
@@ -82,6 +86,10 @@ async function load() {
     selected.value = null
     error.value = null
     sync(q.remaining_s)
+    if (q.position !== lastOpened) {
+      lastOpened = q.position
+      void logEvent('question_opened', { position: q.position })
+    }
   } catch (e) {
     handleError(e)
   }
@@ -111,6 +119,8 @@ function askBeforeLeaving(event: BeforeUnloadEvent) {
 }
 
 onMounted(() => {
+  // The log, heartbeat, microphone watch and recording run from here until the finish page ends them.
+  if (sessionId) startTestRuntime(sessionId)
   void load()
   keepHere()
   window.addEventListener('popstate', keepHere)
@@ -138,6 +148,7 @@ async function resolve(kind: 'answer' | 'skip') {
           ? { position: q.position, option_id: selected.value }
           : { position: q.position },
     })
+    void logEvent(kind === 'answer' ? 'answered' : 'skipped', { position: q.position })
     if (result.done) {
       await router.replace('/done')
       return
@@ -176,6 +187,7 @@ async function resolve(kind: 'answer' | 'skip') {
       <ProgressBar label="Test progress" :value="question.position - 1" :max="question.total" />
 
       <MicBanner />
+      <RecordingBanner />
 
       <Transition name="q" mode="out-in">
         <div :key="question.position" class="qcard">

@@ -16,6 +16,7 @@ const pages = {
   '/precheck': 'precheck page',
   '/test': 'test page',
   '/done': 'done page',
+  '/uploading': 'uploading page',
 }
 
 async function renderStart(entry = '/') {
@@ -101,6 +102,46 @@ describe('Start', () => {
     const wrapper = await renderStart()
     await submit(wrapper, 'ABCD-EFGH')
     expect(wrapper.get('[role=alert]').text()).toContain('not open right now')
+  })
+
+  describe('once the sitting has closed', () => {
+    const closed = new ApiError(409, 'no_open_sitting', {})
+    const resumed = { session_id: 's9', access_token: 'upload-token', status: 'finished', expires_at: 'x' }
+
+    it('finishes the upload of a test already taken, using the same code', async () => {
+      vi.mocked(api).mockImplementation((async (path: string) => {
+        if (path === '/api/session/start') throw closed
+        return resumed
+      }) as unknown as typeof api)
+      const wrapper = await renderStart()
+      await submit(wrapper, 'abcd-efgh')
+
+      expect(vi.mocked(api).mock.calls.map((call) => call[0])).toEqual([
+        '/api/session/start',
+        '/api/session/resume',
+      ])
+      expect((vi.mocked(api).mock.calls[1][1] as { body: { token: string } }).body.token).toBe('ABCDEFGH')
+      expect(getSessionId()).toBe('s9')
+      expect(wrapper.text()).toContain('uploading page')
+    })
+
+    it('keeps saying the test is not open when there is nothing to finish', async () => {
+      vi.mocked(api).mockImplementation((async (path: string) => {
+        throw path === '/api/session/start' ? closed : new ApiError(409, 'nothing_to_resume', {})
+      }) as unknown as typeof api)
+      const wrapper = await renderStart()
+      await submit(wrapper, 'ABCD-EFGH')
+
+      expect(wrapper.get('[role=alert]').text()).toContain('not open right now')
+      expect(getSessionId()).toBeNull()
+    })
+
+    it('does not try to resume for any other refusal', async () => {
+      vi.mocked(api).mockRejectedValue(new ApiError(401, 'invalid_invitation', {}))
+      const wrapper = await renderStart()
+      await submit(wrapper, 'WRONG')
+      expect(vi.mocked(api)).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('tells a throttled candidate how long to wait', async () => {

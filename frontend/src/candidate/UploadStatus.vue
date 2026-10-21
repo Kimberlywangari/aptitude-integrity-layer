@@ -8,13 +8,18 @@ import ProgressBar from '../components/ProgressBar.vue'
 import SuccessMark from '../components/SuccessMark.vue'
 import { api } from '../lib/api'
 import type { ManifestResponse } from '../lib/api'
+import { flushEvents, logEvent, startEventLog } from '../lib/eventLog'
 import { CANDIDATE_PATH } from '../lib/routes'
 import { getSessionId } from '../lib/session'
+import { onUploadStatus, startUploader, uploadStatus } from '../lib/uploader'
+import type { UploadStatus as LocalUpload } from '../lib/uploader'
 import {
   FINISHED_BODY,
   FINISHED_TITLE,
+  UPLOAD_CLOSED,
   UPLOAD_DONE,
   UPLOAD_KEEP_OPEN,
+  UPLOAD_RESUME_HINT,
   UPLOAD_STUCK,
   UPLOAD_TITLE,
 } from './copy'
@@ -29,6 +34,10 @@ const manifest = ref<ManifestResponse | null>(null)
 const failures = ref(0)
 const stalled = ref(false)
 const finished = ref(false)
+// What this computer still holds and is sending. The server's count (above) is what decides
+// whether the upload is complete; this is what explains why it is not yet.
+const local = ref<LocalUpload>(uploadStatus())
+let stopLocal: (() => void) | null = null
 
 let lastReceived = -1
 let lastChangeAt = 0
@@ -70,6 +79,13 @@ onMounted(async () => {
   }
   lastChangeAt = performance.now()
   window.addEventListener('beforeunload', warnBeforeClosing)
+  // Whatever is left on this computer is sent from here, whether the candidate has just finished
+  // or has come back to the invitation link after closing the tab.
+  stopLocal = onUploadStatus((next) => {
+    local.value = next
+  })
+  startEventLog(sessionId)
+  startUploader(sessionId)
   void poll()
 })
 
@@ -77,12 +93,22 @@ onBeforeUnmount(() => {
   stopped = true
   window.clearTimeout(timer)
   window.removeEventListener('beforeunload', warnBeforeClosing)
+  stopLocal?.()
 })
 
 const complete = computed(() => manifest.value?.complete === true)
+const closed = computed(() => local.value.halted === 'closed')
 const canFinishAnyway = computed(
-  () => !complete.value && (failures.value >= FAILURES_BEFORE_FINISH || stalled.value),
+  () => !complete.value && (failures.value >= FAILURES_BEFORE_FINISH || stalled.value || closed.value),
 )
+
+// The server is told how much was missing, so a reviewer sees "the recording is partial" rather
+// than wondering. The same note is made by the server once the 48 hours are over.
+function finishAnyway() {
+  void logEvent('upload_incomplete', { missing: manifest.value?.missing ?? local.value.pending })
+  void flushEvents()
+  finished.value = true
+}
 const percent = computed(() =>
   manifest.value && manifest.value.expected
     ? Math.round((manifest.value.received / manifest.value.expected) * 100)
@@ -127,12 +153,18 @@ const percent = computed(() =>
         <p v-if="failures > 0 && !complete" role="status" class="muted">
           Could not reach the server. Trying again.
         </p>
+        <p v-if="local.pending > 0 && !complete" class="muted detail">
+          {{ local.pending }} {{ local.pending === 1 ? 'part is' : 'parts are' }} still on this
+          computer<template v-if="local.retrying">, waiting for the connection to the server</template>.
+        </p>
+        <p v-if="!complete" class="muted detail">{{ UPLOAD_RESUME_HINT }}</p>
 
-        <Banner v-if="canFinishAnyway" tone="bad" role="alert"><p>{{ UPLOAD_STUCK }}</p></Banner>
+        <Banner v-if="closed" tone="bad" role="alert"><p>{{ UPLOAD_CLOSED }}</p></Banner>
+        <Banner v-else-if="canFinishAnyway" tone="bad" role="alert"><p>{{ UPLOAD_STUCK }}</p></Banner>
 
         <div class="actions">
           <BaseButton v-if="complete" @click="finished = true">Finish</BaseButton>
-          <BaseButton v-if="canFinishAnyway" variant="secondary" @click="finished = true">
+          <BaseButton v-if="canFinishAnyway" variant="secondary" @click="finishAnyway">
             Finish anyway
           </BaseButton>
         </div>

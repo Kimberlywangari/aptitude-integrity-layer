@@ -15,6 +15,7 @@ import { api } from '../src/lib/api'
 import { captureProblem } from '../src/lib/browser'
 import { acquireDevices } from '../src/lib/devices'
 import type { DeviceHandle } from '../src/lib/devices'
+import { heldDevices, releaseDevices } from '../src/lib/media'
 import { resetMock, setMockLatency } from '../src/lib/mock'
 import { clearSession, saveSession } from '../src/lib/session'
 import { fs, resetFullscreen } from './helpers/fakeFullscreen'
@@ -135,6 +136,7 @@ describe('PreCheck', () => {
     vi.useRealTimers()
     vi.unstubAllEnvs()
     vi.mocked(acquireDevices).mockReset()
+    releaseDevices() // whatever a test handed on must not reach the next one
   })
 
   it('goes back to the start page when there is no session', async () => {
@@ -323,7 +325,7 @@ describe('PreCheck', () => {
   })
 
   describe('the last step', () => {
-    it('reports everything, releases the camera and moves on', async () => {
+    it('reports everything, hands the camera on to the recording and moves on', async () => {
       const fake = fakeDevices()
       vi.mocked(acquireDevices).mockResolvedValue(fake.handle)
       const w = await renderPage()
@@ -333,7 +335,9 @@ describe('PreCheck', () => {
       await press(w, 'Continue to the test')
 
       expect(w.text()).toContain('integrity page')
-      expect(fake.stop).toHaveBeenCalled()
+      // the recording uses this same stream, so it is kept on rather than switched off and on again
+      expect(heldDevices()).toBe(fake.handle)
+      expect(fake.stop).not.toHaveBeenCalled()
       const [path, options] = vi.mocked(api).mock.calls[0] as [string, { body: Record<string, unknown> }]
       expect(path).toBe('/api/precheck/result')
       expect(options.body).toMatchObject({
@@ -346,6 +350,18 @@ describe('PreCheck', () => {
         video_size: { width: 320, height: 240 },
         browser: { name: expect.any(String), version: expect.any(String) },
       })
+    })
+
+    it('lets the camera go if the candidate leaves before the check is passed', async () => {
+      const fake = fakeDevices()
+      vi.mocked(acquireDevices).mockResolvedValue(fake.handle)
+      const w = await renderPage()
+      await toDevices(w)
+
+      w.unmount()
+
+      expect(fake.stop).toHaveBeenCalled()
+      expect(heldDevices()).toBeNull()
     })
   })
 

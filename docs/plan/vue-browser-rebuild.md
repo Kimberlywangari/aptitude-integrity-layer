@@ -104,6 +104,13 @@ The action logger and heartbeat, the recorder and upload, the real pre-check end
 serving and deletion, packets and the AI step. The screens for them exist and run on fixtures
 (`MOCKED_PREFIXES` in `src/lib/api.ts`) exactly as before.
 
+> **Update (19 Oct 2026):** everything in that list is now built. The backend side is in
+> [docs/api-reference.md](../api-reference.md), the app runs behind nginx in Compose, and the browser
+> side (the action logger, heartbeat, recorder with its IndexedDB queue and uploader, the resume
+> page, `chunks_total` on finish, and the switch from fixtures to the real server) is in
+> [frontend-recording-and-logging.md](frontend-recording-and-logging.md). `MOCKED_PREFIXES` and
+> `VITE_MOCK_API` are gone; the fixtures in `src/lib/mock/` serve the screen tests only.
+
 ## Risks specific to a plain browser
 
 1. **HTTPS and a domain.** No camera without them outside localhost. Needed from Cytonn before the pilot.

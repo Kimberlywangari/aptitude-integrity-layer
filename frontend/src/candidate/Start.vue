@@ -7,6 +7,7 @@ import BrandMark from '../components/BrandMark.vue'
 import { api, ApiError } from '../lib/api'
 import type { SessionStatus, StartResponse } from '../lib/api'
 import { normaliseInviteCode } from '../lib/inviteCode'
+import { resumeUpload } from '../lib/resume'
 import { saveSession } from '../lib/session'
 import { waitPhrase } from '../lib/wait'
 import { HELP_CONTACT, START_ERRORS, START_FALLBACK_ERROR } from './copy'
@@ -49,8 +50,23 @@ async function start(invitation: string) {
     saveSession(body.session_id, body.access_token)
     await router.replace(routeFor(body.status))
   } catch (e) {
+    // Once the sitting has closed, a code can no longer start anything. If the candidate already
+    // took the test and part of the recording is still unsent, the same code finishes the upload.
+    if (e instanceof ApiError && e.code === 'no_open_sitting' && (await resumedUpload(invitation))) {
+      return
+    }
     error.value = messageFor(e)
     busy.value = false
+  }
+}
+
+async function resumedUpload(invitation: string): Promise<boolean> {
+  try {
+    await resumeUpload(invitation)
+    await router.replace('/uploading')
+    return true
+  } catch {
+    return false // nothing to resume: the message about the test not being open stands
   }
 }
 
