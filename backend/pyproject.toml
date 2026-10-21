@@ -22,6 +22,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "ruff"]
+# only needed when AI_PROVIDER=claude; imported nowhere else
+claude = ["anthropic"]
 
 [tool.setuptools.packages.find]
 include = ["app*", "scripts*"]
