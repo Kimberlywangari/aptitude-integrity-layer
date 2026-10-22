@@ -115,7 +115,7 @@ export interface CandidateDetail {
   rule_breakdown: BreakdownLine[]
   score: number
   pace_s_per_q: number
-  history_source: 'cytonn' | 'synthetic'
+  history_source: 'cytonn' | 'synthetic' | 'none'
   flags: FlagItem[]
   vs_sitting: VsSitting
   innocent_signals: InnocentSignal[]

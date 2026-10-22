@@ -15,6 +15,7 @@ from scripts import (
     close_sitting,
     compute_flags,
     detect_silence,
+    fetch_cytonn_bank,
     import_question_summary,
     load_question_bank,
     loop,
@@ -33,6 +34,7 @@ from scripts import (
 JOBS: dict[str, Callable[[list[str]], None]] = {
     "seed_synthetic": seed_synthetic.main,
     "load_question_bank": load_question_bank.main,
+    "fetch_cytonn_bank": fetch_cytonn_bank.main,
     "import_question_summary": import_question_summary.main,
     "simulate_cohort": simulate_cohort.main,
     "close_sitting": close_sitting.main,

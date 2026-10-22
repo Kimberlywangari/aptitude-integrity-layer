@@ -108,7 +108,9 @@ a minute or more.
   there are 3 or more losses", which the code does not do. Decide which one is intended.
 - **Question history:** `FAST_CORRECT_VS_HISTORY` compares against estimated times until Cytonn's
   real statistics are imported. Its detail says `history_source: synthetic` or `cytonn`, so a
-  reviewer knows how much to lean on it.
+  reviewer knows how much to lean on it. Questions loaded from Cytonn's aptitude API have no
+  statistics at all (the API has no per-question timing), so the rule skips them; a paper made only
+  of such questions shows `history_source: none` and the reviewer page says the check could not run.
 - **False flags are above the target.** Measured on 19 Oct 2026 with the defaults above, over 40
   simulated sittings of 16 (400 honest candidates): **66 were queued by a rule other than a lone
   focus loss, 16.5%**. The target is at most 1 in 10. What fired on them: `LONG_HOLD_CORRECT` 37,

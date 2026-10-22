@@ -125,7 +125,7 @@ class CandidateDetail(BaseModel):
     rule_breakdown: list[BreakdownLine]
     score: int
     pace_s_per_q: float
-    history_source: Literal["cytonn", "synthetic"]
+    history_source: Literal["cytonn", "synthetic", "none"]
     flags: list[FlagItem]
     # only the keys that apply are present, as the page expects (cohort_skipped, or percentiles)
     vs_sitting: dict[str, Any]

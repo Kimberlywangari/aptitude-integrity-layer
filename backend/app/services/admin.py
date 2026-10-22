@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_token, new_invite_code
 from app.errors import ApiError
-from app.models import Candidate, Question, QuestionStats, SessionQuestion, Sitting, TestSession
+from app.models import Candidate, Question, SessionQuestion, Sitting, TestSession
+from app.services.shuffle import most_asked_of_a_section
 
 MAX_INVITES = 500
 MIN_DURATION_S = 60
@@ -119,9 +120,21 @@ def create_sitting(
     if opens_at and closes_at and closes_at <= opens_at:
         raise ApiError(422, "invalid_window")
 
-    available = db.scalar(select(func.count()).select_from(Question)) or 0
+    per_section = dict(
+        db.execute(select(Question.section, func.count()).group_by(Question.section)).all()
+    )
+    available = sum(per_section.values())
     if question_count > available:
         raise ApiError(409, "question_bank_too_small", available=available)
+    # a paper is spread over the sections, so a small one would fail a candidate's start later
+    needed = most_asked_of_a_section(question_count, len(per_section))
+    short = [
+        {"section": section, "available": count}
+        for section, count in sorted(per_section.items())
+        if count < needed
+    ]
+    if short:
+        raise ApiError(409, "section_too_small", needed=needed, sections=short)
     if db.scalar(select(Sitting.id).where(Sitting.name == name)) is not None:
         raise ApiError(409, "name_taken")
 
@@ -197,9 +210,9 @@ def generate_invites(db: Session, count: int) -> list[tuple[str, str]]:
 
 def bank_summary(db: Session) -> BankSummary:
     rows = db.execute(
-        select(Question.section, QuestionStats.source, func.count())
-        .outerjoin(QuestionStats, QuestionStats.question_id == Question.id)
-        .group_by(Question.section, QuestionStats.source)
+        select(Question.section, Question.source, func.count()).group_by(
+            Question.section, Question.source
+        )
     )
     sections: dict[str, list[int]] = {}  # section -> [count, cytonn, synthetic]
     for section, source, n in rows:
@@ -221,19 +234,18 @@ def bank_summary(db: Session) -> BankSummary:
 def retire_synthetic(db: Session) -> tuple[int, int]:
     """Remove placeholder questions. Returns (removed, kept): a placeholder that an earlier
     session already drew is kept, because that session's paper still points at it."""
-    placeholders = select(QuestionStats.question_id).where(QuestionStats.source == "synthetic")
     drawn = select(SessionQuestion.question_id)
 
     kept = (
         db.scalar(
             select(func.count())
             .select_from(Question)
-            .where(Question.id.in_(placeholders), Question.id.in_(drawn))
+            .where(Question.source == "synthetic", Question.id.in_(drawn))
         )
         or 0
     )
     removable = db.scalars(
-        select(Question).where(Question.id.in_(placeholders), Question.id.not_in(drawn))
+        select(Question).where(Question.source == "synthetic", Question.id.not_in(drawn))
     ).all()
     for question in removable:
         db.delete(question)  # its options and stats go with it

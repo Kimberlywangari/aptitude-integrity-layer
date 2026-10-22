@@ -105,8 +105,10 @@ def vs_sitting(
 
 
 def history_source(db: Session, session_id: str) -> str:
-    """`cytonn` only when every question in the paper has Cytonn's own statistics; otherwise the
-    baseline the per-question check used is partly made up, and a reviewer should know."""
+    """`cytonn` only when every question that has statistics has Cytonn's own; otherwise the
+    baseline the per-question check used is partly made up, and a reviewer should know. `none` when
+    no question in the paper has any (questions loaded from the aptitude API have none), so the
+    per-question speed check could not run."""
     sources = set(
         db.scalars(
             select(QuestionStats.source)
@@ -114,6 +116,8 @@ def history_source(db: Session, session_id: str) -> str:
             .where(SessionQuestion.session_id == session_id)
         )
     )
+    if not sources:
+        return "none"
     return "cytonn" if sources == {"cytonn"} else "synthetic"
 
 

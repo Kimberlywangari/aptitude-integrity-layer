@@ -20,6 +20,13 @@ def shuffle_options(session_id: str, position: int, option_ids: Sequence[int]) -
     return order
 
 
+def most_asked_of_a_section(count: int, section_count: int) -> int:
+    """The most questions `balanced_sample` can ask of any one section: it gives each section
+    count // sections and a random few of them one more, so any section may be asked the rounded-up
+    share. A section holding fewer than this can fail a candidate's start."""
+    return -(-count // section_count)
+
+
 def balanced_sample(
     rng: random.Random, by_section: Mapping[str, Sequence[str]], count: int
 ) -> list[str]:

@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-5-5"
     anthropic_api_key: str = ""
 
+    # Cytonn's read-only aptitude API, used only by the fetch_cytonn_bank job. The key is a shared
+    # secret: it stays in .env and is never printed or logged.
+    aptitude_api_base_url: str = "https://hr.cytonn.com/api/aptitude"
+    aptitude_api_key: str = ""
+
     @model_validator(mode="after")
     def _production_keeps_the_gate(self) -> "Settings":
         if self.env == "production" and self.precheck_gate != "recording":

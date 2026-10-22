@@ -193,6 +193,7 @@ def import_summary(
                 difficulty=difficulty,
                 correct_option=correct,
                 text=text,
+                source="cytonn",
             )
             question.options = [Option(label=label, text=options[label]) for label in LABELS]
             db.add(question)
@@ -200,6 +201,7 @@ def import_summary(
             question.section = section
             question.difficulty = difficulty
             question.correct_option = correct
+            question.source = "cytonn"
             if text:
                 question.text = text
             for option in question.options:

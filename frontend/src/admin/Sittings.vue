@@ -13,26 +13,7 @@ import type {
 } from '../lib/adminTypes'
 import { formatDateTime } from '../lib/format'
 import SetupSteps from './SetupSteps.vue'
-
-const CREATE_ERRORS: Record<string, string> = {
-  name_required: 'Give the sitting a name.',
-  name_too_long: 'That name is too long. Use 100 characters or fewer.',
-  name_taken: 'A sitting with that name already exists.',
-  invalid_duration: 'The duration must be at least one minute.',
-  invalid_question_count: 'The sitting needs at least one question.',
-  invalid_window: 'It must close after it opens.',
-}
-
-function createMessage(error: unknown): string | null {
-  if (!error) return null
-  if (error instanceof ApiError) {
-    if (error.code === 'question_bank_too_small') {
-      return `The question bank has only ${String(error.body.available ?? 'a few')} questions.`
-    }
-    return CREATE_ERRORS[error.code] ?? 'Could not create the sitting.'
-  }
-  return 'Could not create the sitting.'
-}
+import { createMessage } from './sittingErrors'
 
 function toIso(local: string): string | null {
   if (!local) return null

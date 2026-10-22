@@ -10,6 +10,33 @@ real data exists. All of it is labelled, and each piece can be removed or replac
 | The simulated sitting | Name "Simulated cohort 1 (made up)", candidates `sim-001` to `sim-016` | `python -m scripts.jobs simulate_cohort --purge` |
 | The invited test candidates | `cand-001` to `cand-020`, sitting "Synthetic sitting 1" | Create a real sitting and invitations in the admin screens |
 
+## Loading the questions from Cytonn's aptitude API
+
+If Cytonn gives access to their aptitude API, the questions, answers and answer key can come from
+there instead of a file (the plan is `docs/plan/cytonn-api-question-bank.md`). Put the key Cytonn
+gave you in `.env` as `APTITUDE_API_KEY` (git-ignored; never paste it into chat or a commit).
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m scripts.jobs fetch_cytonn_bank --dry-run --save-raw ..\data\aptitude-sections-raw.json
+.\.venv\Scripts\python.exe -m scripts.jobs fetch_cytonn_bank
+```
+
+The dry run reads everything and changes nothing. It prints the sections, how many questions each
+has and the minutes Cytonn allows per question (a sitting's duration is questions × minutes), what
+was skipped and why, and any warnings. A question with no correct answer marked, or more than one, is
+skipped, not guessed. A question a session has already drawn is never changed.
+
+These questions come with **no statistics**, because the API has no per-question timing, so the
+"far faster than past candidates" flag skips them. The per-question summary below is still the only
+source of real statistics, but it has not been worked out how to combine it with these questions:
+the importer also overwrites each question's correct option with the letter in the file, and the
+letters here follow Cytonn's answer ids, not necessarily the file's. Settle that with Cytonn before
+importing the summary over questions loaded from the API (their ids look like `C10`).
+
+Then continue from step 3 below (retire the placeholders). The simulated cohort cannot be run once
+only questions without statistics are left, so do step 1 first.
+
 ## Order to follow when Cytonn's data arrives
 
 1. **Remove the simulated sitting first.** The retire step keeps any placeholder question that a

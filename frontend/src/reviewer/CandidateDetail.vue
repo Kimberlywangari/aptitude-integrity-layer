@@ -172,6 +172,10 @@ const aiShown = computed(() => data.value?.explanation.source === 'ai')
             The per-question history behind the "far faster than past candidates" flag is synthetic
             sample data, not Cytonn's.
           </p>
+          <p v-else-if="data.history_source === 'none'" class="muted">
+            There is no past-candidate timing for these questions, so the "far faster than past
+            candidates" flag could not be checked.
+          </p>
         </section>
 
         <section class="panel">
