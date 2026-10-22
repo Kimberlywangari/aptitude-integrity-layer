@@ -2,7 +2,7 @@
 
     python -m scripts.jobs fetch_cytonn_bank [--file PATH] [--save-raw PATH] [--dry-run] [--force]
 
-Reads GET {APTITUDE_API_BASE_URL}/sections with the key in APTITUDE_API_KEY (.env). One request per
+Reads GET {APTITUDE_API_BASE_URL}/sections with the key in X-API-KEY (.env). One request per
 run. The key goes in the X-API-KEY header only: it is never printed, logged or put in a message.
 `--file` loads a response saved earlier instead of calling the API. `--save-raw` keeps the response
 as received; put it under data/, which git ignores (it holds the answer key).
@@ -30,15 +30,23 @@ class FetchError(Exception):
     """The API could not be read. The message never contains the key."""
 
 
-def fetch_sections(base_url: str, api_key: str, *, client: httpx.Client | None = None) -> bytes:
-    """The raw body of GET /sections."""
+def fetch_endpoint(
+    base_url: str,
+    api_key: str,
+    path: str,
+    *,
+    params: dict[str, int] | None = None,
+    client: httpx.Client | None = None,
+) -> bytes:
+    """The raw body of GET {base_url}/{path}. The key goes in the header, never in the URL."""
     if not api_key:
-        raise FetchError("APTITUDE_API_KEY is empty. Add the key Cytonn gave you to .env.")
+        raise FetchError("X-API-KEY is empty. Add the key Cytonn gave you to .env.")
     own = client is None
     http = client or httpx.Client(timeout=TIMEOUT_S)
     try:
         response = http.get(
-            f"{base_url.rstrip('/')}/sections",
+            f"{base_url.rstrip('/')}/{path}",
+            params=params,
             headers={"X-API-KEY": api_key, "Accept": "application/json"},
         )
     except httpx.HTTPError as problem:
@@ -49,7 +57,7 @@ def fetch_sections(base_url: str, api_key: str, *, client: httpx.Client | None =
 
     if response.status_code == 401:
         raise FetchError(
-            "Cytonn rejected the API key (401 Unauthorized). Check APTITUDE_API_KEY in .env, and "
+            "Cytonn rejected the API key (401 Unauthorized). Check X-API-KEY in .env, and "
             "ask Cytonn whether the key has been replaced."
         )
     if response.status_code == 429:
@@ -57,6 +65,11 @@ def fetch_sections(base_url: str, api_key: str, *, client: httpx.Client | None =
     if response.status_code != 200:
         raise FetchError(f"Cytonn's API answered {response.status_code}, not 200")
     return response.content
+
+
+def fetch_sections(base_url: str, api_key: str, *, client: httpx.Client | None = None) -> bytes:
+    """The raw body of GET /sections."""
+    return fetch_endpoint(base_url, api_key, "sections", client=client)
 
 
 def _report(bank: ParsedBank, result: LoadResult, *, dry_run: bool, source: str) -> None:
