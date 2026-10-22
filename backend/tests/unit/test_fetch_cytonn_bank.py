@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+from app.config import Settings
 from app.services.cytonn_bank import LoadResult, parse_sections
 from scripts.fetch_cytonn_bank import FetchError, _report, fetch_sections
 
@@ -36,9 +37,17 @@ def test_a_rejected_key_says_so_without_repeating_the_key():
     assert KEY not in str(problem.value)
 
 
+def test_the_key_is_read_from_the_x_api_key_line_of_the_env_file(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"X-API-KEY={KEY}\n", encoding="utf-8")
+
+    assert Settings(_env_file=env_file).aptitude_api_key == KEY
+    assert Settings(_env_file=None).aptitude_api_key == ""
+
+
 def test_a_missing_key_is_caught_before_any_request():
     seen: list[httpx.Request] = []
-    with pytest.raises(FetchError, match="APTITUDE_API_KEY"):
+    with pytest.raises(FetchError, match="X-API-KEY"):
         fetch_sections(BASE, "", client=client_answering(200, seen=seen))
     assert seen == []
 

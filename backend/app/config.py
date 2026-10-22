@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The repository root, one level above backend/. .env lives there, and so do relative data paths.
@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     # Cytonn's read-only aptitude API, used only by the fetch_cytonn_bank job. The key is a shared
     # secret: it stays in .env and is never printed or logged.
     aptitude_api_base_url: str = "https://hr.cytonn.com/api/aptitude"
-    aptitude_api_key: str = ""
+    aptitude_api_key: str = Field("", validation_alias="X-API-KEY")  # named for the header it fills
 
     @model_validator(mode="after")
     def _production_keeps_the_gate(self) -> "Settings":
