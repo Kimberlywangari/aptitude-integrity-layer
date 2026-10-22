@@ -20,6 +20,13 @@ def shuffle_options(session_id: str, position: int, option_ids: Sequence[int]) -
     return order
 
 
+def most_asked_of_a_section(count: int, section_count: int) -> int:
+    """The most questions `balanced_sample` can ask of any one section: it gives each section
+    count // sections and a random few of them one more, so any section may be asked the rounded-up
+    share. A section holding fewer than this can fail a candidate's start."""
+    return -(-count // section_count)
+
+
 def balanced_sample(
     rng: random.Random, by_section: Mapping[str, Sequence[str]], count: int
 ) -> list[str]:
@@ -37,6 +44,24 @@ def balanced_sample(
     for section in sections:
         wanted = base + (1 if section in with_extra else 0)
         pool = sorted(by_section[section])
+        if wanted > len(pool):
+            raise ValueError(f"section {section!r} has {len(pool)} questions, need {wanted}")
+        picked.extend(rng.sample(pool, wanted))
+    return picked
+
+
+def blueprint_sample(
+    rng: random.Random, by_section: Mapping[str, Sequence[str]], blueprint: Mapping[str, int]
+) -> list[str]:
+    """Pick exactly the number of question IDs the blueprint asks of each section.
+
+    Sections stay grouped (in name order) and the questions inside each are in random order, as in
+    `balanced_sample`.
+    """
+    picked: list[str] = []
+    for section in sorted(blueprint):
+        wanted = blueprint[section]
+        pool = sorted(by_section.get(section, ()))
         if wanted > len(pool):
             raise ValueError(f"section {section!r} has {len(pool)} questions, need {wanted}")
         picked.extend(rng.sample(pool, wanted))

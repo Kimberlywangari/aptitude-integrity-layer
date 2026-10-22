@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, ApiError, pathForError, setSebRequiredHandler } from '../src/lib/api'
+import { api, ApiError, pathForError } from '../src/lib/api'
 import { clearSession, getAccessToken, saveSession } from '../src/lib/session'
 
 function respond(status: number, body?: unknown) {
@@ -21,7 +21,6 @@ describe('api()', () => {
 
   afterEach(() => {
     fetchMock.mockReset()
-    setSebRequiredHandler(null)
     vi.unstubAllGlobals()
   })
 
@@ -50,6 +49,13 @@ describe('api()', () => {
     await expect(api('/api/session/s1/self-report', { method: 'POST', body: {} })).resolves.toBeUndefined()
   })
 
+  it('treats every 403 like any other error', async () => {
+    fetchMock.mockReturnValue(respond(403, { code: 'forbidden' }))
+    const error = await api('/x').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).code).toBe('forbidden')
+  })
+
   it('throws ApiError carrying the server code and extra fields', async () => {
     fetchMock.mockReturnValue(respond(409, { code: 'not_current', current_position: 4 }))
     const error = await api('/x').catch((e: unknown) => e)
@@ -57,23 +63,6 @@ describe('api()', () => {
     expect((error as ApiError).status).toBe(409)
     expect((error as ApiError).code).toBe('not_current')
     expect((error as ApiError).body.current_position).toBe(4)
-  })
-
-  it('maps 403 seb_required to the registered handler and still throws', async () => {
-    const handler = vi.fn()
-    setSebRequiredHandler(handler)
-    fetchMock.mockReturnValue(respond(403, { code: 'seb_required' }))
-
-    await expect(api('/api/session/start', { method: 'POST', body: {} })).rejects.toBeInstanceOf(ApiError)
-    expect(handler).toHaveBeenCalledOnce()
-  })
-
-  it('does not call the SEB handler for other 403s', async () => {
-    const handler = vi.fn()
-    setSebRequiredHandler(handler)
-    fetchMock.mockReturnValue(respond(403, { code: 'no_open_sitting' }))
-    await api('/x').catch(() => undefined)
-    expect(handler).not.toHaveBeenCalled()
   })
 })
 
@@ -84,7 +73,7 @@ describe('pathForError()', () => {
     expect(pathForError(err('not_started'))).toBe('/integrity')
     expect(pathForError(err('finished'))).toBe('/done')
     expect(pathForError(err('time_up'))).toBe('/done')
-    expect(pathForError(err('unauthorized'))).toBe('/')
+    expect(pathForError(err('unauthorized'))).toBe('/candidate')
   })
 
   it('leaves everything else to the caller', () => {

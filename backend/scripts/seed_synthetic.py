@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.core.security import hash_token
+from app.core.security import format_invite_code, hash_token, invite_code_from_digest
 from app.models import Candidate, Option, Question, QuestionStats, Sitting
 
 SECTIONS = ("numerical", "verbal", "logical")
@@ -60,9 +60,10 @@ class SeedSummary:
 
 
 def _invite_token(secret: str, seed: int, number: int) -> str:
-    """Deterministic, so `seed` can rebuild data/invites.csv; keyed with the session secret."""
+    """A short code candidates can type. Deterministic, so `seed` can rebuild data/invites.csv;
+    keyed with the session secret. The canonical form has no dash: that is what gets hashed."""
     mac = hmac.new(secret.encode(), f"invite:{seed}:{number}".encode(), hashlib.sha256)
-    return mac.hexdigest()[:24]
+    return invite_code_from_digest(mac.digest())
 
 
 def seed(
@@ -154,7 +155,9 @@ def seed(
             # Seeded earlier with another seed or secret: the token can't be reproduced.
             summary.token_mismatches += 1
             continue
-        summary.invites.append(Invite(candidate_id, token, f"{base_url}/?t={token}"))
+        summary.invites.append(
+            Invite(candidate_id, token, f"{base_url}/?t={format_invite_code(token)}")
+        )
 
     db.commit()
 
@@ -164,7 +167,9 @@ def seed(
             writer = csv.writer(fh)
             writer.writerow(["candidate_id", "token", "url"])
             for invite in summary.invites:
-                writer.writerow([invite.candidate_id, invite.token, invite.url])
+                # The CSV shows the code the way a candidate types it: XXXX-XXXX.
+                code = format_invite_code(invite.token)
+                writer.writerow([invite.candidate_id, code, invite.url])
     return summary
 
 

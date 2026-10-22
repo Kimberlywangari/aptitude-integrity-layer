@@ -1,16 +1,17 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_clock
+from app.api.deps import client_key, get_clock, get_start_limiter
 from app.clock import Clock
-from app.core.seb import require_seb
+from app.config import Settings, get_settings
 from app.core.security import tokens_match
 from app.db import get_db
 from app.errors import ApiError
 from app.models import TestSession
+from app.schemas.recording import FinishRequest, ResumeRequest, ResumeResponse
 from app.schemas.session import (
     AnswerRequest,
     BeginRequest,
@@ -24,7 +25,9 @@ from app.schemas.session import (
     StartRequest,
     StartResponse,
 )
+from app.services import resume as resume_service
 from app.services import test_flow
+from app.services.rate_limit import AttemptLimiter
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -53,15 +56,55 @@ def current_session(
 @router.post("/start", response_model=StartResponse)
 def start(
     body: StartRequest,
+    request: Request,
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-    seb_verified: bool = Depends(require_seb),
+    limiter: AttemptLimiter = Depends(get_start_limiter),
+    settings: Settings = Depends(get_settings),
 ) -> StartResponse:
-    result = test_flow.start_session(db, clock, body.token, seb_verified)
+    key = client_key(request, settings)
+    wait = limiter.retry_after_s(key, clock.now())
+    if wait > 0:
+        raise ApiError(429, "too_many_attempts", retry_after_s=wait)
+    try:
+        result = test_flow.start_session(db, clock, body.token)
+    except ApiError as exc:
+        if exc.code == "invalid_invitation":
+            limiter.record_failure(key, clock.now())
+        raise
     return StartResponse(
         session_id=result.session.id,
         access_token=result.access_token,
         status=result.session.status,
+    )
+
+
+@router.post("/resume", response_model=ResumeResponse)
+def resume(
+    body: ResumeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    limiter: AttemptLimiter = Depends(get_start_limiter),
+    settings: Settings = Depends(get_settings),
+) -> ResumeResponse:
+    """Finish uploading after the test: an invitation code in, an upload-only token out, for up to
+    48 hours after finishing. Wrong codes count against the same limit as the start page."""
+    key = client_key(request, settings)
+    wait = limiter.retry_after_s(key, clock.now())
+    if wait > 0:
+        raise ApiError(429, "too_many_attempts", retry_after_s=wait)
+    try:
+        result = resume_service.issue_upload_token(db, clock, body.token, settings.resume_window_s)
+    except ApiError as exc:
+        if exc.code == "invalid_invitation":
+            limiter.record_failure(key, clock.now())
+        raise
+    return ResumeResponse(
+        session_id=result.session.id,
+        access_token=result.upload_token,
+        status="finished",
+        expires_at=result.expires_at,
     )
 
 
@@ -71,8 +114,9 @@ def begin(
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
 ) -> BeginResponse:
-    test_flow.begin(db, clock, session, body.accepted)
+    test_flow.begin(db, clock, session, body.accepted, settings.precheck_gate)
     remaining = (session.ends_at - clock.now()).total_seconds()
     return BeginResponse(status=session.status, remaining_s=max(0.0, round(remaining, 1)))
 
@@ -100,11 +144,8 @@ def answer(
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-    seb_verified: bool = Depends(require_seb),
 ) -> ResolveResponse:
-    done, remaining = test_flow.answer(
-        db, clock, session, body.position, body.option_id, seb_verified
-    )
+    done, remaining = test_flow.answer(db, clock, session, body.position, body.option_id)
     return ResolveResponse(done=done, remaining_s=remaining)
 
 
@@ -114,19 +155,19 @@ def skip(
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-    seb_verified: bool = Depends(require_seb),
 ) -> ResolveResponse:
-    done, remaining = test_flow.skip(db, clock, session, body.position, seb_verified)
+    done, remaining = test_flow.skip(db, clock, session, body.position)
     return ResolveResponse(done=done, remaining_s=remaining)
 
 
 @router.post("/{session_id}/finish", response_model=FinishResponse)
 def finish(
+    body: FinishRequest | None = None,
     session: TestSession = Depends(current_session),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
 ) -> FinishResponse:
-    summary = test_flow.finish(db, clock, session)
+    summary = test_flow.finish(db, clock, session, body.chunks_total if body else None)
     return FinishResponse(status=session.status, **asdict(summary))
 
 

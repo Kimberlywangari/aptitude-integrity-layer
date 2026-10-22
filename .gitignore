@@ -17,9 +17,10 @@ playwright-report/
 # Local config and data (never commit)
 .env
 data/
-*.seb
-docs/spikes/laptop-specs.md
+docs/
 .claude/
+.agents/
+skills-lock.json
 
 # Editors and OS
 .vscode/

@@ -1,3 +1,34 @@
+x-backend: &backend
+  build: ./backend
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+  environment: &backend-env
+    # Inside the Compose network the database is `db:5432`, not localhost:5433.
+    DATABASE_URL: postgresql+psycopg://integrity:integrity@db:5432/integrity
+    VIDEO_ROOT: /data/video
+    # Everything below is read from the .env at the repository root when set there.
+    ENV: ${ENV:-development}
+    SESSION_SECRET: ${SESSION_SECRET:-change-me-dev-only}
+    PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+    PRECHECK_GATE: ${PRECHECK_GATE:-off}
+    RETENTION_DAYS: ${RETENTION_DAYS:-30}
+    RESUME_WINDOW_S: ${RESUME_WINDOW_S:-172800}
+    UNDECIDED_REPORT_DAYS: ${UNDECIDED_REPORT_DAYS:-60}
+    CHUNK_FAIL_RATE: ${CHUNK_FAIL_RATE:-0}
+    AI_PROVIDER: ${AI_PROVIDER:-rules}
+    # Ollama runs on the host, not in a container.
+    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_IN_DOCKER:-http://host.docker.internal:11434}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+    AI_TIMEOUT_S: ${AI_TIMEOUT_S:-150}
+    CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  volumes:
+    - videodata:/data/video
+
 services:
   db:
     image: postgres:16
@@ -18,5 +49,41 @@ services:
       timeout: 3s
       retries: 10
 
+  # `docker compose up -d db` still starts only the database, as the run guide says. The whole
+  # stack is `docker compose up -d --build`; candidates and staff open http://localhost:8080.
+  api:
+    <<: *backend
+    ports:
+      # This machine only. Everyone else goes through `web`, which is what makes the forwarded
+      # address below trustworthy: reached directly, a caller could write it themselves.
+      - "127.0.0.1:8000:8000"
+    environment:
+      <<: *backend-env
+      # `web` (nginx) appends the caller's address to X-Forwarded-For. Without this every
+      # candidate would look like one address and share one wrong-code limit.
+      TRUST_FORWARDED_FOR: ${TRUST_FORWARDED_FOR:-true}
+
+  # The page and the single address for the API: nginx serves the built app and proxies /api.
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # The housekeeping that must happen on its own: delete video due for deletion, note uploads
+  # that never finished. Runs hourly.
+  worker:
+    <<: *backend
+    command: ["python", "-m", "scripts.jobs", "loop"]
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  videodata:

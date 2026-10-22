@@ -2,7 +2,13 @@ from collections import Counter
 
 import pytest
 
-from app.services.shuffle import balanced_sample, session_rng, shuffle_options
+from app.services.shuffle import (
+    balanced_sample,
+    blueprint_sample,
+    most_asked_of_a_section,
+    session_rng,
+    shuffle_options,
+)
 
 BANK = {
     "numerical": [f"N{i:02d}" for i in range(20)],
@@ -54,3 +60,33 @@ def test_option_shuffle_is_a_stable_permutation_per_position():
     assert first == shuffle_options("s1", 3, ids)
     orders = {tuple(shuffle_options(f"session-{n}", 1, ids)) for n in range(30)}
     assert len(orders) > 1  # different sessions do get different orders
+
+
+@pytest.mark.parametrize(
+    ("count", "sections", "most"), [(12, 3, 4), (13, 3, 5), (14, 3, 5), (10, 1, 10), (1, 3, 1)]
+)
+def test_the_most_asked_of_a_section_is_the_rounded_up_share(count, sections, most):
+    assert most_asked_of_a_section(count, sections) == most
+
+
+@pytest.mark.parametrize("count", [5, 7, 13, 14])
+def test_sections_of_exactly_that_size_always_make_a_paper(count):
+    need = most_asked_of_a_section(count, 3)
+    bank = {name: [f"{name}{i}" for i in range(need)] for name in ("a", "b", "c")}
+    for seed in range(60):
+        assert len(balanced_sample(session_rng(f"s{seed}", "paper"), bank, count)) == count
+
+
+def test_a_blueprint_asks_for_exactly_its_number_from_each_section():
+    wanted = {"numerical": 5, "logical": 2}
+    picked = blueprint_sample(session_rng("s1", "paper"), BANK, wanted)
+    assert len(picked) == len(set(picked)) == 7
+    assert sections_of(picked) == {"N": 5, "L": 2}
+    assert picked == blueprint_sample(session_rng("s1", "paper"), BANK, wanted)
+
+
+def test_a_blueprint_that_asks_for_more_than_a_section_has_is_an_error():
+    with pytest.raises(ValueError, match="numerical"):
+        blueprint_sample(session_rng("s1", "paper"), BANK, {"numerical": 21})
+    with pytest.raises(ValueError, match="astrology"):
+        blueprint_sample(session_rng("s1", "paper"), BANK, {"astrology": 1})

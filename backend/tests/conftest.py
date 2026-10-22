@@ -15,12 +15,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_clock
+from app.api.deps import get_clock, get_login_limiter, get_start_limiter
 from app.clock import FakeClock
 from app.config import Settings, get_settings
+from app.core import passwords
 from app.db import get_db
 from app.main import app
+from app.services.rate_limit import AttemptLimiter
+from app.services.staff_auth import create_reviewer
 from scripts.seed_synthetic import SeedSummary, seed
+from scripts.simulate_cohort import simulate
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TEST_PUBLIC_URL = "http://localhost:5173"
@@ -65,19 +69,25 @@ def db(test_engine: Engine) -> Iterator[Session]:
         connection.close()
 
 
+@pytest.fixture(autouse=True)
+def cheap_password_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """bcrypt's lowest cost, so a test that signs in does not spend a quarter of a second on it."""
+    monkeypatch.setattr(passwords, "ROUNDS", 4)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
 
 
 @pytest.fixture
-def settings() -> Settings:
-    """Test settings: SEB gate off, public URL fixed. Tests replace fields as they need."""
+def settings(tmp_path) -> Settings:
+    """Test settings: public URL fixed, video kept in a throwaway folder. Tests replace fields
+    as they need."""
     return Settings(
-        seb_mode="off",
-        seb_allowed_keys="",
         public_base_url=TEST_PUBLIC_URL,
         session_secret="test-secret",
+        video_root=str(tmp_path / "video"),
     )
 
 
@@ -91,6 +101,11 @@ def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestCl
     app.dependency_overrides[get_db] = reload_db
     app.dependency_overrides[get_clock] = lambda: clock
     app.dependency_overrides[get_settings] = lambda: settings
+    # a fresh wrong-code limiter per test, so one test's failures never block another
+    limiter = AttemptLimiter(settings.start_max_failures, settings.start_window_s)
+    app.dependency_overrides[get_start_limiter] = lambda: limiter
+    login_limiter = AttemptLimiter(settings.login_max_failures, settings.login_window_s)
+    app.dependency_overrides[get_login_limiter] = lambda: login_limiter
     try:
         yield TestClient(app)
     finally:
@@ -100,3 +115,25 @@ def client(db: Session, clock: FakeClock, settings: Settings) -> Iterator[TestCl
 @pytest.fixture
 def seeded(db: Session) -> SeedSummary:
     return seed(db, seed=42, secret="test-secret", public_base_url=TEST_PUBLIC_URL)
+
+
+@pytest.fixture
+def sim(db: Session, seeded: SeedSummary):
+    """The made-up closed sitting of sixteen finished candidates, flags already computed."""
+    result = simulate(db, seed=1)
+    db.flush()
+    return result
+
+
+STAFF_PASSWORD = "correct horse battery"
+
+
+@pytest.fixture
+def staff(client: TestClient, db: Session, clock: FakeClock) -> dict[str, str]:
+    """Authorization headers for a signed-in reviewer."""
+    create_reviewer(db, clock, email="rev@example.com", password=STAFF_PASSWORD)
+    db.flush()
+    token = client.post(
+        "/api/review/login", json={"email": "rev@example.com", "password": STAFF_PASSWORD}
+    ).json()["token"]
+    return {"Authorization": f"Bearer {token}"}

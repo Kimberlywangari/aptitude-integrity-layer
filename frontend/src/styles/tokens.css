@@ -1,0 +1,100 @@
+/* Design tokens. Every colour, radius, shadow and curve in the app comes from here, so the light
+   and dark themes are the two blocks below and nothing else. index.html sets data-theme before the
+   first paint (the stored choice, else the system setting) and the corner button flips it.
+   Text and accent pairs are at least 4.5:1 in both themes. */
+
+:root {
+  color-scheme: light;
+
+  /* System font: no download, and it already carries the platform's optical sizing. */
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+
+  --text: #13231f;
+  --muted: #4d5f5a;
+  --bg: #f2f6f5;
+  --surface: #ffffff;
+  --surface-2: #e9f1ef;
+  --line: #c9d8d4;
+  --line-soft: #dde8e5;
+  --field-line: #6f827d;
+
+  --accent: #036b5a;
+  --accent-strong: #024f42;
+  --accent-tint: #e1f0ec;
+  --on-accent: #ffffff; /* text on an accent or ok fill */
+
+  --ok: #0b6b4f;
+  --ok-tint: #dff1e6;
+  --danger: #a8281f;
+  --danger-tint: #fbe6e3;
+  --warn-bg: #fbf0d6;
+  --warn-line: #d9b44a;
+  --warn-text: #6b4506;
+
+  --lime: #a3d65c; /* the one bright accent: the active marker in the rail, flags on a timeline */
+  --lime-ink: #1c3810; /* text on lime */
+
+  --chip: #e9f1ef;
+  --chip-ai: #e3f2c8;
+  --overlay: rgb(12 22 20 / 55%);
+
+  /* The staff rail is dark in both themes, and so is the video surface. */
+  --side: #2b3a40;
+  --side-deep: #222d32;
+  --side-ink: #e7eeec;
+  --side-mute: #a7b8b3;
+  --video-bg: #0d1518;
+  --video-ink: #dbe7e3;
+  --video-track: #34484e;
+
+  --shadow-sm: 0 1px 2px rgb(19 35 31 / 6%), 0 1px 3px rgb(19 35 31 / 8%);
+  --shadow-md: 0 4px 12px rgb(19 35 31 / 8%), 0 12px 32px rgb(19 35 31 / 10%);
+  --page-glow: radial-gradient(60rem 26rem at 50% -9rem, rgb(3 107 90 / 10%), transparent 72%);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+
+  /* One strong ease-out for anything that responds to a person: it moves at once, then settles.
+     The built-in curves are too weak. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --text: #e5eeeb;
+  --muted: #a0b2ac;
+  --bg: #10181b;
+  --surface: #192327;
+  --surface-2: #213036;
+  --line: #3a4f56;
+  --line-soft: #2a3b41;
+  --field-line: #7f938d;
+
+  --accent: #3cc2a1;
+  --accent-strong: #7ae0c4;
+  --accent-tint: #16342d;
+  --on-accent: #06231c;
+
+  --ok: #74d9ad;
+  --ok-tint: #16342a;
+  --danger: #ff8f86;
+  --danger-tint: #3a1f1d;
+  --warn-bg: #3a2e14;
+  --warn-line: #8a7326;
+  --warn-text: #f0c46a;
+
+  --chip: #213036;
+  --chip-ai: #2c3d18;
+  --overlay: rgb(0 0 0 / 66%);
+
+  --side: #1b262a;
+  --side-deep: #141c1f;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 8px 28px rgb(0 0 0 / 50%);
+  --page-glow: radial-gradient(60rem 26rem at 50% -9rem, rgb(60 194 161 / 12%), transparent 72%);
+}

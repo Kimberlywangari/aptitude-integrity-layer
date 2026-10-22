@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -28,6 +29,8 @@ class TestSession(Base):
     __table_args__ = (
         UniqueConstraint("candidate_id", "sitting_id"),
         CheckConstraint("status in ('created', 'in_progress', 'finished')", name="status"),
+        # the queue, the cohort checks and the sitting counts all look a sitting's sessions up
+        Index("ix_sessions_sitting_id", "sitting_id"),
     )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
@@ -40,7 +43,6 @@ class TestSession(Base):
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    seb_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     integrity_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     precheck_passed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     precheck_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -49,6 +51,12 @@ class TestSession(Base):
     shortlisted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     video_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     access_token_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Issued by POST /api/session/resume after the test is over. It opens the upload routes
+    # (chunks, events, complaints) and nothing else, for as long as the resume window lasts.
+    upload_token_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    # How many chunks the page says it produced, sent with `finish`. The upload is complete when
+    # every number from 0 to this total has arrived.
+    chunks_total: Mapped[int | None] = mapped_column(Integer)
 
     questions: Mapped[list["SessionQuestion"]] = relationship(
         back_populates="session", order_by="SessionQuestion.position", cascade="all, delete-orphan"

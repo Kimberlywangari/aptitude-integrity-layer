@@ -3,42 +3,45 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SEB spike (D2)</title>
+  <title>Browser capture spike (D2)</title>
+  <!-- Temporary page for the D2 checklist, delete before the pilot. It borrows the app's tokens in
+       dev; it is plain HTML and needs no build. -->
+  <link rel="stylesheet" href="/src/styles/tokens.css" />
+  <link rel="stylesheet" href="/src/styles/base.css" />
   <style>
-    body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; max-width: 1000px; }
-    h1 { font-size: 18px; margin: 0 0 8px; }
-    h2 { font-size: 15px; margin: 18px 0 6px; }
-    section { border: 1px solid #ccc; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
-    button { margin: 2px 4px 2px 0; padding: 4px 10px; }
-    pre, #log { background: #f4f4f4; padding: 8px; overflow: auto; font: 12px/1.35 Consolas, monospace; }
-    #log { max-height: 320px; white-space: pre-wrap; }
-    #preview { width: 320px; height: 240px; background: #000; }
-    table { border-collapse: collapse; }
-    td { padding: 2px 10px 2px 0; vertical-align: top; }
-    .muted { color: #666; }
-    #testText { border: 1px dashed #999; padding: 8px; user-select: text; }
+    body { max-width: 62rem; margin: 0 auto; padding: 1.25rem 1.25rem 5rem; }
+    section { margin-bottom: 1rem; }
+    table { border-collapse: collapse; margin: 0.5rem 0 1rem; }
+    td { padding: 0.2rem 1rem 0.2rem 0; vertical-align: top; }
+    pre, #log { padding: 0.6rem; overflow: auto; font: 12px/1.4 var(--font-mono); background: var(--chip); border-radius: var(--radius-sm); }
+    #log { max-height: 20rem; white-space: pre-wrap; }
+    #preview { width: 20rem; max-width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: var(--radius-sm); }
+    #testText { padding: 0.75rem; border: 1px dashed var(--field-line); border-radius: var(--radius-sm); user-select: text; }
+    .btns { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
   </style>
+  <script src="theme.js"></script>
 </head>
 <body>
-  <h1>SEB spike page (D2)</h1>
-  <p class="muted">Temporary. Answers the questions in docs/plan/week-01.md, D2 checklist items 1-13.
-    Every line below is also kept in memory; press "Send log to server" to write it to
-    <code>data/spike-log.jsonl</code> in case SEB blocks copying or screenshots.</p>
+  <h1>Browser capture spike (D2)</h1>
+  <p class="muted">Run this in Chrome and in Edge and fill in <code>docs/spikes/browser-findings.md</code>.
+    Every line below is kept in memory; "Copy log" puts it on the clipboard.</p>
 
-  <section>
+  <section class="card">
     <h2>1. Environment</h2>
     <table id="env"></table>
-    <button id="btnApi">Re-read SafeExamBrowser JS API</button>
   </section>
 
-  <section>
-    <h2>2. Camera + microphone, recording, local storage (checks 1-4, 12, 13)</h2>
-    <button id="btnStart">Start camera + mic and record</button>
-    <button id="btnStop" disabled>Stop</button>
-    <button id="btnClear">Clear stored chunks</button>
-    <br />
+  <section class="card">
+    <h2>2. Camera, microphone, recording and storage (checks 1-5, 11, 12)</h2>
+    <div class="btns">
+      <button class="btn" id="btnStart">Allow camera + mic and record</button>
+      <button class="btn secondary" id="btnStop" disabled>Stop</button>
+      <button class="btn secondary" id="btnClear">Clear stored chunks</button>
+    </div>
     <video id="preview" autoplay muted playsinline></video>
     <table>
+      <tr><td>Camera permission</td><td id="permCamera">-</td></tr>
+      <tr><td>Microphone permission</td><td id="permMic">-</td></tr>
       <tr><td>Mic peak level (0-1)</td><td id="peak">-</td></tr>
       <tr><td>Flat for (s), peak below <span id="flatPeak"></span></td><td id="flat">-</td></tr>
       <tr><td>Chunks this run</td><td id="runChunks">0</td></tr>
@@ -46,34 +49,26 @@
       <tr><td>Extrapolated MB per hour</td><td id="mbHour">-</td></tr>
       <tr><td><b>Chunks already in IndexedDB at page load</b> (check 4)</td><td id="preexisting">-</td></tr>
       <tr><td>Chunks in IndexedDB now</td><td id="dbChunks">-</td></tr>
+      <tr><td>Storage (estimate)</td><td id="storage">-</td></tr>
     </table>
-    <p><b>Survival markers</b> (read at page load, before anything is written):</p>
-    <table id="markers"></table>
-    <button id="btnMarkers">Write markers now</button>
   </section>
 
-  <section>
-    <h2>3. What the page can observe (checks 7-9)</h2>
+  <section class="card">
+    <h2>3. Full screen and what the page can see (checks 6-10)</h2>
+    <div class="btns">
+      <button class="btn" id="btnFullscreen">Go full screen</button>
+      <button class="btn secondary" id="btnExitFullscreen">Leave full screen</button>
+    </div>
     <p id="testText">Select this paragraph and try: Ctrl+C, Ctrl+X, Ctrl+V, right-click, Print Screen,
-      Alt+Tab, the Windows key, Ctrl+Alt+Del, Ctrl+Shift+Esc. Each event the page receives
-      is logged below. An action that is blocked and logs nothing is a finding too.</p>
-    <textarea id="pasteTarget" rows="2" cols="60" placeholder="paste here"></textarea>
+      Alt+Tab, the Windows key, a Windows notification or chat pop-up while this page is full screen,
+      and clicking on a second monitor. Each event the page receives is logged below. An action that
+      logs nothing is a finding too.</p>
+    <textarea id="pasteTarget" rows="2" placeholder="paste here"></textarea>
   </section>
 
-  <section>
-    <h2>4. Server echo and quit URL (checks 5, 6, 10)</h2>
-    <button id="btnPing">Ping GET /api/spike/echo</button>
-    <label>extra key to test <input id="testKey" size="44" placeholder="Config Key or Browser Exam Key" /></label>
-    <pre id="echo">(not pinged yet)</pre>
-    <label>Quit URL <input id="quitUrl" size="50" /></label>
-    <button id="btnQuit">Navigate to Quit URL</button>
-    <span class="muted">Set the same URL as "Quit URL" in the SEB config.</span>
-  </section>
-
-  <section>
+  <section class="card">
     <h2>Log</h2>
-    <button id="btnSend">Send log to server</button>
-    <button id="btnCopyLog">Copy log</button>
+    <div class="btns"><button class="btn secondary" id="btnCopyLog">Copy log</button></div>
     <div id="log"></div>
   </section>
 

@@ -3,12 +3,11 @@
 from collections import Counter
 
 import pytest
-from sqlalchemy import select
 
-from app.core.seb import REQUEST_HASH_HEADER, request_hash
+from app.core.security import format_invite_code, hash_token
+from app.models import Candidate as CandidateRow
 from app.models import Question, SessionQuestion, TestSession
 from app.services import test_flow
-from tests.conftest import TEST_PUBLIC_URL
 
 DURATION = 1800
 TOTAL = 12
@@ -27,11 +26,10 @@ class Candidate:
         self.session_id = None
         self.headers = {}
 
-    def start(self, extra_headers=None):
+    def start(self):
         response = self.client.post(
             "/api/session/start",
             json={"token": self.invite_token},
-            headers=extra_headers or {},
         )
         if response.status_code == 200:
             body = response.json()
@@ -50,18 +48,18 @@ class Candidate:
     def question(self):
         return self.client.get(self.url("question"), headers=self.headers)
 
-    def answer(self, position, option_id, extra_headers=None):
+    def answer(self, position, option_id):
         return self.client.post(
             self.url("answer"),
             json={"position": position, "option_id": option_id},
-            headers={**self.headers, **(extra_headers or {})},
+            headers=self.headers,
         )
 
-    def skip(self, position, extra_headers=None):
+    def skip(self, position):
         return self.client.post(
             self.url("skip"),
             json={"position": position},
-            headers={**self.headers, **(extra_headers or {})},
+            headers=self.headers,
         )
 
     def finish(self):
@@ -99,10 +97,6 @@ def running(candidate):
     assert candidate.start().status_code == 200
     assert candidate.begin().status_code == 200
     return candidate
-
-
-def seb_headers(path, key):
-    return {REQUEST_HASH_HEADER: request_hash(f"{TEST_PUBLIC_URL}{path}", key)}
 
 
 # ------------------------------------------------------------------------------ start
@@ -143,6 +137,90 @@ def test_no_open_sitting_is_refused(client, db, seeded):
     response = client.post("/api/session/start", json={"token": seeded.invites[0].token})
     assert response.status_code == 403
     assert response.json() == {"code": "no_open_sitting"}
+
+
+def test_a_typed_code_with_a_dash_and_lower_case_starts_the_same_session(client, seeded):
+    code = seeded.invites[0].token
+    exact = client.post("/api/session/start", json={"token": code})
+    typed = client.post("/api/session/start", json={"token": format_invite_code(code).lower()})
+    assert typed.status_code == 200
+    assert typed.json()["session_id"] == exact.json()["session_id"]
+
+
+def test_a_long_token_from_the_first_seed_still_works(client, db, seeded):
+    legacy = "a3f9c1d2e4b5a6f7c8d9e0f1"
+    db.add(CandidateRow(id="cand-legacy", invite_token_hash=hash_token(legacy)))
+    db.flush()
+    response = client.post("/api/session/start", json={"token": f"  {legacy}  "})
+    assert response.status_code == 200
+
+
+def test_wrong_codes_are_refused_with_429_after_the_limit_and_released_later(
+    client, seeded, settings, clock
+):
+    for _ in range(settings.start_max_failures):
+        response = client.post("/api/session/start", json={"token": "ZZZZ-ZZZZ"})
+        assert response.status_code == 401
+
+    blocked = client.post("/api/session/start", json={"token": "ZZZZ-ZZZZ"})
+    assert blocked.status_code == 429
+    body = blocked.json()
+    assert body["code"] == "too_many_attempts"
+    assert 0 < body["retry_after_s"] <= settings.start_window_s
+
+    clock.advance(settings.start_window_s + 1)
+    again = client.post("/api/session/start", json={"token": "ZZZZ-ZZZZ"})
+    assert again.status_code == 401
+
+
+def test_a_blocked_client_cannot_start_even_with_a_right_code(client, seeded, settings):
+    for _ in range(settings.start_max_failures):
+        client.post("/api/session/start", json={"token": "ZZZZ-ZZZZ"})
+    response = client.post("/api/session/start", json={"token": seeded.invites[0].token})
+    assert response.status_code == 429
+
+
+def test_successful_starts_never_count_towards_the_limit(client, seeded, settings):
+    # a venue of honest candidates behind one address must not lock itself out
+    for invite in seeded.invites * 3:
+        response = client.post("/api/session/start", json={"token": invite.token})
+        assert response.status_code == 200
+
+
+def test_forwarded_for_is_only_trusted_when_configured(client, seeded, settings):
+    def attempt(address):
+        return client.post(
+            "/api/session/start",
+            json={"token": "ZZZZ-ZZZZ"},
+            headers={"X-Forwarded-For": f"1.1.1.1, {address}"},
+        )
+
+    # not trusted: every request is the same peer, so spreading headers does not help
+    for i in range(settings.start_max_failures):
+        attempt(f"10.0.0.{i}")
+    assert attempt("10.0.0.250").status_code == 429
+
+
+def test_each_proxied_client_has_its_own_count_when_the_proxy_is_trusted(client, seeded, settings):
+    settings.trust_forwarded_for = True
+    for _ in range(settings.start_max_failures):
+        client.post(
+            "/api/session/start",
+            json={"token": "ZZZZ-ZZZZ"},
+            headers={"X-Forwarded-For": "9.9.9.9, 10.0.0.1"},
+        )
+    other = client.post(
+        "/api/session/start",
+        json={"token": seeded.invites[0].token},
+        headers={"X-Forwarded-For": "9.9.9.9, 10.0.0.2"},
+    )
+    assert other.status_code == 200
+    same = client.post(
+        "/api/session/start",
+        json={"token": seeded.invites[0].token},
+        headers={"X-Forwarded-For": "9.9.9.9, 10.0.0.1"},
+    )
+    assert same.status_code == 429
 
 
 # ------------------------------------------------------------------------------ the paper
@@ -419,81 +497,3 @@ def test_missing_or_bad_authorization_is_refused(candidate, header):
 def test_unknown_session_looks_the_same_as_a_wrong_token(client, seeded):
     response = client.get("/api/session/nope/question", headers={"Authorization": "Bearer x"})
     assert response.status_code == 401
-
-
-# ------------------------------------------------------------------------------ SEB gate
-
-
-KEY = "test-browser-exam-key"
-
-
-def test_enforce_refuses_a_plain_browser_on_start(client, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    response = client.post("/api/session/start", json={"token": seeded.invites[0].token})
-    assert response.status_code == 403
-    assert response.json() == {"code": "seb_required"}
-
-
-def test_enforce_accepts_a_correct_seb_hash_and_records_it(client, db, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    response = person.start(extra_headers=seb_headers("/api/session/start", KEY))
-    assert response.status_code == 200
-    assert person.session().seb_verified is True
-
-
-def test_enforce_refuses_a_hash_made_for_another_url(client, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    headers = seb_headers("/api/session/other", KEY)
-    response = client.post(
-        "/api/session/start", json={"token": seeded.invites[0].token}, headers=headers
-    )
-    assert response.status_code == 403
-
-
-def test_enforce_guards_answer_and_skip_but_not_the_read_routes(client, db, seeded, settings):
-    settings.seb_mode = "enforce"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    person.start(extra_headers=seb_headers("/api/session/start", KEY))
-    person.begin()
-
-    assert person.question().status_code == 200  # plain GET is not verified (proposal)
-    assert person.skip(1).status_code == 403
-    assert person.answer(1, person.correct_option_id(1)).status_code == 403
-    assert person.row(1).answered_at is None
-
-    path = f"/api/session/{person.session_id}/skip"
-    assert person.skip(1, extra_headers=seb_headers(path, KEY)).status_code == 200
-
-
-def test_log_mode_lets_everything_through_but_records_not_verified(client, db, seeded, settings):
-    settings.seb_mode = "log"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    assert person.start().status_code == 200
-    assert person.session().seb_verified is False
-
-
-def test_off_mode_never_blocks(client, db, seeded, settings):
-    settings.seb_mode = "off"
-    person = Candidate(client, db, seeded.invites[0].token)
-    assert person.start().status_code == 200
-    person.begin()
-    assert person.skip(1).status_code == 200
-
-
-def test_one_unverified_answer_clears_seb_verified_for_good(client, db, seeded, settings):
-    settings.seb_mode = "log"
-    settings.seb_allowed_keys = KEY
-    person = Candidate(client, db, seeded.invites[0].token)
-    person.start(extra_headers=seb_headers("/api/session/start", KEY))
-    person.begin()
-    assert person.session().seb_verified is True
-
-    person.skip(1)  # no SEB header on this one
-    assert person.session().seb_verified is False
-    assert db.scalar(select(TestSession.seb_verified)) is False

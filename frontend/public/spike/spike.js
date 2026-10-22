@@ -1,4 +1,5 @@
-// D2 spike. Plain JS, no build. Temporary: delete frontend/public/spike before the pilot.
+// D2 browser capture spike. Plain JS, no build. Temporary: delete frontend/public/spike before the
+// pilot. It answers the checklist in docs/spikes/browser-findings.md.
 (() => {
   'use strict';
 
@@ -8,7 +9,6 @@
 
   const $ = (id) => document.getElementById(id);
   const logEl = $('log');
-  const pending = []; // log lines not yet sent to the server
   const allLines = [];
 
   function log(msg, data) {
@@ -17,10 +17,7 @@
     const div = document.createElement('div');
     div.textContent = `${stamp}  ${text}`;
     logEl.prepend(div);
-    const row = { t: new Date().toISOString(), msg, data: data === undefined ? null : data };
-    pending.push(row);
     allLines.push(`${stamp}  ${text}`);
-    console.log(msg, data === undefined ? '' : data);
   }
 
   function safeJson(value) {
@@ -33,37 +30,34 @@
     const a = document.createElement('td');
     const b = document.createElement('td');
     a.textContent = label;
-    b.textContent = value;
+    b.textContent = String(value);
     tr.append(a, b);
     $('env').append(tr);
   }
 
   function readEnvironment() {
-    $('env').textContent = '';
     envRow('User agent', navigator.userAgent);
-    envRow('"SEB" in user agent', String(/SEB/.test(navigator.userAgent)));
-    envRow('Location', location.href);
-    envRow('window.SafeExamBrowser present', String(!!window.SafeExamBrowser));
-    envRow('mediaDevices available', String(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)));
-    envRow('MediaRecorder available', String(typeof MediaRecorder !== 'undefined'));
-    envRow(`isTypeSupported(${MIME})`, String(typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(MIME)));
-    envRow('Secure context', String(window.isSecureContext));
+    envRow('Secure context (https or localhost)', window.isSecureContext);
+    envRow('mediaDevices available', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+    envRow('MediaRecorder available', typeof MediaRecorder !== 'undefined');
+    envRow(`isTypeSupported(${MIME})`, typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(MIME));
+    envRow('Full screen allowed (document.fullscreenEnabled)', document.fullscreenEnabled);
+    envRow('Notification.permission (this site only; the page cannot see system notification settings)',
+      'Notification' in window ? Notification.permission : 'not supported');
+    envRow('Window size', `${window.innerWidth} x ${window.innerHeight}`);
   }
 
-  function readSebApi() {
-    const api = window.SafeExamBrowser;
-    if (!api) { log('SafeExamBrowser JS API: absent'); return; }
-    log('SafeExamBrowser JS API: present', { keys: Object.keys(api), version: api.version });
-    const security = api.security;
-    if (!security) { log('SafeExamBrowser.security: absent'); return; }
-    const dump = () => log('SafeExamBrowser.security', {
-      configKey: security.configKey,
-      browserExamKey: security.browserExamKey,
-    });
-    if (typeof security.updateKeys === 'function') {
-      security.updateKeys(dump);
-    } else {
-      dump();
+  // ---------------------------------------------------------------- permissions
+  async function watchPermission(name, cell) {
+    if (!navigator.permissions || !navigator.permissions.query) { $(cell).textContent = 'Permissions API not available'; return; }
+    try {
+      const status = await navigator.permissions.query({ name });
+      const show = () => { $(cell).textContent = status.state; };
+      show();
+      log(`permission ${name}`, status.state);
+      status.addEventListener('change', () => { show(); log(`permission ${name} CHANGED`, status.state); });
+    } catch (e) {
+      $(cell).textContent = 'cannot query: ' + e.name;
     }
   }
 
@@ -80,8 +74,8 @@
   function tx(db, mode, fn) {
     return new Promise((resolve, reject) => {
       const t = db.transaction('chunks', mode);
-      const result = fn(t.objectStore('chunks'));
-      t.oncomplete = () => resolve(result.result !== undefined ? result.result : undefined);
+      const request = fn(t.objectStore('chunks'));
+      t.oncomplete = () => resolve(request.result);
       t.onerror = () => reject(t.error);
       t.onabort = () => reject(t.error);
     });
@@ -92,42 +86,17 @@
     return { count: rows.length, bytes: rows.reduce((sum, r) => sum + (r.bytes || 0), 0), rows };
   }
 
-  // ---------------------------------------------------------------- survival markers
-  function readCookie(name) {
-    const m = document.cookie.split('; ').find((c) => c.startsWith(name + '='));
-    return m ? decodeURIComponent(m.split('=')[1]) : null;
-  }
-
-  function showMarkers() {
-    const rows = [
-      ['localStorage spike_marker', safe(() => localStorage.getItem('spike_marker'))],
-      ['sessionStorage spike_marker', safe(() => sessionStorage.getItem('spike_marker'))],
-      ['cookie spike_marker', safe(() => readCookie('spike_marker'))],
-    ];
-    const table = $('markers');
-    table.textContent = '';
-    for (const [label, value] of rows) {
-      const tr = document.createElement('tr');
-      const a = document.createElement('td');
-      const b = document.createElement('td');
-      a.textContent = label;
-      b.textContent = value === null ? '(none)' : value;
-      tr.append(a, b);
-      table.append(tr);
+  async function readStorage() {
+    if (!navigator.storage) { $('storage').textContent = 'navigator.storage not available'; return; }
+    try {
+      const est = navigator.storage.estimate ? await navigator.storage.estimate() : null;
+      const persisted = navigator.storage.persist ? await navigator.storage.persist() : null;
+      const text = `${est ? Math.round(est.usage / 1e6) + ' MB used of ' + Math.round(est.quota / 1e6) + ' MB' : 'no estimate'}; persistent: ${persisted}`;
+      $('storage').textContent = text;
+      log('storage', { usage: est && est.usage, quota: est && est.quota, persisted });
+    } catch (e) {
+      $('storage').textContent = 'error: ' + e.name;
     }
-    log('markers at page load', Object.fromEntries(rows));
-  }
-
-  function safe(fn) {
-    try { return fn(); } catch (e) { return 'error: ' + e.message; }
-  }
-
-  function writeMarkers() {
-    const value = new Date().toISOString();
-    safe(() => localStorage.setItem('spike_marker', value));
-    safe(() => sessionStorage.setItem('spike_marker', value));
-    safe(() => { document.cookie = `spike_marker=${encodeURIComponent(value)}; max-age=86400; path=/`; });
-    log('markers written', value);
   }
 
   // ---------------------------------------------------------------- recording
@@ -167,7 +136,7 @@
     if (video) log('video settings', video.getSettings());
     if (audio) {
       const s = audio.getSettings();
-      log('audio settings (check 12: constraints honoured?)', {
+      log('audio settings (check 11: constraints honoured?)', {
         echoCancellation: s.echoCancellation,
         noiseSuppression: s.noiseSuppression,
         autoGainControl: s.autoGainControl,
@@ -186,11 +155,7 @@
       log('MediaRecorder cannot record ' + MIME);
       return;
     }
-    recorder = new MediaRecorder(stream, {
-      mimeType: MIME,
-      videoBitsPerSecond: 150000,
-      audioBitsPerSecond: 24000,
-    });
+    recorder = new MediaRecorder(stream, { mimeType: MIME, videoBitsPerSecond: 150000, audioBitsPerSecond: 24000 });
     recorder.onerror = (e) => log('recorder error', { name: e.error && e.error.name });
     recorder.onstop = () => log('recorder stopped');
     recorder.ondataavailable = async (e) => {
@@ -217,9 +182,7 @@
     $('runChunks').textContent = String(runChunks);
     $('runBytes').textContent = String(runBytes);
     const seconds = (performance.now() - recordStartedAt) / 1000;
-    if (seconds > 5 && runBytes > 0) {
-      $('mbHour').textContent = ((runBytes / seconds) * 3600 / 1e6).toFixed(1);
-    }
+    if (seconds > 5 && runBytes > 0) $('mbHour').textContent = ((runBytes / seconds) * 3600 / 1e6).toFixed(1);
   }
 
   function startLevelWatch() {
@@ -265,7 +228,7 @@
     log('stored chunks cleared');
   }
 
-  // ---------------------------------------------------------------- 3. observed events
+  // ---------------------------------------------------------------- 3. full screen and events
   function selectionLength() {
     const sel = window.getSelection();
     return sel ? String(sel).length : 0; // length only, never the text
@@ -281,9 +244,10 @@
     window.addEventListener('blur', () => log('EVENT window blur'));
     window.addEventListener('focus', () => log('EVENT window focus'));
     document.addEventListener('visibilitychange', () => log('EVENT visibilitychange', { state: document.visibilityState }));
+    document.addEventListener('fullscreenchange', () => log('EVENT fullscreenchange', { fullscreen: !!document.fullscreenElement }));
     window.addEventListener('online', () => log('EVENT online'));
     window.addEventListener('offline', () => log('EVENT offline'));
-    const interesting = new Set(['PrintScreen', 'Meta', 'OS', 'Alt', 'Tab', 'Escape', 'ContextMenu', 'F12', 'F11', 'F5']);
+    const interesting = new Set(['PrintScreen', 'Meta', 'OS', 'Alt', 'Tab', 'Escape', 'ContextMenu', 'F11']);
     for (const type of ['keydown', 'keyup']) {
       document.addEventListener(type, (e) => {
         if (interesting.has(e.key) || e.ctrlKey || e.metaKey) {
@@ -293,54 +257,22 @@
     }
   }
 
-  // ---------------------------------------------------------------- 4. server echo
-  async function ping() {
-    const extra = $('testKey').value.trim();
-    const url = '/api/spike/echo' + (extra ? '?key=' + encodeURIComponent(extra) : '');
-    try {
-      const res = await fetch(url, { cache: 'no-store' });
-      const body = await res.json();
-      $('echo').textContent = JSON.stringify(body, null, 2);
-      const sebHeaders = Object.fromEntries(Object.entries(body.all_headers || {}).filter(([k]) => k.startsWith('x-safeexambrowser')));
-      log('echo', { status: res.status, sebHeaders, received: body.received, keyResults: body.key_results, urlTheServerRebuilt: body.url_the_server_rebuilt });
-    } catch (e) {
-      $('echo').textContent = 'fetch failed: ' + e;
-      log('echo FAILED', String(e));
-    }
-  }
-
-  async function sendLog() {
-    const lines = pending.splice(0, pending.length);
-    if (lines.length === 0) { log('nothing new to send'); return; }
-    try {
-      const res = await fetch('/api/spike/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines }),
-      });
-      log('log sent', await res.json());
-    } catch (e) {
-      pending.unshift(...lines);
-      log('log send FAILED', String(e));
-    }
-  }
-
   // ---------------------------------------------------------------- start
   async function init() {
     $('flatPeak').textContent = String(MIC_FLAT_PEAK);
-    $('quitUrl').value = `${location.origin}/spike/quit.html`;
     readEnvironment();
-    readSebApi();
-    showMarkers();
+    watchPermission('camera', 'permCamera');
+    watchPermission('microphone', 'permMic');
     wireObservers();
 
-    $('btnApi').addEventListener('click', () => { readEnvironment(); readSebApi(); });
     $('btnStart').addEventListener('click', startRecording);
     $('btnStop').addEventListener('click', stopRecording);
     $('btnClear').addEventListener('click', clearChunks);
-    $('btnMarkers').addEventListener('click', writeMarkers);
-    $('btnPing').addEventListener('click', ping);
-    $('btnSend').addEventListener('click', sendLog);
+    $('btnFullscreen').addEventListener('click', async () => {
+      try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); log('requestFullscreen ok'); }
+      catch (e) { log('requestFullscreen FAILED', { name: e.name, message: e.message }); }
+    });
+    $('btnExitFullscreen').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); });
     $('btnCopyLog').addEventListener('click', () => {
       const text = allLines.slice().reverse().join('\n');
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -349,11 +281,8 @@
         log('clipboard API not available');
       }
     });
-    $('btnQuit').addEventListener('click', () => {
-      log('navigating to quit URL', $('quitUrl').value);
-      sendLog().finally(() => { window.location.href = $('quitUrl').value; });
-    });
 
+    readStorage();
     try {
       db = await openDb();
       const s = await refreshDbCounts();

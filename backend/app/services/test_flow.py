@@ -17,10 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import Clock
-from app.core.security import hash_token, new_token
+from app.core.security import hash_token, new_token, normalise_invite_code
 from app.errors import ApiError
 from app.models import Candidate, Option, Question, SessionQuestion, Sitting, TestSession
-from app.services.shuffle import balanced_sample, session_rng, shuffle_options
+from app.services import precheck
+from app.services.shuffle import balanced_sample, blueprint_sample, session_rng, shuffle_options
 
 
 @dataclass(frozen=True)
@@ -50,22 +51,30 @@ class Summary:
 # ---------------------------------------------------------------------------- paper building
 
 
-def select_questions(db: Session, count: int, rng: random.Random) -> list[Question]:
-    """Choose a paper. Kept behind this one function: the S1 blueprint generator replaces it."""
+def select_questions(
+    db: Session, count: int, rng: random.Random, blueprint: dict[str, int] | None = None
+) -> list[Question]:
+    """Choose a paper: the blueprint's number from each section, or `count` spread evenly over the
+    sections when the sitting has no blueprint. Kept behind this one function."""
     rows = db.execute(select(Question.id, Question.section)).all()
     by_section: dict[str, list[str]] = {}
     for question_id, section in rows:
         by_section.setdefault(section, []).append(question_id)
     try:
-        ids = balanced_sample(rng, by_section, count)
+        if blueprint:
+            ids = blueprint_sample(rng, by_section, blueprint)
+        else:
+            ids = balanced_sample(rng, by_section, count)
     except ValueError as exc:
         raise ApiError(503, "question_bank_too_small", detail=str(exc)) from exc
     by_id = {q.id: q for q in db.scalars(select(Question).where(Question.id.in_(ids)))}
     return [by_id[question_id] for question_id in ids]
 
 
-def _build_paper(db: Session, session: TestSession, count: int) -> None:
-    questions = select_questions(db, count, session_rng(session.id, "paper"))
+def _build_paper(db: Session, session: TestSession, sitting: Sitting) -> None:
+    questions = select_questions(
+        db, sitting.question_count, session_rng(session.id, "paper"), sitting.blueprint
+    )
     for position, question in enumerate(questions, start=1):
         option_ids = [o.id for o in sorted(question.options, key=lambda o: o.label)]
         db.add(
@@ -94,7 +103,7 @@ def _find_open_sitting(db: Session, now: datetime) -> Sitting:
     raise ApiError(403, "no_open_sitting")
 
 
-def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bool) -> StartResult:
+def start_session(db: Session, clock: Clock, invite_token: str) -> StartResult:
     """Exchange an invitation token for a session and a fresh bearer token.
 
     Calling it again with the same invitation returns the same session (a reload or a restart
@@ -102,7 +111,9 @@ def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bo
     """
     now = clock.now()
     candidate = db.scalar(
-        select(Candidate).where(Candidate.invite_token_hash == hash_token(invite_token))
+        select(Candidate).where(
+            Candidate.invite_token_hash == hash_token(normalise_invite_code(invite_token))
+        )
     )
     if candidate is None:
         raise ApiError(401, "invalid_invitation")
@@ -131,27 +142,31 @@ def start_session(db: Session, clock: Clock, invite_token: str, seb_verified: bo
                 sitting_id=sitting.id,
                 status="created",
                 created_at=now,
-                seb_verified=seb_verified,
             )
             db.add(session)
             db.flush()
-            _build_paper(db, session, sitting.question_count)
+            _build_paper(db, session, sitting)
 
     access_token = new_token()
     session.access_token_hash = hash_token(access_token)
-    if session.status != "finished":
-        session.seb_verified = session.seb_verified and seb_verified
     db.commit()
     return StartResult(session, access_token)
 
 
-def begin(db: Session, clock: Clock, session: TestSession, accepted: bool) -> TestSession:
-    """Candidate accepted the integrity statement: the timer starts now. Idempotent."""
+def begin(
+    db: Session, clock: Clock, session: TestSession, accepted: bool, gate: str = "off"
+) -> TestSession:
+    """Candidate accepted the integrity statement: the timer starts now. Idempotent.
+
+    `gate` is the camera and microphone gate (Settings.precheck_gate): with it on, the test cannot
+    start until the pre-check has passed and, at `recording`, a real recording has arrived.
+    """
     if not accepted:
         raise ApiError(422, "integrity_not_accepted")
     if session.status == "finished":
         raise ApiError(409, "finished")
     if session.status == "created":
+        precheck.require_ready(db, session, gate)
         now = clock.now()
         sitting = db.get(Sitting, session.sitting_id)
         session.integrity_accepted_at = now
@@ -237,13 +252,10 @@ def _open_for(
     return sq, now
 
 
-def _mark_resolved(
-    session: TestSession, sq: SessionQuestion, now: datetime, seb_verified: bool
-) -> None:
+def _mark_resolved(sq: SessionQuestion, now: datetime) -> None:
     if sq.opened_at is None:
         sq.opened_at = now
     sq.answered_at = now
-    session.seb_verified = session.seb_verified and seb_verified
 
 
 def _after_resolve(db: Session, session: TestSession, now: datetime) -> tuple[bool, float]:
@@ -261,7 +273,6 @@ def answer(
     session: TestSession,
     position: int,
     option_id: int,
-    seb_verified: bool,
 ) -> tuple[bool, float]:
     """Record an answer for the current question. Returns (test_finished, remaining_s)."""
     sq, now = _open_for(db, clock, session, position)
@@ -269,17 +280,15 @@ def answer(
         raise ApiError(422, "invalid_option")
     option = db.get(Option, option_id)
     question = db.get(Question, sq.question_id)
-    _mark_resolved(session, sq, now, seb_verified)
+    _mark_resolved(sq, now)
     sq.selected_option = option_id
     sq.correct = option.label == question.correct_option
     return _after_resolve(db, session, now)
 
 
-def skip(
-    db: Session, clock: Clock, session: TestSession, position: int, seb_verified: bool
-) -> tuple[bool, float]:
+def skip(db: Session, clock: Clock, session: TestSession, position: int) -> tuple[bool, float]:
     sq, now = _open_for(db, clock, session, position)
-    _mark_resolved(session, sq, now, seb_verified)
+    _mark_resolved(sq, now)
     sq.skipped = True
     return _after_resolve(db, session, now)
 
@@ -296,14 +305,23 @@ def score(session: TestSession) -> int:
     return sum(1 for sq in session.questions if sq.correct is True)
 
 
-def finish(db: Session, clock: Clock, session: TestSession) -> Summary:
-    """End the test (idempotent). Works after time-up too, so the page can collect its summary."""
+def finish(
+    db: Session, clock: Clock, session: TestSession, chunks_total: int | None = None
+) -> Summary:
+    """End the test (idempotent). Works after time-up too, so the page can collect its summary.
+
+    `chunks_total` is how many video chunks the page made. The upload is complete when every
+    chunk from 0 up to it has arrived, so it is kept (the latest value wins: the page may send it
+    again once the recorder has flushed its last chunk).
+    """
     if session.status == "created":
         raise ApiError(409, "not_started")
     if session.status == "in_progress":
         now = clock.now()
         _finish(session, min(now, session.ends_at))
-        db.commit()
+    if chunks_total is not None:
+        session.chunks_total = chunks_total
+    db.commit()
     return summarise(session)
 
 
