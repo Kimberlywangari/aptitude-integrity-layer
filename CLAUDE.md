@@ -9,7 +9,8 @@ screen, after the candidate has been asked for camera, microphone and full-scree
 told to turn off notifications. Camera and microphone are recorded, actions are logged, rules raise
 flags and a person reviews them. It gives reviewers evidence and
 never decides anything about a candidate. Start with [docs/proposal.md](docs/proposal.md), the
-[master plan](docs/plan/00-master-plan.md) and the weekly files in `docs/plan/`.
+[master plan](docs/plan/00-master-plan.md) and the weekly files in `docs/plan/`. The `docs/` folder
+is kept locally and is git-ignored, so a fresh clone does not have it.
 
 ## Run and test (Windows, PowerShell)
 
@@ -81,6 +82,7 @@ Speed and efficiency matter in every part of this project, not only the parts th
 - `frontend/`: Vue 3 and Vite app. The candidate screens are in the main bundle and the staff
   screens are lazy chunks. `public/spike/` is the plain-JavaScript browser capture spike page.
 - `docs/`: proposal, plan (`plan/`, where every plan lives) and spike findings (`spikes/`).
+  Git-ignored, kept locally, never commit.
 - `docker/`: init SQL for the Compose Postgres. `docker-compose.yml` at the root runs the database.
 - `data/`: runtime files (invite tokens, spike log, server logs). Git-ignored, never commit.
 - `.claude/`: local Claude Code settings. Git-ignored.

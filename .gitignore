@@ -17,7 +17,7 @@ playwright-report/
 # Local config and data (never commit)
 .env
 data/
-docs/spikes/laptop-specs.md
+docs/
 .claude/
 .agents/
 skills-lock.json
