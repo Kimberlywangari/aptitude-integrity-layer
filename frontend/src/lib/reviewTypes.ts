@@ -5,6 +5,9 @@ export type AiStatus = 'ok' | 'retried' | 'fallback' | 'not_run'
 
 export type DecisionOutcome = 'no_concern' | 'concern_noted' | 'refer_for_follow_up'
 
+/** How soon a person might want to look. A label for the queue: it sets no one aside. */
+export type Band = 'high' | 'moderate' | 'low'
+
 /** Every decision needs a written reason of at least this many characters (D13). */
 export const MIN_REASON_CHARS = 20
 
@@ -19,6 +22,9 @@ export interface QueueItem {
   rule_score: number
   ai_strength: number | null // 1 to 5, null when the order is rules only
   ai_status: AiStatus
+  strength: number // 1 to 5: the AI's when it answered, else the rules'
+  band: Band
+  flag_count: number
   flag_kinds: string[]
   decision: DecisionOutcome | null
   shortlisted: boolean
@@ -111,6 +117,8 @@ export interface CandidateDetail {
   session_id: string
   candidate_id: string
   rank: number
+  strength: number
+  band: Band
   rule_score: number
   rule_breakdown: BreakdownLine[]
   score: number
@@ -149,4 +157,39 @@ export interface LoginResponse {
   token: string
   email: string
   role: 'reviewer' | 'admin'
+}
+
+export interface OverviewTiles {
+  sat: number
+  finished: number
+  flagged: number
+  reviewed: number
+  videos_uploaded: number
+  videos_expected: number
+  videos_decided_not_deleted: number
+}
+
+export interface HealthCheck {
+  key: string
+  label: string
+  state: 'ok' | 'warn' | 'off' | 'note'
+  detail: string
+}
+
+export interface NextUp {
+  candidate_id: string
+  band: Band
+  flag_count: number
+  first_kind: string
+}
+
+export interface OverviewResponse {
+  sittings: SittingRef[]
+  sitting_id: number
+  sitting_status: 'open' | 'closed' | null
+  tiles: OverviewTiles
+  flags_by_kind: { kind: string; count: number }[]
+  pending: number // queue candidates still without a decision
+  next_up: NextUp[]
+  checks: HealthCheck[]
 }

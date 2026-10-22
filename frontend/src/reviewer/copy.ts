@@ -2,12 +2,24 @@
 // (master plan R11). Nothing here may read as a verdict: the AI ranks and explains, a person
 // decides.
 
-import type { AiStatus, DecisionOutcome } from '../lib/reviewTypes'
+import type { AiStatus, Band, DecisionOutcome } from '../lib/reviewTypes'
 
 export const AI_LABEL =
   'AI-generated and advisory only. It ranks and explains; it is not a verdict and it decides nothing.'
 export const RULES_LABEL = 'Rule-based summary. No AI was used for this candidate.'
 export const CONTEXT_ONLY = 'Context only. Never a flag on its own.'
+export const FACT_CHECKED =
+  'Checked against the stored log before you see it: every flag, time and count it cites is in the evidence.'
+
+/** The queue's priority bands. A label that says where to look first; nobody is set aside. */
+export const BAND_LABELS: Record<Band, string> = {
+  high: 'High',
+  moderate: 'Moderate',
+  low: 'Low',
+}
+export const BAND_NOTE =
+  'Priority is a suggestion for where to start, worked out from the evidence. Every flagged ' +
+  'candidate is in the queue, and nothing here is a verdict.'
 
 export const OUTCOME_LABELS: Record<DecisionOutcome, string> = {
   no_concern: 'No concern',

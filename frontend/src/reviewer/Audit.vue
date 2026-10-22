@@ -23,8 +23,12 @@ const { data, isPending, isError } = useQuery({
   <p v-if="isPending" role="status">Loading the audit log...</p>
   <Banner v-else-if="isError" tone="bad" role="alert"><p>Could not load the audit log.</p></Banner>
   <template v-else-if="data">
-    <h1>Audit log</h1>
-    <p class="muted">Sign-ins, decisions, video views, setup actions and deletions, newest first.</p>
+    <header class="page-head">
+      <div>
+        <h1>Audit log</h1>
+        <p>Sign-ins, decisions, video views, setup actions and deletions, newest first.</p>
+      </div>
+    </header>
     <div class="table-wrap">
       <table class="table">
         <thead>

@@ -25,10 +25,12 @@ from app.schemas.review import (
     LoginRequest,
     LoginResponse,
     MeResponse,
+    OverviewResponse,
     QueueResponse,
     ShortlistResponse,
     VideoViewRequest,
 )
+from app.services import overview as overview_service
 from app.services import review as review_service
 from app.services import staff_auth
 from app.services.rate_limit import AttemptLimiter
@@ -84,6 +86,16 @@ def get_queue(
     db: Session = Depends(get_db),
 ) -> QueueResponse:
     return QueueResponse.model_validate(review_service.queue(db, sitting))
+
+
+@router.get("/overview", response_model=OverviewResponse)
+def get_overview(
+    sitting: int | None = None,
+    _: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> OverviewResponse:
+    return OverviewResponse.model_validate(overview_service.overview(db, sitting, settings))
 
 
 @router.get("/candidates/{candidate_id}", response_model=CandidateDetail)

@@ -4,6 +4,7 @@ import pytest
 
 from app.services.shuffle import (
     balanced_sample,
+    blueprint_sample,
     most_asked_of_a_section,
     session_rng,
     shuffle_options,
@@ -74,3 +75,18 @@ def test_sections_of_exactly_that_size_always_make_a_paper(count):
     bank = {name: [f"{name}{i}" for i in range(need)] for name in ("a", "b", "c")}
     for seed in range(60):
         assert len(balanced_sample(session_rng(f"s{seed}", "paper"), bank, count)) == count
+
+
+def test_a_blueprint_asks_for_exactly_its_number_from_each_section():
+    wanted = {"numerical": 5, "logical": 2}
+    picked = blueprint_sample(session_rng("s1", "paper"), BANK, wanted)
+    assert len(picked) == len(set(picked)) == 7
+    assert sections_of(picked) == {"N": 5, "L": 2}
+    assert picked == blueprint_sample(session_rng("s1", "paper"), BANK, wanted)
+
+
+def test_a_blueprint_that_asks_for_more_than_a_section_has_is_an_error():
+    with pytest.raises(ValueError, match="numerical"):
+        blueprint_sample(session_rng("s1", "paper"), BANK, {"numerical": 21})
+    with pytest.raises(ValueError, match="astrology"):
+        blueprint_sample(session_rng("s1", "paper"), BANK, {"astrology": 1})

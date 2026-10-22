@@ -20,6 +20,7 @@ class SittingOut(BaseModel):
     closes_at: datetime | None
     duration_s: int
     question_count: int
+    blueprint: dict[str, int] | None
     status: Literal["open", "closed"]
     counts: SittingCountsOut
 
@@ -34,7 +35,9 @@ class CreateSittingRequest(BaseModel):
     opens_at: datetime | None = None
     closes_at: datetime | None = None
     duration_s: int
-    question_count: int
+    # Either a total spread evenly over the sections, or how many each section contributes.
+    question_count: int | None = None
+    per_section: dict[str, int] | None = Field(default=None, max_length=50)
 
 
 class CloseSittingRequest(BaseModel):
@@ -57,6 +60,31 @@ class InviteOut(BaseModel):
 
 class InvitesResponse(BaseModel):
     invites: list[InviteOut]
+
+
+class InviteStatusOut(BaseModel):
+    candidate_id: str
+    status: Literal["not_opened", "opened", "started", "finished"]
+
+
+class InviteListResponse(BaseModel):
+    invites: list[InviteStatusOut]
+    total: int  # all candidates; `invites` holds the newest ones
+
+
+class QuestionRowOut(BaseModel):
+    id: str
+    section: str
+    difficulty: Literal["easy", "medium", "hard"] | None
+    source: Literal["cytonn", "synthetic"]
+    preview: str
+    pct_correct: float | None
+    n: int | None
+
+
+class QuestionListResponse(BaseModel):
+    questions: list[QuestionRowOut]
+    total: int
 
 
 class SectionSummaryOut(BaseModel):

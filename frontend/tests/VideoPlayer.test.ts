@@ -93,4 +93,57 @@ describe('VideoPlayer', () => {
     await w.get('video').trigger('loadedmetadata')
     expect(second.currentTime).toBe(77)
   })
+
+  describe('the timeline of flags', () => {
+    const marks = [
+      { id: 'F1', label: 'F1 Copy at 8:40', segment: 0, seekS: 515 },
+      { id: 'F2', label: 'F2 Focus lost at 28:20', segment: 1, seekS: 735 },
+    ]
+    const withMarks = (segments: VideoSegment[], list = marks) =>
+      mount(VideoPlayer, { props: { segments, target: null, deletedAt: null, marks: list } })
+    const left = (w: ReturnType<typeof withMarks>, index: number) =>
+      (w.findAll('.timeline .mk')[index].element as HTMLElement).style.left
+
+    it('puts each flag where it falls in the whole recording, parts laid end to end', () => {
+      const w = withMarks(twoSegments)
+      expect(w.findAll('.timeline .mk')).toHaveLength(2)
+      // the player lands 5 s before the moment, so the marker sits 5 s after the landing point
+      expect(parseFloat(left(w, 0))).toBeCloseTo((515 + 5) / 1900 * 100, 3)
+      expect(parseFloat(left(w, 1))).toBeCloseTo((960 + 735 + 5) / 1900 * 100, 3)
+    })
+
+    it('names each marker for a screen reader and for a mouse', () => {
+      const w = withMarks(twoSegments)
+      const first = w.findAll('.timeline .mk')[0]
+      expect(first.attributes('aria-label')).toBe('Jump to F1 Copy at 8:40')
+      expect(first.attributes('title')).toBe('F1 Copy at 8:40')
+    })
+
+    it('tells the page which flag was clicked', async () => {
+      const w = withMarks(twoSegments)
+      await w.findAll('.timeline .mk')[1].trigger('click')
+      expect(w.emitted('mark')).toEqual([['F2']])
+    })
+
+    it('draws no timeline when no flag has video', () => {
+      expect(withMarks(twoSegments, []).find('.timeline').exists()).toBe(false)
+    })
+
+    it('leaves out a flag whose part is not in the recording', () => {
+      const w = withMarks(oneSegment, marks)
+      expect(w.findAll('.timeline .mk')).toHaveLength(1) // part 2 does not exist here
+    })
+
+    it('moves the playhead as the video plays', async () => {
+      const segments: VideoSegment[] = [{ segment: 0, url: 'blob:one', start_s: 0, duration_s: 1900 }]
+      const w = mount(VideoPlayer, {
+        props: { segments, target: null, deletedAt: null, marks },
+        attachTo: document.body,
+      })
+      const element = w.get('video').element as HTMLVideoElement
+      element.currentTime = 95
+      await w.get('video').trigger('timeupdate')
+      expect(parseFloat((w.get('.playhead').element as HTMLElement).style.left)).toBeCloseTo(5, 3)
+    })
+  })
 })

@@ -36,6 +36,7 @@ const {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['candidate', props.candidateId] }),
       queryClient.invalidateQueries({ queryKey: ['queue'] }),
+      queryClient.invalidateQueries({ queryKey: ['overview'] }),
       queryClient.invalidateQueries({ queryKey: ['audit'] }),
     ])
   },
@@ -65,11 +66,13 @@ function submit() {
     <h2>Your decision</h2>
     <fieldset>
       <legend>Outcome</legend>
-      <label v-for="value in outcomes" :key="value" class="option">
-        <input v-model="outcome" type="radio" name="outcome" :value="value" />
-        <span class="mark" aria-hidden="true" />
-        <span>{{ OUTCOME_LABELS[value] }}</span>
-      </label>
+      <div class="outcomes">
+        <label v-for="value in outcomes" :key="value" class="option">
+          <input v-model="outcome" type="radio" name="outcome" :value="value" />
+          <span class="mark" aria-hidden="true" />
+          <span>{{ OUTCOME_LABELS[value] }}</span>
+        </label>
+      </div>
       <p class="muted">{{ OUTCOMES_NOTE }}</p>
     </fieldset>
 

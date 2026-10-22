@@ -7,12 +7,19 @@ come back as ApiError with a code the screens switch on.
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import Integer, cast, func, select
+from sqlalchemy import Integer, case, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_token, new_invite_code
 from app.errors import ApiError
-from app.models import Candidate, Question, SessionQuestion, Sitting, TestSession
+from app.models import (
+    Candidate,
+    Question,
+    QuestionStats,
+    SessionQuestion,
+    Sitting,
+    TestSession,
+)
 from app.services.shuffle import most_asked_of_a_section
 
 MAX_INVITES = 500
@@ -105,8 +112,11 @@ def create_sitting(
     opens_at: datetime | None,
     closes_at: datetime | None,
     duration_s: int,
-    question_count: int,
+    question_count: int | None = None,
+    per_section: dict[str, int] | None = None,
 ) -> Sitting:
+    """A new sitting. Its paper is either `per_section` (how many questions each section
+    contributes: the blueprint) or `question_count` spread evenly over the sections."""
     name = name.strip()
     if not name:
         raise ApiError(422, "name_required")
@@ -114,27 +124,46 @@ def create_sitting(
         raise ApiError(422, "name_too_long", max=NAME_MAX)
     if duration_s < MIN_DURATION_S:
         raise ApiError(422, "invalid_duration")
-    if question_count < 1:
-        raise ApiError(422, "invalid_question_count")
     opens_at, closes_at = _aware(opens_at), _aware(closes_at)
     if opens_at and closes_at and closes_at <= opens_at:
         raise ApiError(422, "invalid_window")
 
-    per_section = dict(
+    in_bank = dict(
         db.execute(select(Question.section, func.count()).group_by(Question.section)).all()
     )
-    available = sum(per_section.values())
-    if question_count > available:
-        raise ApiError(409, "question_bank_too_small", available=available)
-    # a paper is spread over the sections, so a small one would fail a candidate's start later
-    needed = most_asked_of_a_section(question_count, len(per_section))
-    short = [
-        {"section": section, "available": count}
-        for section, count in sorted(per_section.items())
-        if count < needed
-    ]
-    if short:
-        raise ApiError(409, "section_too_small", needed=needed, sections=short)
+    blueprint: dict[str, int] | None = None
+    if per_section is not None:
+        if any(n < 0 for n in per_section.values()):
+            raise ApiError(422, "invalid_question_count")
+        blueprint = {section: n for section, n in per_section.items() if n > 0}
+        if not blueprint:
+            raise ApiError(422, "invalid_question_count")
+        unknown = sorted(section for section in blueprint if section not in in_bank)
+        if unknown:
+            raise ApiError(422, "unknown_section", sections=unknown)
+        question_count = sum(blueprint.values())
+        short = [
+            {"section": section, "available": in_bank[section], "needed": wanted}
+            for section, wanted in sorted(blueprint.items())
+            if in_bank[section] < wanted
+        ]
+        if short:
+            raise ApiError(409, "section_too_small", sections=short)
+    else:
+        if question_count is None or question_count < 1:
+            raise ApiError(422, "invalid_question_count")
+        available = sum(in_bank.values())
+        if question_count > available:
+            raise ApiError(409, "question_bank_too_small", available=available)
+        # a paper is spread over the sections, so a small one would fail a candidate's start later
+        needed = most_asked_of_a_section(question_count, len(in_bank))
+        short = [
+            {"section": section, "available": count, "needed": needed}
+            for section, count in sorted(in_bank.items())
+            if count < needed
+        ]
+        if short:
+            raise ApiError(409, "section_too_small", needed=needed, sections=short)
     if db.scalar(select(Sitting.id).where(Sitting.name == name)) is not None:
         raise ApiError(409, "name_taken")
 
@@ -144,6 +173,7 @@ def create_sitting(
         closes_at=closes_at,
         duration_s=duration_s,
         question_count=question_count,
+        blueprint=blueprint,
         status="open",
     )
     db.add(sitting)
@@ -205,6 +235,45 @@ def generate_invites(db: Session, count: int) -> list[tuple[str, str]]:
     return invites
 
 
+# Where a candidate is, read off their newest session: no session yet means the code has not been
+# used, a created one means they opened the link but have not started the timer.
+INVITE_STATUS = {"created": "opened", "in_progress": "started", "finished": "finished"}
+INVITES_SHOWN = 500
+
+
+def list_invites(db: Session, limit: int = INVITES_SHOWN) -> tuple[list[tuple[str, str]], int]:
+    """The newest `limit` candidates with where each one is, and how many candidates there are.
+    Codes are never here: only a hash is stored."""
+    total = db.scalar(select(func.count()).select_from(Candidate)) or 0
+    ids = list(
+        db.scalars(
+            select(Candidate.id)
+            .order_by(func.length(Candidate.id).desc(), Candidate.id.desc())
+            .limit(limit)
+        )
+    )
+    newest: dict[str, str] = {}
+    rows = db.execute(
+        select(TestSession.candidate_id, TestSession.status)
+        .where(TestSession.candidate_id.in_(ids))
+        .order_by(TestSession.created_at)
+    )
+    for candidate_id, status in rows:
+        newest[candidate_id] = status  # later sessions replace earlier ones
+    return [(i, INVITE_STATUS.get(newest.get(i, ""), "not_opened")) for i in ids], total
+
+
+def reissue_invite(db: Session, candidate_id: str) -> str:
+    """A new code for one candidate, to resend a lost link. The old code stops working at once."""
+    candidate = db.get(Candidate, candidate_id)
+    if candidate is None:
+        raise ApiError(404, "candidate_not_found")
+    code = new_invite_code()
+    candidate.invite_token_hash = hash_token(code)
+    db.flush()
+    return code
+
+
 # ---------------------------------------------------------------------------------- the bank
 
 
@@ -229,6 +298,51 @@ def bank_summary(db: Session) -> BankSummary:
         synthetic=sum(s.synthetic for s in by_section),
         by_section=by_section,
     )
+
+
+QUESTIONS_PAGE = 100
+QUESTIONS_PAGE_MAX = 500
+PREVIEW_CHARS = 200
+
+
+@dataclass(frozen=True)
+class QuestionRow:
+    id: str
+    section: str
+    difficulty: str | None
+    source: str
+    preview: str  # the start of the text: the table never needs the whole question
+    # Cytonn's own figure, as a percentage; None until a past-sitting summary has been loaded. The
+    # made-up estimates are never shown here (and are stored as fractions, not percentages).
+    pct_correct: float | None
+    n: int | None
+
+
+def list_questions(
+    db: Session, section: str | None, limit: int = QUESTIONS_PAGE, offset: int = 0
+) -> tuple[list[QuestionRow], int]:
+    """One page of the bank, and how many questions match. Only the columns the table shows are
+    fetched, and only the start of each text."""
+    limit = max(1, min(limit, QUESTIONS_PAGE_MAX))
+    where = [Question.section == section] if section else []
+    total = db.scalar(select(func.count()).select_from(Question).where(*where)) or 0
+    rows = db.execute(
+        select(
+            Question.id,
+            Question.section,
+            Question.difficulty,
+            Question.source,
+            func.left(Question.text, PREVIEW_CHARS),
+            case((QuestionStats.source == "cytonn", QuestionStats.pct_correct), else_=None),
+            case((QuestionStats.source == "cytonn", QuestionStats.n), else_=None),
+        )
+        .outerjoin(QuestionStats, QuestionStats.question_id == Question.id)
+        .where(*where)
+        .order_by(Question.section, Question.id)
+        .limit(limit)
+        .offset(max(0, offset))
+    ).all()
+    return [QuestionRow(*row) for row in rows], total
 
 
 def retire_synthetic(db: Session) -> tuple[int, int]:

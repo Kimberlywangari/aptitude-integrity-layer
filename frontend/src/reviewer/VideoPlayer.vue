@@ -3,6 +3,14 @@
 export type JumpTarget =
   | { kind: 'seek'; segment: number; seekS: number; label: string; nonce: number }
   | { kind: 'none'; label: string; nonce: number }
+
+/** A flag on the recording: where the player lands (already 5 s before the moment) and its name. */
+export interface Mark {
+  id: string
+  label: string
+  segment: number
+  seekS: number
+}
 </script>
 
 <script setup lang="ts">
@@ -11,14 +19,22 @@ import BaseButton from '../components/BaseButton.vue'
 import { formatDateTime, formatElapsed } from '../lib/format'
 import type { VideoSegment } from '../lib/reviewTypes'
 
-const props = defineProps<{
-  segments: VideoSegment[]
-  target: JumpTarget | null
-  deletedAt: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    segments: VideoSegment[]
+    target: JumpTarget | null
+    deletedAt: string | null
+    marks?: Mark[]
+  }>(),
+  { marks: () => [] },
+)
+const emit = defineEmits<{ mark: [id: string] }>()
+
+const LEAD_S = 5 // a jump lands this long before the moment
 
 const video = ref<HTMLVideoElement | null>(null)
 const active = ref(0)
+const playedS = ref(0) // where the player is inside the active part
 let pendingSeek: number | null = null
 
 // A new jump to another part switches to it (the element below is keyed on the part, so it is a
@@ -48,25 +64,41 @@ function onLoadedMetadata() {
 }
 
 const segment = computed(() => props.segments.find((s) => s.segment === active.value) ?? props.segments[0])
+
+// ---- the timeline of flags: the whole recording as one line, parts laid end to end by their offsets
+const total = computed(() => Math.max(0, ...props.segments.map((s) => s.start_s + s.duration_s)))
+const startOf = (part: number) => props.segments.find((s) => s.segment === part)?.start_s ?? null
+const percent = (seconds: number) => `${Math.min(100, Math.max(0, (seconds / total.value) * 100))}%`
+
+const placed = computed(() =>
+  props.marks.flatMap((mark) => {
+    const start = startOf(mark.segment)
+    return start === null ? [] : [{ ...mark, at: percent(start + mark.seekS + LEAD_S) }]
+  }),
+)
+const playhead = computed(() => percent((segment.value ? segment.value.start_s : 0) + playedS.value))
 </script>
 
 <template>
-  <div v-if="deletedAt" class="panel">
-    <h2>Video</h2>
-    <p>
-      The video was deleted on {{ formatDateTime(deletedAt) }}, 30 days after the decision. The
-      flags and the packet above are kept.
-    </p>
+  <div v-if="deletedAt" class="video-card">
+    <div class="video-deleted">
+      <h2>Video</h2>
+      <p>
+        The video was deleted on {{ formatDateTime(deletedAt) }}, 30 days after the decision. The
+        flags and the packet above are kept.
+      </p>
+    </div>
   </div>
 
-  <div v-else-if="segments.length === 0" class="panel">
-    <h2>Video</h2>
-    <p>No video was recorded for this candidate.</p>
+  <div v-else-if="segments.length === 0" class="video-card">
+    <div class="video-deleted">
+      <h2>Video</h2>
+      <p>No video was recorded for this candidate.</p>
+    </div>
   </div>
 
-  <div v-else class="panel">
-    <h2>Video</h2>
-    <div v-if="segments.length > 1" class="actions" role="group" aria-label="Recording part">
+  <div v-else class="video-card">
+    <div v-if="segments.length > 1" class="video-parts" role="group" aria-label="Recording part">
       <BaseButton
         v-for="s in segments"
         :key="s.segment"
@@ -85,13 +117,29 @@ const segment = computed(() => props.segments.find((s) => s.segment === active.v
       controls
       preload="metadata"
       @loadedmetadata="onLoadedMetadata"
+      @timeupdate="playedS = ($event.target as HTMLVideoElement).currentTime"
     />
     <div v-else class="video-placeholder">
       The video file is not available here (sample data). Jumps still show where the player would
       land.
     </div>
 
-    <p role="status" class="muted">
+    <div v-if="total > 0 && placed.length > 0" class="timeline" role="group" aria-label="Flags on the recording">
+      <div class="line" />
+      <button
+        v-for="mark in placed"
+        :key="mark.id"
+        type="button"
+        class="mk"
+        :style="{ left: mark.at }"
+        :aria-label="`Jump to ${mark.label}`"
+        :title="mark.label"
+        @click="emit('mark', mark.id)"
+      />
+      <div class="playhead" :style="{ left: playhead }" aria-hidden="true" />
+    </div>
+
+    <p role="status" class="video-note">
       <template v-if="target?.kind === 'seek'">
         {{ target.label }}: part {{ target.segment + 1 }} at {{ formatElapsed(target.seekS) }},
         starting 5 s before the moment.

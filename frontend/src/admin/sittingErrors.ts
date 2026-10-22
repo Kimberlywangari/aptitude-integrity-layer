@@ -5,13 +5,14 @@ const CREATE_ERRORS: Record<string, string> = {
   name_too_long: 'That name is too long. Use 100 characters or fewer.',
   name_taken: 'A sitting with that name already exists.',
   invalid_duration: 'The duration must be at least one minute.',
-  invalid_question_count: 'The sitting needs at least one question.',
+  invalid_question_count: 'Ask for at least one question from at least one section.',
   invalid_window: 'It must close after it opens.',
 }
 
 interface ShortSection {
   section: string
   available: number
+  needed: number
 }
 
 function shortSections(value: unknown): ShortSection[] {
@@ -26,9 +27,13 @@ export function createMessage(error: unknown): string | null {
     }
     if (error.code === 'section_too_small') {
       const short = shortSections(error.body.sections)
-        .map((s) => `${s.section} has ${s.available}`)
+        .map((s) => `${s.section} has ${s.available} (${s.needed} asked for)`)
         .join(', ')
-      return `The questions are spread over the sections, so each needs at least ${String(error.body.needed)} for a sitting this size: ${short}. Ask for fewer questions, or load more.`
+      return `Not enough questions in: ${short}. Ask for fewer, or load more first.`
+    }
+    if (error.code === 'unknown_section') {
+      const names = Array.isArray(error.body.sections) ? error.body.sections.join(', ') : ''
+      return `The question bank has no section called: ${names}.`
     }
     return CREATE_ERRORS[error.code] ?? 'Could not create the sitting.'
   }

@@ -11,8 +11,12 @@ import type {
   ImportReport,
   ImportRequest,
   Invite,
+  InviteListResponse,
   InvitesResponse,
+  InviteStatus,
   QuestionBankSummary,
+  QuestionListResponse,
+  QuestionRow,
   RetireResponse,
 } from '../adminTypes'
 import { ApiError } from '../api'
@@ -29,9 +33,10 @@ import type {
   DecisionOutcome,
   DecisionRequest,
   LoginResponse,
+  OverviewResponse,
   QueueResponse,
 } from '../reviewTypes'
-import { buildDetail, buildQueue, initialState, SITTINGS } from './data'
+import { buildDetail, buildOverview, buildQueue, initialState, SITTINGS } from './data'
 import type { MockState } from './data'
 import { runImport } from './importer'
 
@@ -43,6 +48,7 @@ let state: MockState
 let sittings: AdminSitting[]
 let bank: { section: string; cytonn: number; synthetic: number }[]
 let nextCandidate: number
+let invitees: InviteStatus[]
 let complaintCount: number
 let manifestCalls: Map<string, number>
 
@@ -56,6 +62,7 @@ function reset(): void {
       closes_at: null,
       duration_s: 1800,
       question_count: 12,
+      blueprint: null,
       status: 'open',
       counts: { finished: 14, in_progress: 2, not_started: 4 },
     },
@@ -66,6 +73,7 @@ function reset(): void {
       closes_at: '2026-10-08T11:00:00Z',
       duration_s: 1800,
       question_count: 12,
+      blueprint: null,
       status: 'closed',
       counts: { finished: 12, in_progress: 0, not_started: 0 },
     },
@@ -76,6 +84,11 @@ function reset(): void {
     { section: 'logical', cytonn: 0, synthetic: 20 },
   ]
   nextCandidate = 21
+  // twenty invited, matching the first sitting's counts: 14 finished, 2 sitting now, 4 not opened
+  invitees = Array.from({ length: 20 }, (_, i) => ({
+    candidate_id: `cand-${String(i + 1).padStart(3, '0')}`,
+    status: i < 14 ? 'finished' : i < 16 ? 'started' : 'not_opened',
+  }))
   complaintCount = 0
   manifestCalls = new Map()
 }
@@ -140,6 +153,28 @@ function bankSummary(): QuestionBankSummary {
     synthetic: bank.reduce((n, s) => n + s.synthetic, 0),
     by_section,
   }
+}
+
+/** One row per question the bank summary counts: the real ones first in each section. */
+function questionRows(): QuestionRow[] {
+  const difficulties = ['easy', 'medium', 'hard'] as const
+  const rows: QuestionRow[] = []
+  let number = 1
+  for (const section of [...bank].sort((a, b) => a.section.localeCompare(b.section))) {
+    for (let i = 0; i < section.cytonn + section.synthetic; i++, number++) {
+      const real = i < section.cytonn
+      rows.push({
+        id: real ? `C${number}` : `Q${String(number).padStart(3, '0')}`,
+        section: section.section,
+        difficulty: real ? null : difficulties[i % 3],
+        source: real ? 'cytonn' : 'synthetic',
+        preview: `${real ? 'A Cytonn' : 'A placeholder'} ${section.section} question, number ${i + 1}`,
+        pct_correct: real ? 40 + (i % 5) * 10 : null,
+        n: real ? 800 : null,
+      })
+    }
+  }
+  return rows
 }
 
 function randomCode(): string {
@@ -230,6 +265,18 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
     } satisfies QueueResponse
   }
 
+  if (route === 'GET /api/review/overview') {
+    requireStaff(token)
+    const requested = Number(url.searchParams.get('sitting') ?? SITTINGS[0].id)
+    const sittingId = SITTINGS.some((s) => s.id === requested) ? requested : SITTINGS[0].id
+    return {
+      sittings: SITTINGS,
+      sitting_id: sittingId,
+      sitting_status: sittings.find((s) => s.id === sittingId)?.status ?? null,
+      ...buildOverview(sittingId, state),
+    } satisfies OverviewResponse
+  }
+
   if ((m = route.match(/^GET \/api\/review\/candidates\/([^/]+)$/))) {
     requireStaff(token)
     return buildDetail(m[1], state) ?? fail(404, 'candidate_not_found')
@@ -287,9 +334,18 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
     const b = bodyOf<CreateSittingRequest>(body)
     if (!b.name?.trim()) fail(422, 'name_required')
     if (!(b.duration_s >= 60)) fail(422, 'invalid_duration')
-    if (!(b.question_count >= 1)) fail(422, 'invalid_question_count')
-    const available = bankSummary().total
-    if (b.question_count > available) fail(409, 'question_bank_too_small', { available })
+    const inBank = new Map(bankSummary().by_section.map((s) => [s.section, s.count]))
+    const blueprint = Object.fromEntries(
+      Object.entries(b.per_section ?? {}).filter(([, n]) => n > 0),
+    )
+    const total = Object.values(blueprint).reduce((n, v) => n + v, 0)
+    if (!(total >= 1)) fail(422, 'invalid_question_count')
+    const unknown = Object.keys(blueprint).filter((section) => !inBank.has(section))
+    if (unknown.length) fail(422, 'unknown_section', { sections: unknown })
+    const short = Object.entries(blueprint)
+      .filter(([section, n]) => (inBank.get(section) ?? 0) < n)
+      .map(([section, needed]) => ({ section, available: inBank.get(section) ?? 0, needed }))
+    if (short.length) fail(409, 'section_too_small', { sections: short })
     if (sittings.some((s) => s.name === b.name.trim())) fail(409, 'name_taken')
     const sitting: AdminSitting = {
       id: Math.max(...sittings.map((s) => s.id)) + 1,
@@ -297,7 +353,8 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
       opens_at: b.opens_at,
       closes_at: b.closes_at,
       duration_s: b.duration_s,
-      question_count: b.question_count,
+      question_count: total,
+      blueprint,
       status: 'open',
       counts: { finished: 0, in_progress: 0, not_started: 0 },
     }
@@ -327,8 +384,35 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
       candidate_id: `cand-${String(nextCandidate++).padStart(3, '0')}`,
       code: randomCode(),
     }))
+    for (const invite of invites) {
+      invitees.unshift({ candidate_id: invite.candidate_id, status: 'not_opened' })
+    }
     audit(emailOf(t), 'admin', null, `generated ${count} invitations`)
     return { invites } satisfies InvitesResponse
+  }
+
+  if (route === 'GET /api/admin/invites') {
+    requireAdmin(token)
+    return { invites: invitees.slice(0, 500), total: invitees.length } satisfies InviteListResponse
+  }
+
+  if ((m = route.match(/^POST \/api\/admin\/invites\/([^/]+)\/reissue$/))) {
+    const t = requireAdmin(token)
+    if (!invitees.some((i) => i.candidate_id === m![1])) fail(404, 'candidate_not_found')
+    audit(emailOf(t), 'admin', null, `issued a new code for ${m[1]}`)
+    return { candidate_id: m[1], code: randomCode() } satisfies Invite
+  }
+
+  if (route === 'GET /api/admin/questions') {
+    requireAdmin(token)
+    const wanted = url.searchParams.get('section')
+    const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') ?? 100)))
+    const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0))
+    const all = questionRows().filter((q) => !wanted || q.section === wanted)
+    return {
+      questions: all.slice(offset, offset + limit),
+      total: all.length,
+    } satisfies QuestionListResponse
   }
 
   if (route === 'GET /api/admin/questions/summary') {

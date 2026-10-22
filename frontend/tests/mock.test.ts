@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ApiError } from '../src/lib/api'
-import type { AdminSitting, ImportReport, InvitesResponse } from '../src/lib/adminTypes'
+import type {
+  AdminSitting,
+  ImportReport,
+  InviteListResponse,
+  InvitesResponse,
+  QuestionListResponse,
+} from '../src/lib/adminTypes'
 import { mockApi, resetMock, setMockLatency } from '../src/lib/mock'
 import { clearStaff, saveStaff } from '../src/lib/staffSession'
-import type { CandidateDetail, QueueResponse } from '../src/lib/reviewTypes'
+import type { CandidateDetail, OverviewResponse, QueueResponse } from '../src/lib/reviewTypes'
 
 const REVIEWER = 'mock-reviewer:r@example.com'
 const ADMIN = 'mock-admin:admin@example.com'
@@ -136,6 +142,46 @@ describe('mock review queue and decisions', () => {
     expect(audit.entries[0]).toMatchObject({ action: 'decision', candidate_id: 'cand-007' })
   })
 
+  it('gives each queue item a strength, a band and a flag count that agree', async () => {
+    const queue = await call<QueueResponse>('/api/review/queue')
+    for (const item of queue.items) {
+      expect(item.strength).toBeGreaterThanOrEqual(1)
+      expect(item.strength).toBeLessThanOrEqual(5)
+      expect(item.band).toBe(item.strength >= 4 ? 'high' : item.strength === 3 ? 'moderate' : 'low')
+      expect(item.flag_count).toBe(item.flag_kinds.length)
+    }
+    expect(queue.items.find((i) => i.logging_only)?.band).toBe('low')
+    const detail = await call<CandidateDetail>('/api/review/candidates/cand-007')
+    expect([detail.strength, detail.band]).toEqual([5, 'high'])
+  })
+
+  it('builds the overview from the queue and moves a candidate to reviewed on a decision', async () => {
+    const before = await call<OverviewResponse>('/api/review/overview')
+    expect(before.tiles.flagged).toBe(7)
+    expect(before.tiles.reviewed).toBe(1) // cand-018 arrives decided
+    expect(before.pending).toBe(6)
+    expect(before.next_up.map((n) => n.candidate_id)).toEqual(['cand-007', 'cand-012', 'cand-003'])
+    const counts = before.flags_by_kind.map((k) => k.count)
+    expect(counts).toEqual([...counts].sort((a, b) => b - a))
+    expect(before.checks.map((c) => c.key)).toContain('heartbeat')
+
+    await call('/api/review/decisions', 'POST', {
+      session_id: 'sess-cand-007',
+      outcome: 'no_concern',
+      reason: 'Nothing on the video supports the flags raised here.',
+    })
+    const after = await call<OverviewResponse>('/api/review/overview')
+    expect(after.pending).toBe(5)
+    expect(after.next_up[0].candidate_id).toBe('cand-012')
+  })
+
+  it('has an empty overview for a sitting that has not run', async () => {
+    const overview = await call<OverviewResponse>('/api/review/overview?sitting=2')
+    expect(overview.tiles.flagged).toBe(0)
+    expect(overview.next_up).toEqual([])
+    expect(overview.sitting_status).toBe('closed')
+  })
+
   it('toggles the shortlist', async () => {
     const first = await call<{ shortlisted: boolean }>(
       '/api/review/candidates/cand-012/shortlist',
@@ -168,22 +214,58 @@ describe('mock admin', () => {
     expect(list.sittings.find((s) => s.id === 1)?.status).toBe('closed')
   })
 
-  it('creates a sitting and validates it', async () => {
+  it('creates a sitting from a number per section and validates it', async () => {
     const body = {
       name: 'Pilot',
       opens_at: null,
       closes_at: null,
       duration_s: 1800,
-      question_count: 12,
+      per_section: { numerical: 4, verbal: 3 },
     }
     expect(await codeOf(admin('/api/admin/sittings', 'POST', { ...body, name: ' ' }))).toBe(
       'name_required',
     )
     expect(
-      await codeOf(admin('/api/admin/sittings', 'POST', { ...body, question_count: 500 })),
-    ).toBe('question_bank_too_small')
+      await codeOf(admin('/api/admin/sittings', 'POST', { ...body, per_section: { numerical: 500 } })),
+    ).toBe('section_too_small')
+    expect(
+      await codeOf(admin('/api/admin/sittings', 'POST', { ...body, per_section: { astrology: 2 } })),
+    ).toBe('unknown_section')
+    expect(await codeOf(admin('/api/admin/sittings', 'POST', { ...body, per_section: {} }))).toBe(
+      'invalid_question_count',
+    )
     const created = await admin<AdminSitting>('/api/admin/sittings', 'POST', body)
-    expect(created).toMatchObject({ name: 'Pilot', status: 'open' })
+    expect(created).toMatchObject({
+      name: 'Pilot',
+      status: 'open',
+      question_count: 7,
+      blueprint: { numerical: 4, verbal: 3 },
+    })
+  })
+
+  it('lists the invited candidates with where each one is, and makes a new code for one', async () => {
+    const list = await admin<InviteListResponse>('/api/admin/invites')
+    expect(list.total).toBe(20)
+    expect(list.invites.map((i) => i.status)).toContain('not_opened')
+    expect(list.invites[0]).not.toHaveProperty('code')
+
+    const fresh = await admin<{ candidate_id: string; code: string }>(
+      '/api/admin/invites/cand-016/reissue',
+      'POST',
+    )
+    expect(fresh.candidate_id).toBe('cand-016')
+    expect(fresh.code).toMatch(/^[0-9A-Z]{8}$/)
+    expect(await codeOf(admin('/api/admin/invites/nobody/reissue', 'POST'))).toBe('candidate_not_found')
+  })
+
+  it('pages the questions and filters them by section', async () => {
+    const first = await admin<QuestionListResponse>('/api/admin/questions?limit=25')
+    expect(first.total).toBe(60)
+    expect(first.questions).toHaveLength(25)
+    const verbal = await admin<QuestionListResponse>('/api/admin/questions?section=verbal&limit=500')
+    expect(verbal.total).toBe(20)
+    expect(new Set(verbal.questions.map((q) => q.section))).toEqual(new Set(['verbal']))
+    expect(verbal.questions[0].pct_correct).toBeNull() // made-up questions have no real figure
   })
 
   it('generates short codes with new candidate IDs and no repeats', async () => {

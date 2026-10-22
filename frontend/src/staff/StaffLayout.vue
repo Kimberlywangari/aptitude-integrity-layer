@@ -6,8 +6,8 @@ import BaseButton from '../components/BaseButton.vue'
 import { homeFor, loginPathFor } from '../lib/routes'
 import { clearStaff, getStaff } from '../lib/staffSession'
 import '../styles/staff.css'
-import Breadcrumbs from './Breadcrumbs.vue'
 import { clearQueryClient, getQueryClient, setSessionExpiredHandler } from './queryClient'
+import RailNav from './RailNav.vue'
 
 // Everything staff-facing (the reviewer app and the recruiter's setup screens) is a lazy chunk, and
 // so is TanStack Query: it is provided here, not installed for the whole app.
@@ -41,47 +41,27 @@ function signOut() {
 </script>
 
 <template>
-  <header class="staff-header">
-    <RouterLink :to="homeFor(staff.role)" class="staff-brand">
-      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
-        <rect width="32" height="32" rx="8" />
-        <path d="M9 16.5l4.6 4.6L23 11.5" />
-      </svg>
-      Integrity review
-    </RouterLink>
-    <nav aria-label="Main">
-      <RouterLink to="/review" exact-active-class="active">Queue</RouterLink>
-      <RouterLink to="/review/audit" exact-active-class="active">Audit</RouterLink>
-      <template v-if="staff.role === 'admin'">
-        <RouterLink to="/admin" exact-active-class="active">Sittings</RouterLink>
-        <RouterLink to="/admin/invites" exact-active-class="active">Invites</RouterLink>
-        <RouterLink to="/admin/questions" exact-active-class="active">Questions</RouterLink>
-      </template>
-    </nav>
-    <span class="staff-user">{{ staff.email }} ({{ staff.role }})</span>
-    <BaseButton variant="secondary" @click="signOut">Sign out</BaseButton>
-  </header>
-  <main class="page wide">
-    <Breadcrumbs />
-    <RouterView />
-  </main>
+  <div class="console">
+    <aside class="rail">
+      <RouterLink :to="homeFor(staff.role)" class="staff-brand">
+        <span class="rail-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
+        </span>
+        <span>
+          <strong>Aptitude Integrity</strong>
+          <small>Review console</small>
+        </span>
+      </RouterLink>
+      <!-- RailNav asks for the overview, so it lives in a child: this component provides the query
+           client, and a component cannot inject what it provides itself. -->
+      <RailNav :role="staff.role" />
+      <div class="rail-foot">
+        <span class="staff-user">{{ staff.email }} ({{ staff.role }})</span>
+        <BaseButton variant="secondary" @click="signOut">Sign out</BaseButton>
+      </div>
+    </aside>
+    <main class="console-main">
+      <RouterView />
+    </main>
+  </div>
 </template>
-
-<style scoped>
-.logo {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.logo rect {
-  fill: var(--accent);
-}
-
-.logo path {
-  fill: none;
-  stroke: var(--on-accent);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-</style>

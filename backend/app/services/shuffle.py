@@ -48,3 +48,21 @@ def balanced_sample(
             raise ValueError(f"section {section!r} has {len(pool)} questions, need {wanted}")
         picked.extend(rng.sample(pool, wanted))
     return picked
+
+
+def blueprint_sample(
+    rng: random.Random, by_section: Mapping[str, Sequence[str]], blueprint: Mapping[str, int]
+) -> list[str]:
+    """Pick exactly the number of question IDs the blueprint asks of each section.
+
+    Sections stay grouped (in name order) and the questions inside each are in random order, as in
+    `balanced_sample`.
+    """
+    picked: list[str] = []
+    for section in sorted(blueprint):
+        wanted = blueprint[section]
+        pool = sorted(by_section.get(section, ()))
+        if wanted > len(pool):
+            raise ValueError(f"section {section!r} has {len(pool)} questions, need {wanted}")
+        picked.extend(rng.sample(pool, wanted))
+    return picked

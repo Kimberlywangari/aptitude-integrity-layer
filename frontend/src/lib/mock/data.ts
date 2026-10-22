@@ -5,12 +5,16 @@
 import type {
   AiStatus,
   AuditEntry,
+  Band,
   BreakdownLine,
   CandidateDetail,
   ComplaintItem,
   FlagItem,
+  HealthCheck,
   InnocentSignal,
   MicSilence,
+  NextUp,
+  OverviewTiles,
   PastDecision,
   QueueItem,
   SittingRef,
@@ -236,6 +240,20 @@ const SEEDS: Seed[] = [
 
 // ---- builders
 
+// The same cut points as backend/app/services/ranking/rules.py: a rule score as a 1 to 5 strength.
+const STRENGTH_CUTS = [2, 4, 6, 9]
+
+export function bandOf(strength: number): Band {
+  if (strength >= 4) return 'high'
+  return strength === 3 ? 'moderate' : 'low'
+}
+
+function strengthOf(seed: Seed, ruleScore: number): number {
+  if (seed.ai.strength !== null) return seed.ai.strength
+  if (seed.kinds.every((k) => k === 'LOGGING_PROBLEM')) return 1
+  return 1 + STRENGTH_CUTS.filter((cut) => ruleScore >= cut).length
+}
+
 export function seekFor(
   segments: { start_s: number; duration_s: number }[],
   elapsedS: number,
@@ -333,10 +351,13 @@ export function buildDetail(id: string, state: MockState): CandidateDetail | nul
     duration_s: s.duration_s,
   }))
 
+  const strength = strengthOf(seed, ruleScore)
   return {
     session_id: `sess-${id}`,
     candidate_id: id,
     rank: index + 1,
+    strength,
+    band: bandOf(strength),
     rule_score: ruleScore,
     rule_breakdown: lines,
     score: seed.score,
@@ -374,10 +395,91 @@ export function buildQueue(sittingId: number, state: MockState): QueueItem[] {
       rule_score: detail.rule_score,
       ai_strength: seed.ai.strength,
       ai_status: seed.ai.status,
+      strength: detail.strength,
+      band: detail.band,
+      flag_count: seed.kinds.length,
       flag_kinds: seed.kinds,
       decision: decisions.length ? decisions[decisions.length - 1].outcome : null,
       shortlisted: state.shortlisted.has(seed.id),
       logging_only: seed.kinds.every((k) => k === 'LOGGING_PROBLEM'),
     }
   })
+}
+
+// ---- the overview page
+
+const CHECKS: HealthCheck[] = [
+  {
+    key: 'ai',
+    label: 'AI ranking',
+    state: 'off',
+    detail: 'Rules only: the order comes from the rule score.',
+  },
+  {
+    key: 'factcheck',
+    label: 'Fact check on AI answers',
+    state: 'ok',
+    detail: 'Every AI answer is checked against the stored log before a reviewer sees it.',
+  },
+  {
+    key: 'fallback',
+    label: 'Rule order fallback',
+    state: 'ok',
+    detail: 'If the AI fails, the rule order is used.',
+  },
+  {
+    key: 'gate',
+    label: 'Camera and microphone gate',
+    state: 'warn',
+    detail: 'The test starts without the camera and microphone check. Fine for development.',
+  },
+]
+
+export function buildOverview(
+  sittingId: number,
+  state: MockState,
+): {
+  tiles: OverviewTiles
+  flags_by_kind: { kind: string; count: number }[]
+  pending: number
+  next_up: NextUp[]
+  checks: HealthCheck[]
+} {
+  const queue = buildQueue(sittingId, state)
+  const waiting = queue.filter((item) => item.decision === null)
+  const counts = new Map<string, number>()
+  for (const item of queue) {
+    for (const kind of item.flag_kinds) counts.set(kind, (counts.get(kind) ?? 0) + 1)
+  }
+  const gaps = counts.get('LOGGING_PROBLEM') ?? 0
+  return {
+    tiles: {
+      sat: queue.length ? 16 : 0,
+      finished: queue.length ? 14 : 0,
+      flagged: queue.length,
+      reviewed: queue.length - waiting.length,
+      videos_uploaded: queue.length ? 13 : 0,
+      videos_expected: queue.length ? 14 : 0,
+      videos_decided_not_deleted: queue.filter((item) => item.decision !== null).length,
+    },
+    flags_by_kind: [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([kind, count]) => ({ kind, count })),
+    pending: waiting.length,
+    next_up: waiting.slice(0, 3).map((item) => ({
+      candidate_id: item.candidate_id,
+      band: item.band,
+      flag_count: item.flag_count,
+      first_kind: item.flag_kinds[0],
+    })),
+    checks: [
+      ...CHECKS,
+      {
+        key: 'heartbeat',
+        label: 'Heartbeat gaps',
+        state: gaps ? 'note' : 'ok',
+        detail: gaps ? `${gaps} to look at.` : 'None in this sitting.',
+      },
+    ],
+  }
 }

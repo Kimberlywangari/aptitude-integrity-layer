@@ -10,15 +10,19 @@ describe('createMessage', () => {
   it('names the sections that are too small for the sitting', () => {
     const error = new ApiError(409, 'section_too_small', {
       code: 'section_too_small',
-      needed: 5,
       sections: [
-        { section: 'verbal', available: 3 },
-        { section: 'logical', available: 4 },
+        { section: 'verbal', available: 3, needed: 5 },
+        { section: 'logical', available: 4, needed: 6 },
       ],
     })
     const message = createMessage(error) ?? ''
-    expect(message).toContain('at least 5')
-    expect(message).toContain('verbal has 3, logical has 4')
+    expect(message).toContain('verbal has 3 (5 asked for)')
+    expect(message).toContain('logical has 4 (6 asked for)')
+  })
+
+  it('names a section the bank does not have', () => {
+    const error = new ApiError(422, 'unknown_section', { code: 'unknown_section', sections: ['astrology'] })
+    expect(createMessage(error)).toContain('astrology')
   })
 
   it('still explains a bank that is too small overall', () => {

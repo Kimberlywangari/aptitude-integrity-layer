@@ -25,6 +25,13 @@ const untilText = (w: VueWrapper, re: RegExp | string) =>
 const button = (w: VueWrapper, name: string) => w.findAll('button').find((b) => b.text().trim() === name)
 const link = (w: VueWrapper, name: string | RegExp) =>
   w.findAll('a').find((a) => (typeof name === 'string' ? a.text().trim() === name : name.test(a.text())))
+const rail = (w: VueWrapper, name: string) =>
+  w.findAll('.rail-nav a').find((a) => a.text().replace(/\d+$/, '').trim() === name)
+const tab = (w: VueWrapper, name: string) =>
+  w.findAll('.tabs a').find((a) => a.text().trim() === name)
+const filterButton = (w: VueWrapper, name: string) =>
+  w.findAll('.filters button').find((b) => b.text().trim() === name)!
+const queueIds = (w: VueWrapper) => w.findAll('a.q-item strong').map((s) => s.text())
 
 const asReviewer = () =>
   saveStaff({ token: 'mock-reviewer:r@example.com', email: 'r@example.com', role: 'reviewer' })
@@ -104,11 +111,12 @@ describe('staff app', () => {
       expect(getStaff()?.role).toBe('admin')
     })
 
-    it('lands an admin on the sittings from the admin sign-in', async () => {
+    it('lands an admin on the sitting setup from the admin sign-in', async () => {
       const { w } = await renderAt('/login/admin')
       await untilHeading(w, 'Admin sign in')
       await signInWith(w, 'admin@example.com')
-      await untilHeading(w, 'Sittings')
+      await untilHeading(w, 'Admin')
+      expect(tab(w, 'Sitting setup')!.attributes('aria-current')).toBe('page')
     })
 
     it('tells a reviewer the admin sign-in is not for them and keeps nothing', async () => {
@@ -168,7 +176,7 @@ describe('staff app', () => {
       clearStaff()
       asAdmin()
       const second = await renderAt('/login/admin')
-      await untilHeading(second.w, 'Sittings')
+      await untilHeading(second.w, 'Admin')
     })
 
     it('signs out and lands on the entry page', async () => {
@@ -208,47 +216,169 @@ describe('staff app', () => {
       expect(second.w.get('.staff-brand').attributes('href')).toBe('/admin')
     })
 
-    it('shows where a deep page sits and how to get back', async () => {
+    it('lists the pages in the rail, and the admin pages only for an admin', async () => {
       asReviewer()
-      const { w } = await renderAt('/review/candidates/cand-007')
-      await until(() => w.find('nav[aria-label=Breadcrumb]').exists())
-      const crumbs = w.get('nav[aria-label=Breadcrumb]')
-      expect(crumbs.find('a').text()).toBe('Review')
-      expect(crumbs.find('a').attributes('href')).toBe('/review')
-      expect(crumbs.get('[aria-current=page]').text()).toBe('Candidate cand-007')
+      const first = await renderAt('/overview')
+      await until(() => rail(first.w, 'Overview') !== undefined)
+      expect(first.w.findAll('.rail-nav a').map((a) => a.text().replace(/\d+$/, '').trim())).toEqual([
+        'Overview',
+        'Review queue',
+        'Audit log',
+      ])
+
+      clearStaff()
+      asAdmin()
+      const second = await renderAt('/overview')
+      await until(() => rail(second.w, 'Admin') !== undefined)
+      expect(rail(second.w, 'Admin')!.attributes('href')).toBe('/admin')
     })
 
-    it('shows no breadcrumb at the top of a section', async () => {
+    it('marks the part of the app the person is in, and keeps the queue lit on a candidate', async () => {
+      asReviewer()
+      const audit = await renderAt('/review/audit')
+      await until(() => rail(audit.w, 'Audit log') !== undefined)
+      expect(rail(audit.w, 'Audit log')!.attributes('aria-current')).toBe('page')
+      expect(rail(audit.w, 'Review queue')!.attributes('aria-current')).toBeUndefined()
+
+      const deep = await renderAt('/review/candidates/cand-007')
+      await until(() => rail(deep.w, 'Review queue') !== undefined)
+      expect(rail(deep.w, 'Review queue')!.attributes('aria-current')).toBe('page')
+      expect(rail(deep.w, 'Audit log')!.attributes('aria-current')).toBeUndefined()
+    })
+
+    it('shows how many flagged candidates still wait, and updates it after a decision', async () => {
       asReviewer()
       const { w } = await renderAt('/review')
-      await untilHeading(w, 'Review queue')
-      expect(w.find('nav[aria-label=Breadcrumb]').exists()).toBe(false)
+      await until(() => w.find('.rail-count').exists())
+      expect(w.get('.rail-count').text()).toBe('6') // seven flagged, one already decided
+
+      await w.get('a.q-item[href*="cand-009"]').trigger('click')
+      await untilText(w, 'Candidate cand-009')
+      await w.findAll('label.option').find((l) => l.text().includes('No concern'))!.get('input').setValue(true)
+      await w.get('#reason').setValue('Screen froze, as the candidate said; timing fits.')
+      await w.get('.check input').setValue(true)
+      await w.findAll('form').at(-1)!.trigger('submit')
+      await until(() => w.get('.rail-count').text() === '5')
     })
 
-    it('puts the admin section in the trail of the setup pages', async () => {
+    it('puts the admin sections in tabs under one Admin heading', async () => {
       asAdmin()
       const { w } = await renderAt('/admin/questions')
-      await until(() => w.find('nav[aria-label=Breadcrumb]').exists())
-      const crumbs = w.get('nav[aria-label=Breadcrumb]')
-      expect(crumbs.find('a').text()).toBe('Admin')
-      expect(crumbs.find('a').attributes('href')).toBe('/admin')
-      expect(crumbs.text()).toContain('Questions')
+      await untilHeading(w, 'Admin')
+      expect(w.findAll('.tabs a').map((a) => a.text().trim())).toEqual([
+        'Sitting setup',
+        'Question bank',
+        'Invitations',
+      ])
+      expect(tab(w, 'Question bank')!.attributes('aria-current')).toBe('page')
+      expect(tab(w, 'Question bank')!.attributes('href')).toBe('/admin/questions')
+      expect(rail(w, 'Admin')!.attributes('aria-current')).toBe('page')
     })
   })
 
-  describe('reviewer queue', () => {
+  describe('overview', () => {
     beforeEach(asReviewer)
 
-    it('lists flagged candidates by rank with a separate low lane', async () => {
-      const { w } = await renderAt('/review')
-      await until(() => link(w, 'cand-007') !== undefined)
-      expect(link(w, 'cand-007')!.attributes('href')).toBe('/review/candidates/cand-007')
+    it('shows where the sitting stands', async () => {
+      const { w } = await renderAt('/overview')
+      await untilHeading(w, 'Overview')
+      await untilText(w, 'Sat this sitting')
 
-      expect(w.text()).toContain('AI advisory 5/5')
-      expect(w.text()).toContain('Rules only (AI check failed)')
-      const lane = w.get('section[aria-labelledby=low-lane]')
-      expect(lane.findAll('a').some((a) => a.text() === 'cand-004')).toBe(true)
+      const tiles = w.findAll('.tile').map((t) => norm(t.text()))
+      expect(tiles[0]).toContain('16')
+      expect(tiles[1]).toContain('7')
+      expect(tiles[2]).toMatch(/1 of 7/)
+      expect(tiles[3]).toMatch(/13 of 14/)
+    })
+
+    it('says the sitting is still open, so flags are not final', async () => {
+      const { w } = await renderAt('/overview')
+      await untilText(w, /This sitting is still open/)
+    })
+
+    it('draws the flags by kind, most common first', async () => {
+      const { w } = await renderAt('/overview')
+      await until(() => w.find('.bars').exists())
+      const rows = w.findAll('.bars li').map((li) => norm(li.text()))
+      expect(rows[0]).toMatch(/^Run of correct answers after a gap\s*5$/)
+      expect(rows.some((r) => /^Copy or cut attempt\s*3$/.test(r))).toBe(true)
+      expect(rows.some((r) => r.startsWith('Logging problem (heartbeat gap)'))).toBe(true)
+    })
+
+    it('lists the system checks in words, not just colour', async () => {
+      const { w } = await renderAt('/overview')
+      await until(() => w.find('.checks').exists())
+      const state = (label: string) =>
+        w.findAll('.checks li').find((li) => li.text().startsWith(label))!.get('.pill').text()
+      expect(state('Fact check on AI answers')).toBe('OK')
+      expect(state('Camera and microphone gate')).toBe('Needs a look')
+      expect(state('AI ranking')).toBe('Off')
+    })
+
+    it('lists who needs a person next and links to them', async () => {
+      const { w } = await renderAt('/overview')
+      await until(() => w.find('.next-row').exists())
+      const rows = w.findAll('a.next-row')
+      expect(rows.map((r) => r.get('strong').text())).toEqual(['cand-007', 'cand-012', 'cand-003'])
+      expect(rows[0].attributes('href')).toBe('/review/candidates/cand-007')
+      expect(rows[0].text()).toContain('High priority')
+    })
+
+    it('shows a sitting that has not run as empty', async () => {
+      const { w } = await renderAt('/overview?sitting=2')
+      await untilText(w, 'No one is flagged in this sitting yet.')
+      expect(w.find('a.next-row').exists()).toBe(false)
+    })
+  })
+
+  describe('review queue', () => {
+    beforeEach(asReviewer)
+
+    it('lists flagged candidates by rank with a priority band and a separate low lane', async () => {
+      const { w } = await renderAt('/review')
+      await untilHeading(w, 'Review queue')
+      await until(() => queueIds(w).length > 0)
+
+      expect(queueIds(w)).toEqual([
+        'cand-007',
+        'cand-012',
+        'cand-003',
+        'cand-015',
+        'cand-009',
+        'cand-018',
+        'cand-004',
+      ])
+      const first = w.get('a.q-item')
+      expect(first.attributes('href')).toBe('/review/candidates/cand-007')
+      expect(first.text()).toContain('High')
+      expect(first.text()).toContain('4 flags')
+
+      // the candidate whose only flag is a gap in the record sits below a label of its own
+      const lane = w.get('.lane-label')
+      expect(lane.text()).toBe('Logging problems only (low priority)')
+      expect(lane.element.nextElementSibling?.textContent).toContain('cand-004')
       expect(w.text()).toContain('Shortlisted')
+      expect(w.text()).toContain('Decided') // cand-018 arrives with a decision
+    })
+
+    it('filters by priority band and by what is still pending', async () => {
+      const { w } = await renderAt('/review')
+      await until(() => queueIds(w).length === 7)
+
+      await filterButton(w, 'High').trigger('click')
+      expect(queueIds(w)).toEqual(['cand-007', 'cand-012', 'cand-003', 'cand-015'])
+      expect(filterButton(w, 'High').attributes('aria-pressed')).toBe('true')
+
+      await filterButton(w, 'Pending').trigger('click')
+      expect(queueIds(w)).not.toContain('cand-018') // already decided
+      expect(queueIds(w)).toHaveLength(6)
+
+      await filterButton(w, 'Low').trigger('click')
+      expect(queueIds(w)).toEqual(expect.arrayContaining(['cand-009', 'cand-004']))
+      expect(queueIds(w)).not.toContain('cand-007')
+
+      await filterButton(w, 'All').trigger('click')
+      expect(queueIds(w)).toHaveLength(7)
     })
 
     it('shows an empty sitting plainly', async () => {
@@ -259,7 +389,20 @@ describe('staff app', () => {
     it('does not show the setup screens to a reviewer', async () => {
       const { w } = await renderAt('/review')
       await untilHeading(w, 'Review queue')
-      expect(link(w, 'Invites')).toBeUndefined()
+      expect(rail(w, 'Admin')).toBeUndefined()
+    })
+
+    it('opens a candidate beside the queue without losing it', async () => {
+      const { w, router } = await renderAt('/review')
+      await until(() => queueIds(w).length === 7)
+      expect(w.text()).toContain('Choose a candidate')
+
+      await w.get('a.q-item[href*="cand-012"]').trigger('click')
+      await untilText(w, 'Candidate cand-012')
+      expect(router.currentRoute.value.path).toBe('/review/candidates/cand-012')
+      expect(queueIds(w)).toHaveLength(7)
+      expect(w.get('a.q-item[href*="cand-012"]').attributes('aria-current')).toBe('page')
+      expect(w.get('a.q-item[href*="cand-007"]').attributes('aria-current')).toBeUndefined()
     })
   })
 
@@ -268,26 +411,55 @@ describe('staff app', () => {
 
     it('says plainly when a flag has no video and where the others land', async () => {
       const { w } = await renderAt('/review/candidates/cand-015')
-      await untilHeading(w, 'Candidate cand-015')
+      await untilText(w, 'Candidate cand-015')
 
-      const jumps = w.findAll('button').filter((b) => b.text() === 'Jump to video')
-      await jumps[0].trigger('click') // F1 at 520 s: segment 0, 515 s
+      const rows = w.findAll('.flag-row')
+      await rows[0].trigger('click') // F1 at 520 s: segment 0, 515 s
       await untilText(w, /part 1 at 8:35, starting 5 s before the moment/)
 
-      await jumps[2].trigger('click') // F3 at 930 s: inside the camera drop
+      await rows[2].trigger('click') // F3 at 930 s: inside the camera drop
       await untilText(w, /no video was recorded at this moment/)
+    })
+
+    it('puts the flags that have video on a timeline and jumps from them', async () => {
+      const { w } = await renderAt('/review/candidates/cand-015')
+      await untilText(w, 'Candidate cand-015')
+
+      const marks = w.findAll('.timeline .mk')
+      expect(marks).toHaveLength(2) // the third flag falls in a recording gap, so it has no marker
+      expect(marks[0].attributes('aria-label')).toBe('Jump to F1 Copy or cut attempt at 8:40')
+
+      await marks[1].trigger('click')
+      await untilText(w, /F2 Focus lost: part 2 at 12:15, starting 5 s before the moment/)
     })
 
     it('labels AI text as advisory and context as context', async () => {
       const { w } = await renderAt('/review/candidates/cand-007')
-      await untilHeading(w, 'Candidate cand-007')
+      await untilText(w, 'Candidate cand-007')
       expect(w.text()).toMatch(/not a verdict and it decides nothing/)
+      expect(w.text()).toContain('Checked against the stored log')
       expect(w.text()).toContain('Context only. Never a flag on its own.')
+      expect(w.text()).toContain('What the AI makes of the flags')
+    })
+
+    it('makes no fact-check claim when the AI did not pass', async () => {
+      const { w } = await renderAt('/review/candidates/cand-015')
+      await untilText(w, 'Candidate cand-015')
+      expect(w.text()).toContain('What the rules found')
+      expect(w.text()).toContain('Rule-based summary')
+      expect(w.text()).not.toContain('Checked against the stored log')
+    })
+
+    it('shows the priority band beside the rank', async () => {
+      const { w } = await renderAt('/review/candidates/cand-007')
+      await untilText(w, 'Candidate cand-007')
+      expect(w.text()).toContain('High priority')
+      expect(w.text()).toContain('Rank 1')
     })
 
     it('records a decision and shows it in the history', async () => {
       const { w } = await renderAt('/review/candidates/cand-009')
-      await untilHeading(w, 'Candidate cand-009')
+      await untilText(w, 'Candidate cand-009')
 
       await w.findAll('label.option').find((l) => l.text().includes('No concern'))!.get('input').setValue(true)
       await w.get('#reason').setValue('Screen froze, as the candidate said; timing fits.')
@@ -304,23 +476,24 @@ describe('staff app', () => {
     })
   })
 
-  describe('setup screens', () => {
-    it('keeps them away from a reviewer', async () => {
+  describe('admin: sitting setup', () => {
+    beforeEach(asAdmin)
+
+    it('keeps the admin pages away from a reviewer', async () => {
+      clearStaff()
       asReviewer()
       const { w } = await renderAt('/admin')
       await untilHeading(w, 'Review queue')
     })
 
     it('shows sittings and warns while placeholder questions are in the bank', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin')
-      await untilHeading(w, 'Sittings')
+      await untilHeading(w, 'Admin')
       await untilText(w, /60 placeholder questions are still in the question bank/)
       await untilText(w, 'Synthetic sitting 1')
     })
 
     it('shows where the setup stands, with a way to the next step', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin')
       await until(() => w.find('#setup-title').exists())
       const setup = w.get('section[aria-labelledby=setup-title]')
@@ -332,8 +505,66 @@ describe('staff app', () => {
       expect(norm(setup.text())).toMatch(/14 of 20 finished/)
     })
 
+    it('starts each section at a few questions and adds them up', async () => {
+      const { w } = await renderAt('/admin')
+      await until(() => w.find('#per-numerical').exists())
+      for (const section of ['logical', 'numerical', 'verbal']) {
+        expect((w.get(`#per-${section}`).element as HTMLInputElement).value).toBe('4')
+      }
+      expect(norm(w.get('#paper-summary').text())).toContain('12 questions from 3 sections, 30 minutes.')
+    })
+
+    it('steps a section up and down and never past what the bank holds', async () => {
+      const { w } = await renderAt('/admin')
+      await until(() => w.find('#per-verbal').exists())
+      const more = () => w.get('button[aria-label="More verbal questions"]')
+      const fewer = () => w.get('button[aria-label="Fewer verbal questions"]')
+
+      await more().trigger('click')
+      expect((w.get('#per-verbal').element as HTMLInputElement).value).toBe('5')
+      await fewer().trigger('click')
+      await fewer().trigger('click')
+      expect((w.get('#per-verbal').element as HTMLInputElement).value).toBe('3')
+
+      await w.get('#per-verbal').setValue('99') // typed past the 20 in the bank
+      await w.get('#per-verbal').trigger('change')
+      expect((w.get('#per-verbal').element as HTMLInputElement).value).toBe('20')
+      expect((more().element as HTMLButtonElement).disabled).toBe(true)
+
+      await w.get('#per-verbal').setValue('0')
+      await w.get('#per-verbal').trigger('change')
+      expect((fewer().element as HTMLButtonElement).disabled).toBe(true)
+    })
+
+    it('cannot create a sitting with no questions, and says how many it has asked for', async () => {
+      const { w } = await renderAt('/admin')
+      await until(() => w.find('#per-verbal').exists())
+      await w.get('#name').setValue('Empty')
+      for (const section of ['logical', 'numerical', 'verbal']) {
+        await w.get(`#per-${section}`).setValue('0')
+        await w.get(`#per-${section}`).trigger('change')
+      }
+      expect(norm(w.get('#paper-summary').text())).toContain('0 questions from 0 sections')
+      expect((button(w, 'Create sitting')!.element as HTMLButtonElement).disabled).toBe(true)
+    })
+
+    it('creates a sitting with the chosen questions from each section', async () => {
+      const { w } = await renderAt('/admin')
+      await until(() => w.find('#per-verbal').exists())
+      await w.get('#name').setValue('Pilot 28 Oct')
+      await w.get('#per-logical').setValue('0')
+      await w.get('#per-logical').trigger('change')
+      await w.get('#minutes').setValue('45')
+      await w.get('#new-sitting form').trigger('submit')
+
+      await untilText(w, 'Pilot 28 Oct')
+      const row = norm(w.findAll('tbody tr').find((r) => r.text().includes('Pilot 28 Oct'))!.text())
+      expect(row).toContain('45 min')
+      expect(row).toContain('8 questions')
+      expect(row).toContain('numerical 4, verbal 4')
+    })
+
     it('says when a sitting with that name already exists', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin')
       await until(() => w.find('#name').exists())
       await w.get('#name').setValue('Synthetic sitting 1')
@@ -344,16 +575,18 @@ describe('staff app', () => {
     })
 
     it('asks before closing a sitting that has unfinished candidates', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin')
       await until(() => button(w, 'Close sitting') !== undefined)
       await button(w, 'Close sitting')!.trigger('click')
       await until(() => button(w, 'Close anyway (logged)') !== undefined)
       expect(w.text()).toMatch(/6 not finished/)
     })
+  })
+
+  describe('admin: invitations', () => {
+    beforeEach(asAdmin)
 
     it('generates codes once and offers the download', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin/invites')
       await until(() => w.find('#count').exists())
       await w.get('#count').setValue('3')
@@ -369,21 +602,77 @@ describe('staff app', () => {
     })
 
     it('blocks an out-of-range invite count', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin/invites')
       await until(() => w.find('#count').exists())
       await w.get('#count').setValue('501')
       expect((button(w, 'Generate codes')!.element as HTMLButtonElement).disabled).toBe(true)
     })
 
+    it('lists every candidate with where they are, in words', async () => {
+      const { w } = await renderAt('/admin/invites')
+      await until(() => w.findAll('#who ~ .table-wrap tbody tr, .table-wrap tbody tr').length >= 20)
+      const status = (id: string) =>
+        norm(w.findAll('tbody tr').find((r) => r.text().includes(id))!.text())
+      expect(status('cand-001')).toContain('Finished')
+      expect(status('cand-015')).toContain('Started')
+      expect(status('cand-020')).toContain('Not opened')
+    })
+
+    it('shows new candidates in the list as not opened', async () => {
+      const { w } = await renderAt('/admin/invites')
+      await until(() => w.find('#count').exists())
+      await w.get('#count').setValue('2')
+      await w.get('form').trigger('submit')
+      await untilText(w, '2 new codes')
+      await until(() => w.findAll('tbody tr').some((r) => r.text().includes('cand-022')))
+      expect(norm(w.findAll('tbody tr').find((r) => r.text().includes('cand-022') && r.text().includes('Not opened'))!.text())).toContain('cand-022')
+    })
+
+    it('makes a new link for a lost one, shown once', async () => {
+      const { w } = await renderAt('/admin/invites')
+      await until(() => w.find('button[aria-label="Resend link to cand-016"]').exists())
+      await w.get('button[aria-label="Resend link to cand-016"]').trigger('click')
+
+      await until(() => w.find('.tokenbox').exists())
+      const box = w.get('.tokenbox')
+      expect(box.text()).toContain('cand-016')
+      expect(box.text()).toContain('The old code no longer works.')
+      expect(box.get('code').text()).toMatch(/\/\?t=[0-9A-Z]{4}-[0-9A-Z]{4}$/)
+
+      await button(box as unknown as VueWrapper, 'Hide')!.trigger('click')
+      expect(w.find('.tokenbox').exists()).toBe(false)
+    })
+  })
+
+  describe('admin: question bank', () => {
+    beforeEach(asAdmin)
+
     it('shows what is in the bank and offers to remove the placeholders', async () => {
-      asAdmin()
       const { w } = await renderAt('/admin/questions')
       await untilText(w, /60 questions: 0 from Cytonn, 60/)
       await button(w, 'Remove placeholder questions')!.trigger('click')
       expect(button(w, 'Yes, remove 60 placeholders')).toBeDefined()
       await button(w, 'Cancel')!.trigger('click')
       expect(button(w, 'Yes, remove 60 placeholders')).toBeUndefined()
+    })
+
+    it('lists the questions a page at a time, and says the correct share is pending', async () => {
+      const { w } = await renderAt('/admin/questions')
+      await until(() => w.findAll('#all-questions ~ * tbody tr, .panel tbody tr').length > 0)
+      await untilText(w, 'Showing 60 of 60.')
+      const rows = w.findAll('section[aria-labelledby=all-questions] tbody tr')
+      expect(rows).toHaveLength(60)
+      expect(norm(rows[0].text())).toContain('Pending')
+      expect(norm(rows[0].text())).toContain('Placeholder')
+    })
+
+    it('filters the list by section', async () => {
+      const { w } = await renderAt('/admin/questions')
+      await untilText(w, 'Showing 60 of 60.')
+      await w.get('#section-filter').setValue('verbal')
+      await untilText(w, 'Showing 20 of 20.')
+      const sections = w.findAll('section[aria-labelledby=all-questions] tbody tr td:nth-child(2)')
+      expect(new Set(sections.map((td) => td.text()))).toEqual(new Set(['verbal']))
     })
   })
 })

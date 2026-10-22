@@ -36,8 +36,15 @@ from app.schemas.review import MAX_REASON_CHARS, MIN_REASON_CHARS
 from app.services import evidence
 from app.services.evidence import rules_explanation  # noqa: F401  (the name other code imports)
 from app.services.flags.config import DEFAULTS, FlagConfig
-from app.services.flags.scoring import is_flagged
-from app.services.ranking.rules import Ranked, flags_by_session, rule_order, score_session
+from app.services.flags.scoring import is_flagged, is_logging_only
+from app.services.ranking.rules import (
+    Ranked,
+    flags_by_session,
+    priority_band,
+    rule_order,
+    score_session,
+    strength_bucket,
+)
 from app.services.video import ffmpeg
 from app.services.video.assemble import ensure_assembled, known_segments
 from app.services.video.seek import SegmentSpan, seek_for
@@ -130,17 +137,32 @@ def _ai_strength(ranking: Ranking | None) -> int | None:
     return None
 
 
-def queue(db: Session, sitting_id: int | None, cfg: FlagConfig = DEFAULTS) -> dict[str, Any]:
+def strength_and_band(entry: Entry) -> tuple[int, str]:
+    """The 1 to 5 strength the queue shows (the AI's when it answered, else the rules') and the
+    priority band it falls in."""
+    strength = _ai_strength(entry.ranking)
+    if strength is None:
+        strength = strength_bucket(entry.ranked.score, entry.ranked.logging_only)
+    return strength, priority_band(strength)
+
+
+def sittings_and_choice(db: Session, sitting_id: int | None) -> tuple[list[dict[str, Any]], int]:
+    """Every sitting, and the one to show: the one asked for, else the newest with flags."""
     sittings = [
         {"id": s.id, "name": s.name} for s in db.scalars(select(Sitting).order_by(Sitting.id))
     ]
     known = {s["id"] for s in sittings}
-    chosen = sitting_id if sitting_id in known else default_sitting_id(db)
+    return sittings, (sitting_id if sitting_id in known else default_sitting_id(db))
+
+
+def queue(db: Session, sitting_id: int | None, cfg: FlagConfig = DEFAULTS) -> dict[str, Any]:
+    sittings, chosen = sittings_and_choice(db, sitting_id)
     entries = ordered_queue(db, chosen, cfg) if chosen else []
     decisions = _latest_decisions(db, [e.ranked.session.id for e in entries])
     items = []
     for entry in entries:
         decision = decisions.get(entry.ranked.session.id)
+        strength, band = strength_and_band(entry)
         items.append(
             {
                 "candidate_id": entry.ranked.session.candidate_id,
@@ -148,6 +170,9 @@ def queue(db: Session, sitting_id: int | None, cfg: FlagConfig = DEFAULTS) -> di
                 "rule_score": entry.ranked.score,
                 "ai_strength": _ai_strength(entry.ranking),
                 "ai_status": entry.ranking.ai_status if entry.ranking else "not_run",
+                "strength": strength,
+                "band": band,
+                "flag_count": len(entry.ranked.flags),
                 "flag_kinds": entry.ranked.kinds,
                 "decision": decision.outcome if decision else None,
                 "shortlisted": entry.ranked.session.shortlisted,
@@ -225,9 +250,12 @@ def candidate_detail(
     entry = entries.get(session.id)
     if entry is not None:
         score_total, lines, rank = entry.ranked.score, entry.ranked.lines, entry.rank
+        strength, band = strength_and_band(entry)
     else:
         score_total, lines = score_session(session, flags, cfg)
         rank = 0
+        strength = strength_bucket(score_total, is_logging_only([f.kind for f in flags]))
+        band = priority_band(strength)
     ranking = entry.ranking if entry else None
 
     segments = _segments(db, session, video)
@@ -329,6 +357,8 @@ def candidate_detail(
         "session_id": session.id,
         "candidate_id": session.candidate_id,
         "rank": rank,
+        "strength": strength,
+        "band": band,
         "rule_score": score_total,
         "rule_breakdown": [{"label": ln.label, "points": ln.points} for ln in lines],
         "score": score,

@@ -220,7 +220,7 @@ def test_a_sitting_is_refused_when_one_section_is_too_small_for_its_share(db):
     assert (refused.value.status_code, refused.value.code) == (409, "section_too_small")
     assert refused.value.extra == {
         "needed": 3,
-        "sections": [{"section": "verbal reasoning", "available": 2}],
+        "sections": [{"section": "verbal reasoning", "available": 2, "needed": 3}],
     }
 
     assert admin.create_sitting(db, **sitting_args(4)).question_count == 4  # 2 from each

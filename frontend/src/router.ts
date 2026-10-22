@@ -50,15 +50,31 @@ export const routes: RouteRecordRaw[] = [
   { path: '/review/login', redirect: (to) => ({ path: LOGIN_PATH.reviewer, query: to.query }) },
 
   {
+    path: '/overview',
+    component: () => import('./staff/StaffLayout.vue'),
+    meta: { staff: true },
+    children: [
+      { path: '', component: () => import('./reviewer/Overview.vue') },
+      { path: ':rest(.*)*', redirect: '/overview' },
+    ],
+  },
+  {
     path: '/review',
     component: () => import('./staff/StaffLayout.vue'),
     meta: { staff: true },
     children: [
-      { path: '', component: () => import('./reviewer/Queue.vue') },
+      // the queue stays on the left while a candidate is open on the right
       {
-        path: 'candidates/:id',
-        component: () => import('./reviewer/CandidateDetail.vue'),
-        props: true,
+        path: '',
+        component: () => import('./reviewer/Workbench.vue'),
+        children: [
+          { path: '', component: () => import('./reviewer/PickACandidate.vue') },
+          {
+            path: 'candidates/:id',
+            component: () => import('./reviewer/CandidateDetail.vue'),
+            props: true,
+          },
+        ],
       },
       { path: 'audit', component: () => import('./reviewer/Audit.vue') },
       { path: ':rest(.*)*', redirect: '/review' },
@@ -69,9 +85,15 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('./staff/StaffLayout.vue'),
     meta: { staff: true, role: 'admin' },
     children: [
-      { path: '', component: () => import('./admin/Sittings.vue') },
-      { path: 'invites', component: () => import('./admin/Invites.vue') },
-      { path: 'questions', component: () => import('./admin/Questions.vue') },
+      {
+        path: '',
+        component: () => import('./admin/AdminLayout.vue'),
+        children: [
+          { path: '', component: () => import('./admin/Sittings.vue') },
+          { path: 'questions', component: () => import('./admin/Questions.vue') },
+          { path: 'invites', component: () => import('./admin/Invites.vue') },
+        ],
+      },
       { path: ':rest(.*)*', redirect: '/admin' },
     ],
   },

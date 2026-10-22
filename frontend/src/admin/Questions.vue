@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ref } from 'vue'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { computed, ref } from 'vue'
 import Banner from '../components/Banner.vue'
 import BaseButton from '../components/BaseButton.vue'
 import { api, ApiError } from '../lib/api'
@@ -8,6 +8,8 @@ import type {
   ImportReport,
   ImportRequest,
   QuestionBankSummary,
+  QuestionListResponse,
+  QuestionRow,
   RetireResponse,
 } from '../lib/adminTypes'
 
@@ -22,6 +24,8 @@ const REQUIRED = [
   'p25_s',
   'p75_s',
 ]
+const PAGE = 100
+const DIFFICULTY_PILL = { easy: 'low', medium: 'moderate', hard: 'high' } as const
 
 function importMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -46,13 +50,36 @@ const bankFile = ref<File | null>(null)
 const report = ref<ImportReport | null>(null)
 const confirmRetire = ref(false)
 const retired = ref<RetireResponse | null>(null)
+const section = ref('')
 
 const { data: bank, isPending: bankPending } = useQuery({
   queryKey: ['admin', 'bank'],
   queryFn: () => api<QuestionBankSummary>('/api/admin/questions/summary'),
 })
 
-const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'bank'] })
+// The table loads a page at a time: a bank can hold thousands of questions.
+const list = useInfiniteQuery({
+  queryKey: ['admin', 'questions', section],
+  initialPageParam: 0,
+  queryFn: ({ pageParam }) =>
+    api<QuestionListResponse>(
+      `/api/admin/questions?limit=${PAGE}&offset=${pageParam}${
+        section.value ? `&section=${encodeURIComponent(section.value)}` : ''
+      }`,
+    ),
+  getNextPageParam: (last, pages) => {
+    const loaded = pages.reduce((n, page) => n + page.questions.length, 0)
+    return loaded < last.total ? loaded : undefined
+  },
+})
+const rows = computed<QuestionRow[]>(() => list.data.value?.pages.flatMap((p) => p.questions) ?? [])
+const matching = computed(() => list.data.value?.pages[0]?.total ?? 0)
+
+const refresh = () =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['admin', 'bank'] }),
+    queryClient.invalidateQueries({ queryKey: ['admin', 'questions'] }),
+  ])
 
 const {
   mutate: runImport,
@@ -99,8 +126,6 @@ function submit() {
 </script>
 
 <template>
-  <h1>Question bank</h1>
-
   <p v-if="bankPending" role="status">Loading the question bank...</p>
   <section v-if="bank" class="panel">
     <h2>What is in the bank</h2>
@@ -142,6 +167,73 @@ function submit() {
       Removed {{ retired.removed }} placeholders<template v-if="retired.kept > 0">; {{ retired.kept }} stay because an earlier test uses them</template>.
     </p>
     <Banner v-if="retireFailed" tone="bad" role="alert"><p>{{ importMessage(retireError) }}</p></Banner>
+  </section>
+
+  <section v-if="bank && bank.total > 0" class="panel" aria-labelledby="all-questions">
+    <div class="row-between">
+      <div>
+        <h2 id="all-questions">Questions</h2>
+        <p class="muted">
+          "Answered correctly" fills in once Cytonn's past-sitting summary is loaded. Until then it
+          says pending.
+        </p>
+      </div>
+      <div>
+        <label class="sr-only" for="section-filter">Section</label>
+        <select id="section-filter" v-model="section">
+          <option value="">All sections</option>
+          <option v-for="s in bank.by_section" :key="s.section" :value="s.section">{{ s.section }}</option>
+        </select>
+      </div>
+    </div>
+
+    <p v-if="list.isPending.value" role="status">Loading the questions...</p>
+    <Banner v-else-if="list.isError.value" tone="bad" role="alert">
+      <p>Could not load the questions.</p>
+    </Banner>
+    <template v-else>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Section</th>
+              <th>Difficulty</th>
+              <th>Question</th>
+              <th>From</th>
+              <th>Answered correctly</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="q in rows" :key="q.id">
+              <td class="mono">{{ q.id }}</td>
+              <td>{{ q.section }}</td>
+              <td>
+                <span v-if="q.difficulty" class="pill" :class="DIFFICULTY_PILL[q.difficulty]">{{ q.difficulty }}</span>
+                <span v-else class="muted">-</span>
+              </td>
+              <td class="preview" :title="q.preview">{{ q.preview }}</td>
+              <td>
+                <span class="pill plain" :class="{ ai: q.source === 'cytonn' }">{{ q.source === 'cytonn' ? 'Cytonn' : 'Placeholder' }}</span>
+              </td>
+              <td>
+                <template v-if="q.pct_correct !== null">{{ Math.round(q.pct_correct) }}%<span class="muted"> of {{ q.n }}</span></template>
+                <span v-else class="muted">Pending</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">Showing {{ rows.length }} of {{ matching }}.</p>
+      <BaseButton
+        v-if="list.hasNextPage.value"
+        variant="secondary"
+        :busy="list.isFetchingNextPage.value"
+        @click="list.fetchNextPage()"
+      >
+        Show more
+      </BaseButton>
+    </template>
   </section>
 
   <form class="panel" @submit.prevent="submit">

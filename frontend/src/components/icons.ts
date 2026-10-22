@@ -46,6 +46,8 @@ export const ICON_PATHS = {
   sliders: ['M4 7h10', 'M18 7h2', 'M4 17h2', 'M10 17h10', 'M14 5v4', 'M6 15v4'],
   upload: ['M12 16V4', 'M7 9l5-5 5 5', 'M5 20h14'],
   lock: ['M6 11h12v9H6z', 'M8 11V8a4 4 0 0 1 8 0v3'],
+  grid: ['M4 4h7v9H4z', 'M13 4h7v5h-7z', 'M13 11h7v9h-7z', 'M4 15h7v5H4z'],
+  queue: ['M4 6h16', 'M4 12h9', 'M4 18h6', 'M17.5 14.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', 'M19.7 20.7L22 23'],
 } as const
 
 export type IconName = keyof typeof ICON_PATHS

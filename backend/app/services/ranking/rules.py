@@ -43,6 +43,14 @@ def strength_bucket(score: float, logging_only: bool = False) -> int:
     return 1 + sum(score >= cut for cut in STRENGTH_CUTS)
 
 
+def priority_band(strength: int) -> str:
+    """How soon a person might want to look, from the 1 to 5 strength (the AI's when it answered,
+    else the rules'). A label for the queue only: it orders attention and sets no one aside."""
+    if strength >= 4:
+        return "high"
+    return "moderate" if strength == 3 else "low"
+
+
 def flags_by_session(db: Session, session_ids: list[str]) -> dict[str, list[Flag]]:
     out: dict[str, list[Flag]] = {sid: [] for sid in session_ids}
     if not session_ids:

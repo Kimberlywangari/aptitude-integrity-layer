@@ -21,9 +21,13 @@ from app.schemas.admin import (
     CreateSittingRequest,
     ImportReportOut,
     ImportRequest,
+    InviteListResponse,
     InviteOut,
     InvitesRequest,
     InvitesResponse,
+    InviteStatusOut,
+    QuestionListResponse,
+    QuestionRowOut,
     RetireResponse,
     SittingCountsOut,
     SittingOut,
@@ -45,6 +49,7 @@ def _sitting_out(view: admin_service.SittingView) -> SittingOut:
         closes_at=sitting.closes_at,
         duration_s=sitting.duration_s,
         question_count=sitting.question_count,
+        blueprint=sitting.blueprint,
         status=sitting.status,  # type: ignore[arg-type]
         counts=SittingCountsOut(**asdict(view.counts)),
     )
@@ -80,6 +85,7 @@ def create_sitting(
         closes_at=body.closes_at,
         duration_s=body.duration_s,
         question_count=body.question_count,
+        per_section=body.per_section,
     )
     record_action(db, clock, admin, "admin", f'created sitting "{sitting.name}"')
     view = admin_service.view_of(db, sitting)
@@ -106,6 +112,32 @@ def close_sitting(
 # ---------------------------------------------------------------------------------- invitations
 
 
+@router.get("/invites", response_model=InviteListResponse)
+def list_invites(
+    _: Reviewer = Depends(require_admin), db: Session = Depends(get_db)
+) -> InviteListResponse:
+    invites, total = admin_service.list_invites(db)
+    return InviteListResponse(
+        invites=[InviteStatusOut(candidate_id=c, status=s) for c, s in invites],  # type: ignore[arg-type]
+        total=total,
+    )
+
+
+@router.post("/invites/{candidate_id}/reissue", response_model=InviteOut)
+def reissue_invite(
+    candidate_id: str,
+    response: Response,
+    admin: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+) -> InviteOut:
+    code = admin_service.reissue_invite(db, candidate_id)
+    record_action(db, clock, admin, "admin", f"issued a new code for {candidate_id}")
+    db.commit()
+    response.headers["Cache-Control"] = "no-store"  # the code exists in the clear only here
+    return InviteOut(candidate_id=candidate_id, code=code)
+
+
 @router.post("/invites", response_model=InvitesResponse)
 def generate_invites(
     body: InvitesRequest,
@@ -122,6 +154,20 @@ def generate_invites(
 
 
 # ---------------------------------------------------------------------------------- the bank
+
+
+@router.get("/questions", response_model=QuestionListResponse)
+def list_questions(
+    section: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    _: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> QuestionListResponse:
+    rows, total = admin_service.list_questions(db, section, limit, offset)
+    return QuestionListResponse(
+        questions=[QuestionRowOut.model_validate(asdict(row)) for row in rows], total=total
+    )
 
 
 @router.get("/questions/summary", response_model=BankSummaryOut)

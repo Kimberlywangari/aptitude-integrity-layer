@@ -35,12 +35,18 @@ class SittingRef(BaseModel):
     name: str
 
 
+Band = Literal["high", "moderate", "low"]
+
+
 class QueueItem(BaseModel):
     candidate_id: str
     rank: int
     rule_score: float
     ai_strength: int | None
     ai_status: AiStatus
+    strength: int  # 1 to 5: the AI's when it answered, else the rules'
+    band: Band  # a label for the queue; it orders attention and sets no one aside
+    flag_count: int
     flag_kinds: list[str]
     decision: Outcome | None
     shortlisted: bool
@@ -121,6 +127,8 @@ class CandidateDetail(BaseModel):
     session_id: str
     candidate_id: str
     rank: int
+    strength: int
+    band: Band
     rule_score: float
     rule_breakdown: list[BreakdownLine]
     score: int
@@ -157,6 +165,46 @@ class ShortlistResponse(BaseModel):
 
 class VideoViewRequest(BaseModel):
     flag_id: str | None = Field(default=None, max_length=20)
+
+
+class OverviewTiles(BaseModel):
+    sat: int  # started or finished
+    finished: int
+    flagged: int  # the review queue
+    reviewed: int  # of those, how many have a written decision
+    videos_uploaded: int
+    videos_expected: int
+    videos_decided_not_deleted: int  # decided, so on the clock for deletion
+
+
+class FlagKindCount(BaseModel):
+    kind: str
+    count: int
+
+
+class HealthCheck(BaseModel):
+    key: str
+    label: str
+    state: Literal["ok", "warn", "off", "note"]
+    detail: str
+
+
+class NextUp(BaseModel):
+    candidate_id: str
+    band: Band
+    flag_count: int
+    first_kind: str
+
+
+class OverviewResponse(BaseModel):
+    sittings: list[SittingRef]
+    sitting_id: int
+    sitting_status: Literal["open", "closed"] | None
+    tiles: OverviewTiles
+    flags_by_kind: list[FlagKindCount]
+    pending: int  # queue candidates still without a decision
+    next_up: list[NextUp]
+    checks: list[HealthCheck]
 
 
 class AuditEntry(BaseModel):

@@ -21,7 +21,7 @@ from app.core.security import hash_token, new_token, normalise_invite_code
 from app.errors import ApiError
 from app.models import Candidate, Option, Question, SessionQuestion, Sitting, TestSession
 from app.services import precheck
-from app.services.shuffle import balanced_sample, session_rng, shuffle_options
+from app.services.shuffle import balanced_sample, blueprint_sample, session_rng, shuffle_options
 
 
 @dataclass(frozen=True)
@@ -51,22 +51,30 @@ class Summary:
 # ---------------------------------------------------------------------------- paper building
 
 
-def select_questions(db: Session, count: int, rng: random.Random) -> list[Question]:
-    """Choose a paper. Kept behind this one function: the S1 blueprint generator replaces it."""
+def select_questions(
+    db: Session, count: int, rng: random.Random, blueprint: dict[str, int] | None = None
+) -> list[Question]:
+    """Choose a paper: the blueprint's number from each section, or `count` spread evenly over the
+    sections when the sitting has no blueprint. Kept behind this one function."""
     rows = db.execute(select(Question.id, Question.section)).all()
     by_section: dict[str, list[str]] = {}
     for question_id, section in rows:
         by_section.setdefault(section, []).append(question_id)
     try:
-        ids = balanced_sample(rng, by_section, count)
+        if blueprint:
+            ids = blueprint_sample(rng, by_section, blueprint)
+        else:
+            ids = balanced_sample(rng, by_section, count)
     except ValueError as exc:
         raise ApiError(503, "question_bank_too_small", detail=str(exc)) from exc
     by_id = {q.id: q for q in db.scalars(select(Question).where(Question.id.in_(ids)))}
     return [by_id[question_id] for question_id in ids]
 
 
-def _build_paper(db: Session, session: TestSession, count: int) -> None:
-    questions = select_questions(db, count, session_rng(session.id, "paper"))
+def _build_paper(db: Session, session: TestSession, sitting: Sitting) -> None:
+    questions = select_questions(
+        db, sitting.question_count, session_rng(session.id, "paper"), sitting.blueprint
+    )
     for position, question in enumerate(questions, start=1):
         option_ids = [o.id for o in sorted(question.options, key=lambda o: o.label)]
         db.add(
@@ -137,7 +145,7 @@ def start_session(db: Session, clock: Clock, invite_token: str) -> StartResult:
             )
             db.add(session)
             db.flush()
-            _build_paper(db, session, sitting.question_count)
+            _build_paper(db, session, sitting)
 
     access_token = new_token()
     session.access_token_hash = hash_token(access_token)

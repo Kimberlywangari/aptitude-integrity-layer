@@ -15,6 +15,7 @@ export interface AdminSitting {
   closes_at: string | null
   duration_s: number
   question_count: number
+  blueprint: Record<string, number> | null // questions from each section; null = spread evenly
   status: 'open' | 'closed'
   counts: SittingCounts
 }
@@ -24,7 +25,8 @@ export interface CreateSittingRequest {
   opens_at: string | null
   closes_at: string | null
   duration_s: number
-  question_count: number
+  /** How many questions each section contributes to a paper. */
+  per_section: Record<string, number>
 }
 
 export interface CloseSittingResponse {
@@ -79,4 +81,31 @@ export interface ImportReport {
 export interface RetireResponse {
   removed: number
   kept: number // synthetic questions an earlier test session still points at
+}
+
+export type InviteState = 'not_opened' | 'opened' | 'started' | 'finished'
+
+export interface InviteStatus {
+  candidate_id: string
+  status: InviteState
+}
+
+export interface InviteListResponse {
+  invites: InviteStatus[]
+  total: number // all candidates; `invites` holds the newest
+}
+
+export interface QuestionRow {
+  id: string
+  section: string
+  difficulty: 'easy' | 'medium' | 'hard' | null
+  source: 'cytonn' | 'synthetic'
+  preview: string
+  pct_correct: number | null // Cytonn's figure as a percentage, null until a summary is loaded
+  n: number | null
+}
+
+export interface QuestionListResponse {
+  questions: QuestionRow[]
+  total: number
 }

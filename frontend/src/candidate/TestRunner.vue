@@ -24,6 +24,7 @@ interface Clock {
 
 const WARN_BELOW_S = 300
 const DANGER_BELOW_S = 60
+const LETTERS = 'ABCDEFGH'
 
 const router = useRouter()
 const sessionId = getSessionId()
@@ -202,9 +203,11 @@ async function resolve(kind: 'answer' | 'skip') {
 
           <fieldset :disabled="busy">
             <legend class="sr-only">Choose one answer</legend>
-            <label v-for="option in question.options" :key="option.id" class="option">
+            <!-- The letter is the option's place on this candidate's screen (options are shuffled per
+                 candidate), so it is drawn from the position and never from the stored label. -->
+            <label v-for="(option, index) in question.options" :key="option.id" class="option">
               <input v-model="selected" type="radio" name="answer" :value="option.id" />
-              <span class="mark" aria-hidden="true" />
+              <span class="mark" aria-hidden="true" :data-letter="LETTERS[index] ?? ''" />
               <span class="text">{{ option.text }}</span>
             </label>
           </fieldset>
@@ -298,6 +301,31 @@ async function resolve(kind: 'answer' | 'skip') {
   /* Keep the line breaks a question carries: a passage above its question, or a list of values. */
   white-space: pre-line;
   text-wrap: pretty;
+}
+
+/* Each option wears its letter instead of the radio dot; the real radio input is still the control. */
+.qcard .option .mark {
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-top: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+.qcard .option .mark::before {
+  content: attr(data-letter);
+}
+
+.qcard .option .mark::after {
+  display: none;
+}
+
+.qcard .option:has(input:checked) .mark {
+  color: var(--on-accent);
+  background: var(--accent);
 }
 
 .actions {
