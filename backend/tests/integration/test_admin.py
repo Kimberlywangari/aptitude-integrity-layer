@@ -40,12 +40,22 @@ def reviewer_headers(db, clock, settings):
     return {"Authorization": f"Bearer {token}"}
 
 
+def counts_of(finished, in_progress, not_started):
+    """A sitting's counts as the API reports them (no AI papers are being written in these)."""
+    return {
+        "finished": finished,
+        "in_progress": in_progress,
+        "not_started": not_started,
+        "papers_pending": 0,
+        "papers_failed": 0,
+    }
+
+
 def sitting_body(**overrides):
     body = {
         "name": "October sitting",
         "opens_at": None,
         "closes_at": None,
-        "duration_s": 1800,
         "question_count": 12,
     }
     return body | overrides
@@ -115,7 +125,7 @@ def test_the_list_counts_finished_in_progress_and_not_started(
     assert sittings[0]["name"] == "Synthetic sitting 1"
     assert sittings[0]["status"] == "open"
     # 20 invited candidates, nobody has a session yet
-    assert sittings[0]["counts"] == {"finished": 0, "in_progress": 0, "not_started": 20}
+    assert sittings[0]["counts"] == counts_of(0, 0, 20)
 
     sitting_id = sittings[0]["id"]
     candidates = list(db.scalars(select(Candidate).order_by(Candidate.id)))
@@ -136,7 +146,7 @@ def test_the_list_counts_finished_in_progress_and_not_started(
         "counts"
     ]
     # the "created" session and the 16 candidates with no session are both "not started"
-    assert counts == {"finished": 2, "in_progress": 1, "not_started": 17}
+    assert counts == counts_of(2, 1, 17)
 
 
 def test_a_closed_sitting_does_not_count_later_invitations_as_not_started(
@@ -146,7 +156,7 @@ def test_a_closed_sitting_does_not_count_later_invitations_as_not_started(
     counts = client.get("/api/admin/sittings", headers=admin_headers).json()["sittings"][0][
         "counts"
     ]
-    assert counts == {"finished": 0, "in_progress": 0, "not_started": 0}
+    assert counts == counts_of(0, 0, 0)
 
 
 def test_a_sitting_can_be_created_and_is_audited(client, db, seeded, admin_headers):
@@ -156,7 +166,7 @@ def test_a_sitting_can_be_created_and_is_audited(client, db, seeded, admin_heade
     body = response.json()
     assert body["name"] == "October sitting"
     assert body["status"] == "open"
-    assert body["counts"] == {"finished": 0, "in_progress": 0, "not_started": 20}
+    assert body["counts"] == counts_of(0, 0, 20)
     assert db.scalar(select(func.count()).select_from(Sitting)) == 2
     assert audit_details(db) == ['created sitting "October sitting"']
 
@@ -169,7 +179,6 @@ def test_a_sitting_can_be_created_and_is_audited(client, db, seeded, admin_heade
     [
         ({"name": "   "}, 422, "name_required"),
         ({"name": "x" * 101}, 422, "name_too_long"),
-        ({"duration_s": 59}, 422, "invalid_duration"),
         ({"question_count": 0}, 422, "invalid_question_count"),
         (
             {"opens_at": "2026-10-20T10:00:00Z", "closes_at": "2026-10-20T09:00:00Z"},
@@ -262,7 +271,7 @@ def test_invites_continue_the_numbering_and_store_only_hashes(client, db, seeded
         stored = db.get(Candidate, invite["candidate_id"])
         assert stored.invite_token_hash == hash_token(invite["code"])
         assert invite["code"] not in stored.invite_token_hash
-    assert audit_details(db) == ["generated 3 invitations"]
+    assert audit_details(db) == ['generated 3 invitations for "Synthetic sitting 1"']
     assert all(i["code"] not in (d or "") for d in audit_details(db) for i in invites)
 
 
@@ -288,6 +297,8 @@ def test_an_invite_count_outside_one_to_five_hundred_is_refused(
 
 
 def test_invites_start_from_one_in_an_empty_database(client, db, admin_headers):
+    db.add(Sitting(name="Only one", duration_s=600, question_count=3, status="open"))
+    db.flush()
     invites = client.post("/api/admin/invites", json={"count": 2}, headers=admin_headers).json()
     assert [i["candidate_id"] for i in invites["invites"]] == ["cand-001", "cand-002"]
 
@@ -329,7 +340,7 @@ def test_placeholders_are_retired_but_a_question_a_paper_uses_is_kept(
     assert db.scalars(select(Question.id)).all() == ["Q001"]
     assert (
         audit_details(db)[-1]
-        == "removed 59 placeholder questions (1 kept: an earlier session used them)"
+        == "removed 59 practice questions (1 kept: an earlier session used them)"
     )
 
 

@@ -159,8 +159,10 @@ def test_the_invite_list_says_where_each_candidate_is(client, db, sim, admin_hea
 
 
 def test_a_reissued_code_replaces_the_old_one(client, db, clock, admin_headers):
+    db.add(Sitting(name="Only one", duration_s=600, question_count=3, status="open"))
+    db.flush()
     first = client.post("/api/admin/invites", json={"count": 1}, headers=admin_headers).json()
-    candidate_id, old_code = first["invites"][0].values()
+    candidate_id, old_code = (first["invites"][0][key] for key in ("candidate_id", "code"))
 
     response = client.post(f"/api/admin/invites/{candidate_id}/reissue", headers=admin_headers)
 
@@ -230,7 +232,6 @@ def per_section_args(**counts):
         "name": "Blueprint sitting",
         "opens_at": None,
         "closes_at": None,
-        "duration_s": 1800,
         "per_section": counts,
     }
 
@@ -253,9 +254,10 @@ def test_a_papers_sections_follow_the_blueprint(db, seeded):
 
 def test_a_sitting_without_a_blueprint_still_spreads_evenly(db, seeded):
     sitting = admin.create_sitting(
-        db, name="Even", opens_at=None, closes_at=None, duration_s=1800, question_count=12
+        db, name="Even", opens_at=None, closes_at=None, question_count=12
     )
     assert sitting.blueprint is None
+    assert sitting.duration_s == 12 * 105
     questions = select_questions(db, 12, random.Random(7), sitting.blueprint)
     per_section = [sum(1 for q in questions if q.section == s) for s in SECTIONS]
     assert per_section == [4, 4, 4]
@@ -289,7 +291,6 @@ def test_a_bad_blueprint_is_refused_with_a_code(db, seeded, counts, status, code
 def test_the_blueprint_goes_through_the_api_and_comes_back(client, db, seeded, admin_headers):
     body = {
         "name": "Via the API",
-        "duration_s": 1800,
         "per_section": {"numerical": 3, "logical": 3},
     }
     created = client.post("/api/admin/sittings", json=body, headers=admin_headers)
@@ -308,9 +309,9 @@ def test_the_blueprint_goes_through_the_api_and_comes_back(client, db, seeded, a
 def test_a_candidate_who_starts_gets_the_sections_the_sitting_asked_for(client, db, seeded):
     from app.models import SessionQuestion
 
-    # the newest open sitting is the one a candidate is put into
-    admin.create_sitting(db, **per_section_args(numerical=3, verbal=2))
-    ((_, code),) = admin.generate_invites(db, 1)
+    # an invitation opens the sitting it was made for, not just whichever is newest
+    sitting = admin.create_sitting(db, **per_section_args(numerical=3, verbal=2))
+    ((_, code),) = admin.generate_invites(db, 1, sitting)
 
     response = client.post("/api/session/start", json={"token": code})
 

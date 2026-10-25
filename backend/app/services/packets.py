@@ -150,7 +150,6 @@ def build_packet(
         "vs_sitting": vs,
         "score": score,
         "pace_s_per_q": round(pace),
-        "history_source": evidence.history_source(db, session.id),
         "fullscreen_exits": evidence.fullscreen_exits(events, session.started_at, end),
         "precheck": evidence.precheck_view(session.precheck_report),
         "innocent_signals": innocent,

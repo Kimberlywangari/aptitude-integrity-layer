@@ -24,6 +24,8 @@ from app.models import (
     Decision,
     Event,
     Flag,
+    Heartbeat,
+    Question,
     Ranking,
     Reviewer,
     SessionQuestion,
@@ -182,6 +184,66 @@ def queue(db: Session, sitting_id: int | None, cfg: FlagConfig = DEFAULTS) -> di
     return {"sittings": sittings, "sitting_id": chosen, "items": items}
 
 
+def candidates_in_sitting(
+    db: Session, sitting_id: int | None, cfg: FlagConfig = DEFAULTS
+) -> dict[str, Any]:
+    """Everyone who opened the test in a sitting, flagged or not, in invitation order.
+
+    The queue is the work list: finished candidates with enough evidence to look at. This is the
+    way to any other candidate, whether to check that nothing was missed, to answer a complaint or
+    to see who is still sitting. It says whether each is in the queue and opens nothing the queue
+    would not (video stays closed unless they are flagged or shortlisted).
+    """
+    sittings, chosen = sittings_and_choice(db, sitting_id)
+    items: list[dict[str, Any]] = []
+    if chosen:
+        sessions = list(
+            db.scalars(
+                select(TestSession)
+                .where(TestSession.sitting_id == chosen)
+                .order_by(func.length(TestSession.candidate_id), TestSession.candidate_id)
+            )
+        )
+        ids = [s.id for s in sessions]
+        flags = flags_by_session(db, ids)
+        decisions = _latest_decisions(db, ids)
+        progress = {
+            sid: (total, resolved)
+            for sid, total, resolved in db.execute(
+                select(
+                    SessionQuestion.session_id,
+                    func.count(),
+                    func.count(SessionQuestion.answered_at),
+                )
+                .where(SessionQuestion.session_id.in_(ids))
+                .group_by(SessionQuestion.session_id)
+            )
+        }
+        for session in sessions:
+            found = flags[session.id]
+            kinds = [f.kind for f in found]
+            in_queue = False
+            if found and session.status == "finished":
+                score, _ = score_session(session, found, cfg)
+                in_queue = is_flagged(score, kinds, cfg)
+            decision = decisions.get(session.id)
+            total, resolved = progress.get(session.id, (0, 0))
+            items.append(
+                {
+                    "candidate_id": session.candidate_id,
+                    "status": session.status,
+                    "resolved": resolved,
+                    "total": total,
+                    "flag_count": len(found),
+                    "flag_kinds": list(dict.fromkeys(kinds)),
+                    "in_queue": in_queue,
+                    "decision": decision.outcome if decision else None,
+                    "shortlisted": session.shortlisted,
+                }
+            )
+    return {"sittings": sittings, "sitting_id": chosen, "items": items}
+
+
 # ------------------------------------------------------------------------- one candidate's page
 
 
@@ -258,7 +320,9 @@ def candidate_detail(
         band = priority_band(strength)
     ranking = entry.ranking if entry else None
 
-    segments = _segments(db, session, video)
+    # Video stays closed for anyone the queue would not show, unless a reviewer shortlisted them.
+    video_available = _may_watch(session, flags, score_total, cfg)
+    segments = _segments(db, session, video if video_available else None)
     spans = [
         SegmentSpan(s.segment, s.started_at, s.duration_s)
         for s in segments
@@ -363,7 +427,6 @@ def candidate_detail(
         "rule_breakdown": [{"label": ln.label, "points": ln.points} for ln in lines],
         "score": score,
         "pace_s_per_q": round(pace, 1),
-        "history_source": evidence.history_source(db, session.id),
         "flags": flag_items,
         "vs_sitting": vs,
         "innocent_signals": innocent,
@@ -380,6 +443,7 @@ def candidate_detail(
         "complaints": complaints,
         "decisions": decisions,
         "shortlisted": session.shortlisted,
+        "video_available": video_available,
         "segments": segment_items,
         "video_deleted_at": session.video_deleted_at,
         "video_purge_on": purge_on,
@@ -415,21 +479,111 @@ def _explanation(
     }
 
 
+# ------------------------------------------------------------------------------- the action log
+
+LOG_EVENTS_MAX = 2000  # a long test is a few hundred; the cap only stops a runaway session
+
+
+def _offset(moment: datetime | None, origin: datetime) -> float | None:
+    return None if moment is None else round((moment - origin).total_seconds(), 1)
+
+
+def action_log(db: Session, candidate_id: str, sitting_id: int | None) -> dict[str, Any]:
+    """Everything the page reported for one candidate, in server time, and their paper question by
+    question. It is the raw record the flags were worked out from, so a reviewer (or whoever is
+    checking the rules) can see what a flag was based on. Copy and cut events hold a length, never
+    text, and the questions themselves are not shown."""
+    session = _find_session(db, candidate_id, sitting_id)
+    origin = session.started_at or session.created_at
+
+    total = db.scalar(select(func.count()).select_from(Event).where(Event.session_id == session.id))
+    rows = db.scalars(
+        select(Event)
+        .where(Event.session_id == session.id)
+        .order_by(Event.server_ts, Event.id)
+        .limit(LOG_EVENTS_MAX)
+    )
+    events: list[dict[str, Any]] = []
+    current: int | None = None  # the question the candidate was on when it happened
+    for event in rows:
+        payload = event.payload or {}
+        position = payload.get("position")
+        if event.type == "question_opened" and isinstance(position, int):
+            current = position
+        events.append(
+            {
+                "type": event.type,
+                "at_s": _offset(event.server_ts, origin),
+                "question": position if isinstance(position, int) else current,
+                "detail": {k: v for k, v in payload.items() if k != "position"},
+            }
+        )
+
+    questions: list[dict[str, Any]] = []
+    paper = db.execute(
+        select(SessionQuestion, Question.section, Question.difficulty, Question.written_by)
+        .join(Question, Question.id == SessionQuestion.question_id)
+        .where(SessionQuestion.session_id == session.id)
+        .order_by(SessionQuestion.position)
+    )
+    for sq, section, difficulty, written_by in paper:
+        if sq.skipped:
+            result = "skipped"
+        elif sq.selected_option is None:
+            result = "unanswered"
+        else:
+            result = "correct" if sq.correct else "wrong"
+        taken = (
+            round((sq.answered_at - sq.opened_at).total_seconds(), 1)
+            if sq.opened_at is not None and sq.answered_at is not None
+            else None
+        )
+        questions.append(
+            {
+                "position": sq.position,
+                "section": section,
+                "difficulty": difficulty,
+                "opened_s": _offset(sq.opened_at, origin),
+                "answered_s": _offset(sq.answered_at, origin),
+                "time_s": taken,
+                "result": result,
+                "written_by": written_by,
+            }
+        )
+
+    heartbeats = db.scalar(
+        select(func.count()).select_from(Heartbeat).where(Heartbeat.session_id == session.id)
+    )
+    return {
+        "candidate_id": session.candidate_id,
+        "status": session.status,
+        "started_at": session.started_at,
+        "finished_at": session.finished_at,
+        "total_events": total or 0,
+        "truncated": (total or 0) > len(events),
+        "heartbeats": heartbeats or 0,
+        "events": events,
+        "questions": questions,
+    }
+
+
 # ------------------------------------------------------------------------------------ video
 
 
-def can_view_video(db: Session, session: TestSession, cfg: FlagConfig = DEFAULTS) -> bool:
+def _may_watch(session: TestSession, flags: list[Flag], score: float, cfg: FlagConfig) -> bool:
     """Video is for candidates who are in the queue (finished and flagged) or who a reviewer has
     shortlisted. Everyone else's recording stays unopened."""
     if session.shortlisted:
         return True
-    if session.status != "finished":
+    if session.status != "finished" or not flags:
         return False
-    flags = flags_by_session(db, [session.id])[session.id]
-    if not flags:
-        return False
-    score, _ = score_session(session, flags, cfg)
     return is_flagged(score, [f.kind for f in flags], cfg)
+
+
+def can_view_video(db: Session, session: TestSession, cfg: FlagConfig = DEFAULTS) -> bool:
+    flags = flags_by_session(db, [session.id])[session.id]
+    score, _ = score_session(session, flags, cfg)
+    return _may_watch(session, flags, score, cfg)
 
 
 def note_video_playback(

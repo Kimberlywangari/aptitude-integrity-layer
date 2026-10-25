@@ -18,8 +18,10 @@ from app.db import get_db
 from app.errors import ApiError
 from app.models import Reviewer, TestSession, VideoSegment
 from app.schemas.review import (
+    ActionLog,
     AuditResponse,
     CandidateDetail,
+    CandidatesResponse,
     DecisionRequest,
     DecisionResponse,
     LoginRequest,
@@ -31,8 +33,8 @@ from app.schemas.review import (
     VideoViewRequest,
 )
 from app.services import overview as overview_service
+from app.services import results, staff_auth
 from app.services import review as review_service
-from app.services import staff_auth
 from app.services.rate_limit import AttemptLimiter
 from app.services.video import ffmpeg
 from app.services.video.assemble import ensure_assembled
@@ -96,6 +98,25 @@ def get_overview(
     settings: Settings = Depends(get_settings),
 ) -> OverviewResponse:
     return OverviewResponse.model_validate(overview_service.overview(db, sitting, settings))
+
+
+@router.get("/candidates", response_model=CandidatesResponse)
+def get_candidates(
+    sitting: int | None = None,
+    _: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+) -> CandidatesResponse:
+    return CandidatesResponse.model_validate(review_service.candidates_in_sitting(db, sitting))
+
+
+@router.get("/candidates/{candidate_id}/events", response_model=ActionLog)
+def get_action_log(
+    candidate_id: str,
+    sitting: int | None = None,
+    _: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+) -> ActionLog:
+    return ActionLog.model_validate(review_service.action_log(db, candidate_id, sitting))
 
 
 @router.get("/candidates/{candidate_id}", response_model=CandidateDetail)
@@ -182,8 +203,9 @@ def shortlist(
     clock: Clock = Depends(get_clock),
 ) -> ShortlistResponse:
     now_on = review_service.toggle_shortlist(db, clock, reviewer, candidate_id, sitting)
+    emailed = results.result_email_exists(db, candidate_id)
     db.commit()
-    return ShortlistResponse(shortlisted=now_on)
+    return ShortlistResponse(shortlisted=now_on, result_email_sent=emailed)
 
 
 @router.post("/candidates/{candidate_id}/video-view", status_code=204)

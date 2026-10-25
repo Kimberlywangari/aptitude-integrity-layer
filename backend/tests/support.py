@@ -131,23 +131,25 @@ class Live:
         self.db.expire_all()
         return self.db.get(TestSession, self.session_id)
 
+    def answer_one(self, clock, position: int, seconds: float = 20.0) -> bool:
+        """Answer question `position` correctly after `seconds`. True once the test is over."""
+        row = self.db.get(SessionQuestion, (self.session_id, position))
+        question = self.db.get(Question, row.question_id)
+        option_id = next(o.id for o in question.options if o.label == question.correct_option)
+        clock.advance(seconds)
+        return self.client.post(
+            self.url("answer"),
+            json={"position": position, "option_id": option_id},
+            headers=self.headers,
+        ).json()["done"]
+
     def answer_everything(self, clock, seconds_each: float = 20.0) -> None:
         """Answer every question correctly, `seconds_each` apart."""
         while True:
             response = self.question()
             if response.status_code != 200:
                 return
-            position = response.json()["position"]
-            row = self.db.get(SessionQuestion, (self.session_id, position))
-            question = self.db.get(Question, row.question_id)
-            option_id = next(o.id for o in question.options if o.label == question.correct_option)
-            clock.advance(seconds_each)
-            done = self.client.post(
-                self.url("answer"),
-                json={"position": position, "option_id": option_id},
-                headers=self.headers,
-            ).json()["done"]
-            if done:
+            if self.answer_one(clock, response.json()["position"], seconds_each):
                 return
 
 
@@ -174,7 +176,7 @@ def sample_packet() -> dict:
             "server_ts": "2026-10-28T09:18:45Z",
             "elapsed_s": 1125,
             "question_number": 22,
-            "detail": {"time_s": 212, "own_median_s": 38, "focus_lost_during": True},
+            "detail": {"time_s": 212, "own_median_s": 38, "focus_lost_s": 90},
         },
     ]
     packet = {
@@ -187,7 +189,6 @@ def sample_packet() -> dict:
         "vs_sitting": {"pace_percentile": 8, "spread_percentile": 3, "score_percentile": 91},
         "score": 8,
         "pace_s_per_q": 21,
-        "history_source": "synthetic",
         "fullscreen_exits": [],
         "precheck": {
             "notifications_off_confirmed": True,

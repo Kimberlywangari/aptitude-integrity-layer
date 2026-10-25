@@ -26,12 +26,11 @@ def test_it_runs_beside_an_existing_simulated_sitting_and_leaves_it_alone(db, se
     )
     assert after == before  # the measurement removed everything it made, and nothing else
     assert db.scalar(select(Sitting).where(Sitting.name == SITTING_NAME)) is not None
-    assert out["honest_n"] == 2 * 10
+    assert out["honest_n"] == 2 * 11
     assert set(out["recall"]) == {
         "tab_lookup",
         "copier",
         "answer_runner",
-        "fast_correct",
         "logging_blocker",
     }
 

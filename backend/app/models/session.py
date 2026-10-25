@@ -29,6 +29,7 @@ class TestSession(Base):
     __table_args__ = (
         UniqueConstraint("candidate_id", "sitting_id"),
         CheckConstraint("status in ('created', 'in_progress', 'finished')", name="status"),
+        CheckConstraint("paper_status in ('pending', 'ready', 'failed')", name="paper_status"),
         # the queue, the cohort checks and the sitting counts all look a sitting's sessions up
         Index("ix_sessions_sitting_id", "sitting_id"),
     )
@@ -37,6 +38,16 @@ class TestSession(Base):
     candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id"))
     sitting_id: Mapped[int] = mapped_column(ForeignKey("sittings.id"))
     status: Mapped[str] = mapped_column(String(12), default="created", server_default="created")
+
+    # Whether the candidate's questions exist yet. Always `ready` for a bank sitting; an AI sitting
+    # starts `pending` while the writer works, and the test cannot begin until it is `ready`.
+    paper_status: Mapped[str] = mapped_column(
+        String(10), default="ready", server_default="ready"
+    )
+    paper_error: Mapped[str | None] = mapped_column(String(200))
+    # When the paper was last asked for: opening the link, or asking again. A paper that has been
+    # pending for longer than the wait limit can be asked for again.
+    paper_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

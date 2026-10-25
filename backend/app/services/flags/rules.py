@@ -14,9 +14,9 @@ from app.services.flags.config import DEFAULTS, FlagConfig
 
 FOCUS_LOSS = "FOCUS_LOSS"
 COPY_ATTEMPT = "COPY_ATTEMPT"
+SCREENSHOT_KEY = "SCREENSHOT_KEY"
 LONG_HOLD_CORRECT = "LONG_HOLD_CORRECT"
 CORRECT_RUN_AFTER_GAP = "CORRECT_RUN_AFTER_GAP"
-FAST_CORRECT_VS_HISTORY = "FAST_CORRECT_VS_HISTORY"
 PACE_OUTLIER = "PACE_OUTLIER"
 SPREAD_OUTLIER = "SPREAD_OUTLIER"
 LOGGING_PROBLEM = "LOGGING_PROBLEM"
@@ -36,9 +36,6 @@ class Answer:
     answered_at: datetime | None
     correct: bool | None
     skipped: bool = False
-    p25_s: float | None = None  # how quickly the fastest quarter answered it in past sittings
-    stats_n: int | None = None  # how many past candidates that figure comes from (None: unknown)
-    stats_source: str | None = None  # 'cytonn' or 'synthetic'
 
     @property
     def time_s(self) -> float | None:
@@ -127,6 +124,21 @@ def _overlaps(span: Span, start: datetime, end: datetime) -> bool:
     return span.start < end and span.end > start
 
 
+def counted_losses(losses: list[Span], cfg: FlagConfig = DEFAULTS) -> list[Span]:
+    """The focus losses that count: a loss shorter than `focus_loss_min_s` is a blink (a
+    notification, a click on the address bar) and no rule looks at it."""
+    return [s for s in losses if s.duration_s >= cfg.focus_loss_min_s]
+
+
+def lost_seconds(losses: list[Span], start: datetime, end: datetime) -> float:
+    """How long, in total, focus was away between `start` and `end`."""
+    return sum(
+        (min(s.end, end) - max(s.start, start)).total_seconds()
+        for s in losses
+        if _overlaps(s, start, end)
+    )
+
+
 # -------------------------------------------------------------------------------------- rules
 
 
@@ -171,16 +183,36 @@ def copy_attempt_flags(
     return drafts
 
 
+def screenshot_key_flags(
+    events: list[Ev], answers: list[Answer], cfg: FlagConfig = DEFAULTS
+) -> list[FlagDraft]:
+    """One flag per screenshot key press. Only the key combination is kept."""
+    return [
+        FlagDraft(
+            SCREENSHOT_KEY,
+            cfg.screenshot_weight,
+            event.ts,
+            position_at(answers, event.ts),
+            {"combo": str(event.payload.get("combo", ""))},
+        )
+        for event in sorted(events, key=lambda e: e.ts)
+        if event.type == "screenshot_attempt"
+    ]
+
+
 def long_hold_correct_flags(
     answers: list[Answer], losses: list[Span], cfg: FlagConfig = DEFAULTS
 ) -> list[FlagDraft]:
-    """A correct answer after far longer than the candidate's own usual time.
+    """A correct answer after far longer than the candidate's own usual time, with focus lost for
+    more than `hold_min_focus_lost_s` while the question was open.
 
     The candidate's own median comes from their other answered questions, and a candidate with
     fewer than `hold_min_other_answers` of those gets no flag at all: there is nothing fair to
-    compare against.
+    compare against. A slow answer with focus on the page the whole time is not flagged: the
+    candidate was just thinking, and nothing suggests help.
     """
     answered = [a for a in answers if a.time_s is not None and not a.skipped]
+    losses = counted_losses(losses, cfg)
     drafts = []
     for answer in answered:
         if answer.correct is not True or answer.opened_at is None or answer.answered_at is None:
@@ -189,21 +221,24 @@ def long_hold_correct_flags(
         if len(others) < cfg.hold_min_other_answers:
             continue
         median = statistics.median(others)
-        limit = max(cfg.hold_factor * median, median + cfg.hold_extra_s)
+        limit = min(max(cfg.hold_factor * median, median + cfg.hold_extra_s), cfg.hold_cap_s)
+        if limit <= median:  # usually uses the whole time, so a long hold is nothing unusual
+            continue
         if answer.time_s is None or answer.time_s <= limit:
             continue
-        lost_during = any(_overlaps(s, answer.opened_at, answer.answered_at) for s in losses)
-        weight = cfg.hold_weight + (cfg.hold_focus_bonus if lost_during else 0.0)
+        away_s = lost_seconds(losses, answer.opened_at, answer.answered_at)
+        if away_s <= cfg.hold_min_focus_lost_s:
+            continue
         drafts.append(
             FlagDraft(
                 LONG_HOLD_CORRECT,
-                weight,
+                cfg.hold_weight,
                 answer.opened_at,
                 answer.position,
                 {
                     "time_s": round(answer.time_s),
                     "own_median_s": round(median),
-                    "focus_lost_during": lost_during,
+                    "focus_lost_s": round(away_s),
                 },
             )
         )
@@ -212,7 +247,7 @@ def long_hold_correct_flags(
 
 def run_gaps(losses: list[Span], idles: list[Span], cfg: FlagConfig = DEFAULTS) -> list[Span]:
     """The focus losses and idle stretches long enough to count as a gap before a run."""
-    gaps = [s for s in losses if s.duration_s >= cfg.run_gap_focus_s]
+    gaps = [s for s in counted_losses(losses, cfg) if s.duration_s >= cfg.run_gap_focus_s]
     gaps += [s for s in idles if s.duration_s >= cfg.run_gap_idle_s]
     return sorted(gaps, key=lambda s: s.end)
 
@@ -220,7 +255,14 @@ def run_gaps(losses: list[Span], idles: list[Span], cfg: FlagConfig = DEFAULTS) 
 def correct_run_after_gap_flags(
     answers: list[Answer], gaps: list[Span], cfg: FlagConfig = DEFAULTS
 ) -> list[FlagDraft]:
-    """`run_length` or more correct answers in a row, straight after a gap."""
+    """`run_length` or more correct answers in a row, straight after a gap, answered quickly.
+
+    "Quickly" is the average time per question of the first `run_length` answers after the gap,
+    counted from the end of the gap (the first question may have been open through it), against the
+    candidate's own median on their other answers: under `run_fast_factor` of it. A run at the
+    candidate's normal pace is just a good stretch. With fewer than `run_min_other_answers` other
+    answers there is nothing fair to compare against, so there is no flag.
+    """
     answered = sorted(
         (a for a in answers if a.answered_at is not None and not a.skipped),
         key=lambda a: a.answered_at,  # type: ignore[arg-type,return-value]
@@ -234,17 +276,38 @@ def correct_run_after_gap_flags(
             if answer.correct is not True:
                 break
             run += 1
-        if run >= cfg.run_length and after[0].position not in used:
-            used.add(after[0].position)
-            drafts.append(
-                FlagDraft(
-                    CORRECT_RUN_AFTER_GAP,
-                    cfg.run_weight,
-                    gap.end,
-                    after[0].position,
-                    {"gap_s": round(gap.duration_s), "run_length": run},
-                )
+        if run < cfg.run_length or after[0].position in used:
+            continue
+        checked = after[: cfg.run_length]
+        in_run = {a.position for a in checked}
+        others = [
+            a.time_s for a in answered if a.position not in in_run and a.time_s is not None
+        ]
+        if len(others) < cfg.run_min_other_answers:
+            continue
+        median = statistics.median(others)
+        times = [
+            (a.answered_at - max(a.opened_at or gap.end, gap.end)).total_seconds()  # type: ignore[operator]
+            for a in checked
+        ]
+        mean = statistics.fmean(times)
+        if mean >= cfg.run_fast_factor * median:
+            continue
+        used.add(after[0].position)
+        drafts.append(
+            FlagDraft(
+                CORRECT_RUN_AFTER_GAP,
+                cfg.run_weight,
+                gap.end,
+                after[0].position,
+                {
+                    "gap_s": round(gap.duration_s),
+                    "run_length": run,
+                    "mean_s": round(mean, 1),
+                    "own_median_s": round(median),
+                },
             )
+        )
     return drafts
 
 
@@ -289,43 +352,6 @@ def logging_problem_flags(
             )
         )
     return drafts
-
-
-def fast_correct_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> list[FlagDraft]:
-    """Correct answers far faster than the usual fast time for that question in past sittings.
-    One flag, and only when there are at least `fast_min_questions` such answers. A question whose
-    history comes from fewer than `fast_min_history_n` candidates is not compared against."""
-    hits = []
-    for answer in answers:
-        if answer.correct is not True or answer.time_s is None or answer.p25_s is None:
-            continue
-        if answer.stats_n is not None and answer.stats_n < cfg.fast_min_history_n:
-            continue
-        factor = cfg.fast_p25_factor
-        if answer.difficulty == "hard":
-            factor *= cfg.fast_hard_multiplier
-        if answer.time_s < factor * answer.p25_s:
-            hits.append(answer)
-    if len(hits) < cfg.fast_min_questions:
-        return []
-    first = min(hits, key=lambda a: a.position)
-    # a baseline that is partly estimated must say so, so a reviewer does not lean on it as if
-    # it were Cytonn's own history
-    source = "cytonn" if all(a.stats_source == "cytonn" for a in hits) else "synthetic"
-    return [
-        FlagDraft(
-            FAST_CORRECT_VS_HISTORY,
-            cfg.fast_weight,
-            first.opened_at,  # type: ignore[arg-type]
-            first.position,
-            {
-                "questions": [a.position for a in hits],
-                "times_s": [round(a.time_s or 0) for a in hits],
-                "p25_s": [round(a.p25_s or 0) for a in hits],
-                "history_source": source,
-            },
-        )
-    ]
 
 
 # ------------------------------------------------------------------------------------ cohort

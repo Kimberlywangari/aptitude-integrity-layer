@@ -4,11 +4,12 @@ Python, so only these functions need the binary, and tests can swap them for fak
 Only `ffmpeg` is needed (not `ffprobe`): its own log carries the duration.
 """
 
-import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
+
+from app.config import get_settings
 
 DURATION = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
 PROGRESS_TIME = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
@@ -23,7 +24,8 @@ class FfmpegFailed(RuntimeError):
 
 
 def ffmpeg_path() -> str:
-    found = os.environ.get("FFMPEG_BIN") or shutil.which("ffmpeg")
+    # FFMPEG_BIN comes from the settings, which read the real environment first and then .env
+    found = get_settings().ffmpeg_bin or shutil.which("ffmpeg")
     if not found:
         raise FfmpegMissing("ffmpeg was not found: install it or set FFMPEG_BIN")
     return found

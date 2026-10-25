@@ -7,6 +7,10 @@ and option order (a reload or a rebuilt paper never reshuffles), and two session
 import random
 from collections.abc import Mapping, Sequence
 
+# Questions that hang off one reading passage carry its text each, so a paper that took many of
+# them would have the candidate read the same passage again and again.
+MAX_PER_PASSAGE = 2
+
 
 def session_rng(session_id: str, purpose: str) -> random.Random:
     # A str seed is hashed with SHA-512 by random.Random, so this is stable across processes.
@@ -27,8 +31,40 @@ def most_asked_of_a_section(count: int, section_count: int) -> int:
     return -(-count // section_count)
 
 
+def draw(
+    rng: random.Random,
+    pool: Sequence[str],
+    wanted: int,
+    passages: Mapping[str, str] | None = None,
+) -> list[str]:
+    """`wanted` IDs from `pool`, in random order. With `passages` (question ID to passage key),
+    no more than MAX_PER_PASSAGE come from one passage unless the pool leaves no other way to
+    fill the paper, so a section made mostly of one passage still gets its questions."""
+    if not passages:
+        return rng.sample(sorted(pool), wanted)
+    order = sorted(pool)
+    rng.shuffle(order)
+    picked: list[str] = []
+    used: dict[str, int] = {}
+    for question_id in order:
+        key = passages.get(question_id)
+        if key is not None and used.get(key, 0) >= MAX_PER_PASSAGE:
+            continue
+        picked.append(question_id)
+        if key is not None:
+            used[key] = used.get(key, 0) + 1
+        if len(picked) == wanted:
+            return picked
+    chosen = set(picked)
+    picked += [q for q in order if q not in chosen][: wanted - len(picked)]
+    return picked
+
+
 def balanced_sample(
-    rng: random.Random, by_section: Mapping[str, Sequence[str]], count: int
+    rng: random.Random,
+    by_section: Mapping[str, Sequence[str]],
+    count: int,
+    passages: Mapping[str, str] | None = None,
 ) -> list[str]:
     """Pick `count` question IDs, spread as evenly as possible over the sections.
 
@@ -46,12 +82,15 @@ def balanced_sample(
         pool = sorted(by_section[section])
         if wanted > len(pool):
             raise ValueError(f"section {section!r} has {len(pool)} questions, need {wanted}")
-        picked.extend(rng.sample(pool, wanted))
+        picked.extend(draw(rng, pool, wanted, passages))
     return picked
 
 
 def blueprint_sample(
-    rng: random.Random, by_section: Mapping[str, Sequence[str]], blueprint: Mapping[str, int]
+    rng: random.Random,
+    by_section: Mapping[str, Sequence[str]],
+    blueprint: Mapping[str, int],
+    passages: Mapping[str, str] | None = None,
 ) -> list[str]:
     """Pick exactly the number of question IDs the blueprint asks of each section.
 
@@ -64,5 +103,5 @@ def blueprint_sample(
         pool = sorted(by_section.get(section, ()))
         if wanted > len(pool):
             raise ValueError(f"section {section!r} has {len(pool)} questions, need {wanted}")
-        picked.extend(rng.sample(pool, wanted))
+        picked.extend(draw(rng, pool, wanted, passages))
     return picked

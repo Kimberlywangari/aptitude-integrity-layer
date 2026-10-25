@@ -292,7 +292,11 @@ def test_question_has_shuffled_opaque_options_and_no_answer_key(running, db):
     assert body["position"] == 1 and body["total"] == TOTAL
     assert body["remaining_s"] == DURATION
     assert len(body["options"]) == 4
-    assert set(body) == {"position", "total", "section", "text", "options", "remaining_s"}
+    assert set(body) == {
+        "position", "total", "section", "text", "options", "remaining_s",
+        "question_remaining_s", "images",
+    }
+    assert body["images"] == []  # a bank question has no picture
     for option in body["options"]:
         assert set(option) == {"id", "text"}
     assert [o["id"] for o in body["options"]] == list(running.row(1).option_order)
@@ -310,6 +314,37 @@ def test_reload_keeps_the_question_clock_and_the_remaining_time(running, clock):
     assert running.row(1).opened_at == opened_at
     assert again["remaining_s"] == DURATION - 40
     assert third["remaining_s"] == DURATION - 45
+
+
+# ------------------------------------------------------------------------- a question's own time
+
+
+def test_a_question_open_for_its_whole_time_closes_and_the_next_opens_then(running, clock):
+    limit = test_flow.QUESTION_SECONDS
+    assert running.question().json()["question_remaining_s"] == limit
+    clock.advance(limit + 10)
+
+    second = running.question().json()
+    one, two = running.row(1), running.row(2)
+    assert second["position"] == 2 and second["question_remaining_s"] == limit - 10
+    assert one.skipped is True and one.selected_option is None
+    assert (one.answered_at - one.opened_at).total_seconds() == limit
+    assert two.opened_at == one.answered_at
+
+
+def test_an_answer_that_arrives_after_the_question_closed_is_refused(running, clock):
+    running.question()
+    clock.advance(test_flow.QUESTION_SECONDS)
+    late = running.answer(1, running.correct_option_id(1))
+    assert late.status_code == 409 and late.json()["code"] == "not_current"
+    assert running.row(1).selected_option is None
+
+
+def test_a_candidate_who_walks_away_loses_questions_as_the_time_passes(running, clock):
+    running.question()
+    clock.advance(test_flow.QUESTION_SECONDS * 3 + 5)
+    assert running.question().json()["position"] == 4
+    assert [running.row(p).skipped for p in (1, 2, 3)] == [True, True, True]
 
 
 # ------------------------------------------------------------------------------ answering

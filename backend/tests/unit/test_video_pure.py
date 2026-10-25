@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.config import Settings
 from app.services.audio.silence import parse_silencedetect
+from app.services.video import ffmpeg
 from app.services.video.ffmpeg import parse_duration, parse_last_progress
 from app.services.video.seek import SegmentSpan, seek_for
 from app.services.video.store import LocalVideoStore, assembled_key, chunk_key
@@ -98,6 +100,53 @@ def test_the_last_progress_time_is_the_length_when_the_header_has_none():
     log = "frame=1 time=00:00:10.00 x\nframe=2 time=00:00:25.40 bitrate=N/A\n"
     assert parse_last_progress(log) == 25.4
     assert parse_last_progress("nothing here") is None
+
+
+# --------------------------------------------------------------------- where ffmpeg is found
+
+
+def settings_from(tmp_path, text):
+    env_file = tmp_path / ".env"
+    env_file.write_text(text, encoding="utf-8")
+    return Settings(_env_file=env_file)
+
+
+@pytest.fixture
+def no_ffmpeg_on_path(monkeypatch):
+    monkeypatch.delenv("FFMPEG_BIN", raising=False)
+    monkeypatch.setattr(ffmpeg.shutil, "which", lambda name: None)
+
+
+def test_ffmpeg_bin_is_read_from_the_env_file(tmp_path, monkeypatch, no_ffmpeg_on_path):
+    path = r"C:\ffmpeg\bin\ffmpeg.exe"  # unquoted, as .env.example asks
+    monkeypatch.setattr(
+        ffmpeg, "get_settings", lambda: settings_from(tmp_path, f"FFMPEG_BIN={path}\n")
+    )
+    assert ffmpeg.ffmpeg_path() == path
+    assert ffmpeg.available()
+
+
+def test_the_real_environment_beats_the_env_file(tmp_path, monkeypatch, no_ffmpeg_on_path):
+    monkeypatch.setenv("FFMPEG_BIN", "/opt/ffmpeg")
+    monkeypatch.setattr(
+        ffmpeg, "get_settings", lambda: settings_from(tmp_path, "FFMPEG_BIN=/from/file\n")
+    )
+    assert ffmpeg.ffmpeg_path() == "/opt/ffmpeg"
+
+
+def test_an_empty_setting_falls_back_to_path(tmp_path, monkeypatch, no_ffmpeg_on_path):
+    monkeypatch.setattr(ffmpeg, "get_settings", lambda: settings_from(tmp_path, "FFMPEG_BIN=\n"))
+    monkeypatch.setattr(ffmpeg.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    assert ffmpeg.ffmpeg_path() == "/usr/bin/ffmpeg"
+
+
+def test_with_no_setting_and_nothing_on_path_ffmpeg_is_missing(
+    tmp_path, monkeypatch, no_ffmpeg_on_path
+):
+    monkeypatch.setattr(ffmpeg, "get_settings", lambda: settings_from(tmp_path, ""))
+    assert not ffmpeg.available()
+    with pytest.raises(ffmpeg.FfmpegMissing):
+        ffmpeg.ffmpeg_path()
 
 
 # ------------------------------------------------------------------------------------- store

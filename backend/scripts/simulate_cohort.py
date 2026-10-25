@@ -13,9 +13,13 @@ Everything it makes is recognisable and removable:
 - it never touches the invited candidates or the sitting a person is actually sitting in.
 
 The cheating cases are scripted so the rules have something to find (a tab lookup, a copier, an
-answer runner, a gap in the log, quick correct answers). The honest cases include people who are
-quick, and people with a dropped connection or a camera fault, because a rule that cannot tell
-those apart from the scripted cases is not worth using.
+answer runner, a gap in the log). The honest cases include people who are quick, and people with a
+dropped connection or a camera fault, because a rule that cannot tell those apart from the
+scripted cases is not worth using.
+
+Nothing here uses past candidates' statistics: how long a question takes and how likely it is to be
+answered correctly come from its difficulty alone, so it works on any bank, including one with no
+history at all.
 """
 
 import argparse
@@ -37,7 +41,6 @@ from app.models import (
     Heartbeat,
     Option,
     Question,
-    QuestionStats,
     SessionQuestion,
     Sitting,
     TestSession,
@@ -52,16 +55,19 @@ QUESTION_COUNT = 12
 DURATION_S = 1800
 PER_SECTION = 4
 
+# How long a question of each difficulty usually takes, and how often a middling candidate gets it
+# right. A stand-in for a person's behaviour, not a measurement of one.
+TYPICAL = {"easy": (22.0, 0.85), "medium": (35.0, 0.65), "hard": (55.0, 0.42)}
+
 # (archetype, how many). Sixteen candidates, enough for the cohort rules (eight or more).
 PLAN = (
-    ("honest", 6),
+    ("honest", 7),
     ("honest_fast", 2),
     ("honest_tech", 2),
     ("tab_lookup", 2),
     ("copier", 1),
     ("answer_runner", 1),
     ("logging_blocker", 1),
-    ("fast_correct", 1),
 )
 # Two people also have a long muted or silent stretch (context for a reviewer, never a flag).
 MIC_SILENT = {("honest", 3), ("tab_lookup", 1)}
@@ -101,16 +107,15 @@ def _pick_questions(rng: random.Random, by_section: dict[str, list[Question]]) -
 def _draw_paper(
     rng: random.Random,
     questions: list[Question],
-    stats: dict[str, QuestionStats],
     archetype: str,
 ) -> list[Item]:
     speed = 0.62 if archetype == "honest_fast" else 1.0
     ability = rng.gauss(0.5, 0.1) + (0.18 if archetype == "honest_fast" else 0.0)
     items: list[Item] = []
     for question in questions:
-        s = stats[question.id]
-        time_s = max(3.0, rng.lognormvariate(math.log(s.median_s), 0.32) * speed)
-        p_correct = min(0.97, max(0.08, s.pct_correct + (ability - 0.5) * 0.8))
+        median_s, pct_correct = TYPICAL[question.difficulty or "medium"]
+        time_s = max(3.0, rng.lognormvariate(math.log(median_s), 0.32) * speed)
+        p_correct = min(0.97, max(0.08, pct_correct + (ability - 0.5) * 0.8))
         items.append(Item(question, time_s, rng.random() < p_correct))
 
     # Now the scripted behaviour, on positions chosen so the rules have something to find.
@@ -130,12 +135,6 @@ def _draw_paper(
         items[start].pre_idle_s = rng.uniform(88, 120)
         for i in range(start, start + 4):
             items[i].time_s = rng.uniform(4, 8)
-            items[i].correct = True
-    elif archetype == "fast_correct":
-        hard_first = sorted(middle, key=lambda i: items[i].question.difficulty != "hard")
-        for i in hard_first[:4]:
-            p25 = stats[items[i].question.id].p25_s
-            items[i].time_s = max(2.5, 0.3 * p25)
             items[i].correct = True
     elif archetype == "honest" and rng.random() < 0.4:
         i = rng.choice(middle)
@@ -161,7 +160,6 @@ def _write_session(
     sitting: Sitting,
     start_base: datetime,
     questions: list[Question],
-    stats: dict[str, QuestionStats],
     options: dict[str, list[Option]],
     prefix: str,
 ) -> None:
@@ -179,7 +177,7 @@ def _write_session(
     # the same seed (the measurement job does this) can never reuse an ID.
     raw = f"{sitting.id}:{candidate_id}:{rng.getrandbits(128):032x}"
     session_id = hashlib.sha256(raw.encode()).hexdigest()[:32]
-    items = _draw_paper(rng, questions, stats, archetype)
+    items = _draw_paper(rng, questions, archetype)
 
     events: list[tuple[datetime, str, dict]] = [(started_at, "page_load", {})]
     cursor = started_at + timedelta(seconds=rng.uniform(4, 9))
@@ -355,11 +353,10 @@ def simulate(
     if existing is not None:
         return SimSummary(created=False, sitting_id=existing.id)
 
-    questions = list(db.scalars(select(Question)))
-    stats = {s.question_id: s for s in db.scalars(select(QuestionStats))}
-    usable = [q for q in questions if q.id in stats]
+    # the bank only: a question an AI wrote for one candidate is never part of a made-up paper
+    questions = list(db.scalars(select(Question).where(Question.source != "ai")))
     by_section: dict[str, list[Question]] = {}
-    for question in usable:
+    for question in questions:
         by_section.setdefault(question.section, []).append(question)
     if not by_section or any(len(v) < PER_SECTION for v in by_section.values()):
         raise ValueError("the question bank is too small: seed it first (seed_synthetic)")
@@ -386,7 +383,7 @@ def simulate(
             number += 1
             paper = _pick_questions(rng, by_section)
             _write_session(
-                db, rng, number, archetype, ordinal, sitting, start, paper, stats, options, prefix
+                db, rng, number, archetype, ordinal, sitting, start, paper, options, prefix
             )
             summary.by_archetype[f"{prefix}-{number:03d}"] = archetype
     summary.candidates = number

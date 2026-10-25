@@ -15,7 +15,7 @@ def at(seconds: float) -> datetime:
     return T0 + timedelta(seconds=seconds)
 
 
-def answer(position, opened, took, correct=True, difficulty=None, p25=None, skipped=False):
+def answer(position, opened, took, correct=True, difficulty=None, skipped=False):
     return rules.Answer(
         position=position,
         question_id=f"Q{position:03d}",
@@ -24,7 +24,6 @@ def answer(position, opened, took, correct=True, difficulty=None, p25=None, skip
         answered_at=at(opened + took),
         correct=correct,
         skipped=skipped,
-        p25_s=p25,
     )
 
 
@@ -55,6 +54,12 @@ def test_a_loss_of_one_second_counts_and_one_just_under_does_not():
     assert short == []
 
 
+def test_only_losses_of_a_second_or_more_are_counted_by_any_rule():
+    spans = [rules.Span(at(1), at(1.5)), rules.Span(at(5), at(6)), rules.Span(at(9), at(14))]
+    assert [s.duration_s for s in rules.counted_losses(spans, CFG)] == [1.0, 5.0]
+    assert rules.lost_seconds(spans, at(0), at(10)) == 0.5 + 1.0 + 1.0  # clipped to the window
+
+
 def test_pairs_a_loss_with_the_next_return_and_runs_an_unreturned_loss_to_the_end():
     events = [ev("focus_lost", 10), ev("focus_returned", 25), ev("focus_lost", 40)]
     spans = rules.focus_losses(events, at(100))
@@ -79,7 +84,26 @@ def test_each_copy_or_cut_is_a_flag_and_only_the_length_is_kept():
     assert [d.position for d in drafts] == [1, 2]
 
 
+def test_each_screenshot_key_press_is_a_flag_of_two_points_and_nothing_else_is():
+    events = [
+        ev("screenshot_attempt", 5, combo="PrintScreen"),
+        ev("screenshot_attempt", 70, combo="Win+Shift+S"),
+        ev("copy_attempt", 80, length=3),
+        ev("paste_attempt", 90),
+    ]
+    drafts = rules.screenshot_key_flags(events, paper(60, 60), CFG)
+    assert [d.kind for d in drafts] == ["SCREENSHOT_KEY", "SCREENSHOT_KEY"]
+    assert all(d.weight == 2 for d in drafts)
+    assert [d.detail for d in drafts] == [{"combo": "PrintScreen"}, {"combo": "Win+Shift+S"}]
+    assert [d.position for d in drafts] == [1, 2]
+
+
 # ---------------------------------------------------------------------------- long hold, correct
+
+
+def away(start, length):
+    """A focus loss that starts `start` seconds in and lasts `length` seconds."""
+    return rules.Span(at(start), at(start + length))
 
 
 def test_long_hold_fires_above_the_limit_and_not_at_it():
@@ -87,49 +111,133 @@ def test_long_hold_fires_above_the_limit_and_not_at_it():
     others = paper(30, 30, 30, 30, 30)
     just_over = [*others, answer(6, 200, 91)]
     exactly = [*others, answer(6, 200, 90)]
+    lost = [away(210, 20)]
 
-    fired = rules.long_hold_correct_flags(just_over, [], CFG)
+    fired = rules.long_hold_correct_flags(just_over, lost, CFG)
     assert [d.kind for d in fired] == ["LONG_HOLD_CORRECT"]
-    assert fired[0].weight == 3
+    assert fired[0].weight == 4
     assert fired[0].position == 6
-    assert fired[0].detail == {"time_s": 91, "own_median_s": 30, "focus_lost_during": False}
-    assert rules.long_hold_correct_flags(exactly, [], CFG) == []
+    assert fired[0].detail == {"time_s": 91, "own_median_s": 30, "focus_lost_s": 20}
+    assert rules.long_hold_correct_flags(exactly, lost, CFG) == []
 
 
 def test_the_extra_45_seconds_wins_when_the_median_is_small():
     # median 10 s: 3 x 10 = 30 but 10 + 45 = 55, so 55 s is the limit
     others = paper(10, 10, 10, 10, 10)
-    assert rules.long_hold_correct_flags([*others, answer(6, 100, 55)], [], CFG) == []
-    assert len(rules.long_hold_correct_flags([*others, answer(6, 100, 56)], [], CFG)) == 1
+    lost = [away(110, 20)]
+    assert rules.long_hold_correct_flags([*others, answer(6, 100, 55)], lost, CFG) == []
+    assert len(rules.long_hold_correct_flags([*others, answer(6, 100, 56)], lost, CFG)) == 1
 
 
-def test_a_focus_loss_during_the_hold_adds_a_point():
+def test_the_line_is_capped_because_a_question_closes_at_105_seconds():
+    # median 50 s: 3 x 50 = 150 s could never be reached, so the line is the 90 s cap
+    others = paper(50, 50, 50, 50, 50)
+    lost = [away(260, 20)]
+    assert len(rules.long_hold_correct_flags([*others, answer(6, 250, 100)], lost, CFG)) == 1
+    assert rules.long_hold_correct_flags([*others, answer(6, 250, 90)], lost, CFG) == []
+    # usually uses the whole time: a long hold is nothing unusual for them
+    slow = paper(95, 95, 95, 95, 95)
+    assert rules.long_hold_correct_flags([*slow, answer(6, 600, 100)], [away(610, 20)], CFG) == []
+
+
+def test_a_long_hold_with_focus_on_the_page_the_whole_time_is_not_flagged():
     others = paper(30, 30, 30, 30, 30)
-    held = answer(6, 200, 120)
-    loss = rules.Span(at(220), at(250))
-    drafts = rules.long_hold_correct_flags([*others, held], [loss], CFG)
-    assert drafts[0].weight == 4
-    assert drafts[0].detail["focus_lost_during"] is True
+    assert rules.long_hold_correct_flags([*others, answer(6, 200, 300)], [], CFG) == []
+    # a loss during some other question does not count towards this one
+    elsewhere = [away(20, 60)]
+    assert rules.long_hold_correct_flags([*others, answer(6, 200, 300)], elsewhere, CFG) == []
+
+
+def test_focus_must_have_been_lost_for_more_than_two_seconds():
+    others = paper(30, 30, 30, 30, 30)
+    held = [*others, answer(6, 200, 120)]
+    assert rules.long_hold_correct_flags(held, [away(220, 2)], CFG) == []  # exactly 2 s
+    assert len(rules.long_hold_correct_flags(held, [away(220, 2.5)], CFG)) == 1
+
+
+def test_blinks_do_not_count_but_several_real_losses_add_up():
+    others = paper(30, 30, 30, 30, 30)
+    held = [*others, answer(6, 200, 120)]
+    blinks = [away(210, 0.9), away(230, 0.9), away(250, 0.9)]  # 2.7 s, but none counts
+    assert rules.long_hold_correct_flags(held, blinks, CFG) == []
+    two_real = [away(210, 1.5), away(250, 1.5)]  # 3 s together
+    assert len(rules.long_hold_correct_flags(held, two_real, CFG)) == 1
+
+
+def test_only_the_part_of_a_loss_inside_the_question_counts():
+    others = paper(30, 30, 30, 30, 30)
+    held = [*others, answer(6, 200, 120)]  # open from 200 s to 320 s
+    straddling = [away(319, 30)]  # only 1 s of it is inside the question
+    assert rules.long_hold_correct_flags(held, straddling, CFG) == []
+    assert len(rules.long_hold_correct_flags(held, [away(310, 30)], CFG)) == 1  # 10 s inside
 
 
 def test_no_flag_with_fewer_than_five_other_answers_or_an_incorrect_one():
     four_others = paper(30, 30, 30, 30)
-    assert rules.long_hold_correct_flags([*four_others, answer(5, 150, 300)], [], CFG) == []
+    lost = [away(160, 30)]
+    assert rules.long_hold_correct_flags([*four_others, answer(5, 150, 300)], lost, CFG) == []
     five_others = paper(30, 30, 30, 30, 30)
     wrong = answer(6, 200, 300, correct=False)
-    assert rules.long_hold_correct_flags([*five_others, wrong], [], CFG) == []
+    assert rules.long_hold_correct_flags([*five_others, wrong], [away(210, 30)], CFG) == []
 
 
 # ----------------------------------------------------------------------- correct run after a gap
 
 
-def test_three_correct_in_a_row_after_a_five_second_loss():
-    answers = paper(30, 30, 30, 30)
-    gap = rules.Span(at(5), at(10))  # exactly five seconds
-    drafts = rules.correct_run_after_gap_flags(answers, rules.run_gaps([gap], [], CFG), CFG)
+def run_paper():
+    """Five ordinary 30 s answers (0 s to 154 s), then three quick ones of 8 s (155 s to 181 s).
+    A gap that ends at 155 s therefore comes straight before the quick ones."""
+    return paper(30, 30, 30, 30, 30, 8, 8, 8)
+
+
+def test_three_quick_correct_in_a_row_after_a_five_second_loss():
+    gap = rules.Span(at(150), at(155))  # exactly five seconds
+    drafts = rules.correct_run_after_gap_flags(
+        run_paper(), rules.run_gaps([gap], [], CFG), CFG
+    )
     assert [d.kind for d in drafts] == ["CORRECT_RUN_AFTER_GAP"]
     assert drafts[0].weight == 2
-    assert drafts[0].detail == {"gap_s": 5, "run_length": 4}
+    assert drafts[0].position == 6
+    assert drafts[0].detail == {
+        "gap_s": 5,
+        "run_length": 3,
+        "mean_s": 8.0,
+        "own_median_s": 30,
+    }
+
+
+def test_a_run_at_the_candidates_normal_pace_is_not_flagged():
+    gap = rules.run_gaps([rules.Span(at(150), at(155))], [], CFG)
+    normal = paper(30, 30, 30, 30, 30, 30, 30, 30)  # the same shape, at their usual pace
+    assert rules.correct_run_after_gap_flags(normal, gap, CFG) == []
+    # the line is half their median: 15 s is not under it, 14 s is
+    exactly = paper(30, 30, 30, 30, 30, 15, 15, 15)
+    just_under = paper(30, 30, 30, 30, 30, 14, 14, 14)
+    assert rules.correct_run_after_gap_flags(exactly, gap, CFG) == []
+    assert len(rules.correct_run_after_gap_flags(just_under, gap, CFG)) == 1
+
+
+def test_the_time_is_counted_from_the_end_of_the_gap_not_from_when_the_question_opened():
+    # question 6 opened at 155 s but the candidate was away until 190 s, then answered at once
+    answers = [
+        *paper(30, 30, 30, 30, 30),
+        answer(6, 155, 37),  # open 155 s to 192 s, 37 s in all
+        answer(7, 193, 8),
+        answer(8, 202, 8),
+    ]
+    gap = rules.run_gaps([rules.Span(at(160), at(190))], [], CFG)
+    drafts = rules.correct_run_after_gap_flags(answers, gap, CFG)
+    # 2 s after the gap for question 6, then 8 and 8: well under half of 30
+    assert [d.position for d in drafts] == [6]
+    assert drafts[0].detail["mean_s"] < 15
+
+
+def test_no_flag_without_five_other_answers_to_compare_with():
+    gap = rules.run_gaps([rules.Span(at(-1), at(5))], [], CFG)
+    few = paper(8, 8, 8, 30, 30, 30, 30)  # four others after the three quick ones
+    assert rules.correct_run_after_gap_flags(few, gap, CFG) == []
+    enough = paper(8, 8, 8, 30, 30, 30, 30, 30)
+    assert len(rules.correct_run_after_gap_flags(enough, gap, CFG)) == 1
 
 
 def test_a_loss_just_under_five_seconds_is_not_a_gap():
@@ -137,19 +245,25 @@ def test_a_loss_just_under_five_seconds_is_not_a_gap():
     assert rules.run_gaps([gap], [], CFG) == []
 
 
+def test_a_blink_is_never_a_gap_whatever_the_gap_length_is_set_to():
+    cfg = FlagConfig(run_gap_focus_s=0.5)  # even a gap threshold below the 1 s a loss must last
+    assert rules.run_gaps([rules.Span(at(5), at(5.9))], [], cfg) == []
+
+
 def test_a_wrong_answer_breaks_the_run_and_two_is_not_three():
-    gap = rules.run_gaps([rules.Span(at(1), at(20))], [], CFG)
-    broken = paper(30, 30, 30, 30)
-    broken[2] = answer(3, 62, 30, correct=False)
-    assert rules.correct_run_after_gap_flags(broken, gap, CFG) == []  # run is 2
-    two = paper(30, 30)
-    assert rules.correct_run_after_gap_flags(two, gap, CFG) == []
+    gap = rules.run_gaps([rules.Span(at(150), at(155))], [], CFG)
+    broken = run_paper()
+    broken[6] = answer(7, 164, 8, correct=False)  # the second quick answer is wrong: a run of 1
+    assert rules.correct_run_after_gap_flags(broken, gap, CFG) == []
+    two = paper(30, 30, 30, 30, 30, 30, 8, 8)
+    gap_two = rules.run_gaps([rules.Span(at(180), at(185))], [], CFG)
+    assert rules.correct_run_after_gap_flags(two, gap_two, CFG) == []
 
 
 def test_idle_gaps_count_from_sixty_seconds():
-    answers = paper(30, 30, 30)  # answered at 30 s, 61 s and 92 s
-    exactly = [rules.Span(at(-50), at(10))]  # 60 s, over before the first answer
-    under = [rules.Span(at(-49), at(10))]  # 59 s
+    answers = paper(8, 8, 8, 30, 30, 30, 30, 30)
+    exactly = [rules.Span(at(-61), at(-1))]  # 60 s, over before the first question opened
+    under = [rules.Span(at(-60), at(-1))]  # 59 s
     assert len(rules.run_gaps([], exactly, CFG)) == 1
     assert rules.run_gaps([], under, CFG) == []
     gaps = rules.run_gaps([], exactly, CFG)
@@ -208,42 +322,6 @@ def test_a_dropped_connection_or_a_reload_explains_a_gap():
     assert len(rules.logging_problem_flags(gap, [], elsewhere, CFG)) == 1
 
 
-# --------------------------------------------------------------------------- fast and correct
-
-
-def test_two_correct_answers_under_half_the_p25_make_one_flag():
-    answers = [
-        answer(1, 0, 9, p25=40),  # 9 < 20
-        answer(2, 10, 19.9, p25=40),  # just under 20
-        answer(3, 40, 20, p25=40),  # exactly 20: not under
-    ]
-    drafts = rules.fast_correct_flags(answers, CFG)
-    assert [d.kind for d in drafts] == ["FAST_CORRECT_VS_HISTORY"]
-    assert drafts[0].weight == 2
-    assert drafts[0].detail["questions"] == [1, 2]
-
-
-def test_one_quick_answer_is_not_enough_and_a_wrong_one_does_not_count():
-    assert rules.fast_correct_flags([answer(1, 0, 5, p25=40)], CFG) == []
-    wrong = [answer(1, 0, 5, p25=40), answer(2, 10, 5, p25=40, correct=False)]
-    assert rules.fast_correct_flags(wrong, CFG) == []
-
-
-def test_hard_questions_use_the_wider_threshold():
-    # 28 s is over 0.5 x 40 = 20 but under 0.75 x 40 = 30
-    easy = [answer(1, 0, 28, p25=40), answer(2, 30, 28, p25=40)]
-    hard = [
-        answer(1, 0, 28, p25=40, difficulty="hard"),
-        answer(2, 30, 28, p25=40, difficulty="hard"),
-    ]
-    assert rules.fast_correct_flags(easy, CFG) == []
-    assert len(rules.fast_correct_flags(hard, CFG)) == 1
-
-
-def test_questions_with_no_history_are_ignored():
-    assert rules.fast_correct_flags([answer(1, 0, 1), answer(2, 5, 1)], CFG) == []
-
-
 # --------------------------------------------------------------------------------- the cohort
 
 
@@ -270,6 +348,11 @@ def test_a_group_with_no_spread_flags_nobody():
     same = [member(f"s{i}", 40, 10) for i in range(10)]
     assert rules.cohort_flags(same, CFG) == {}
     assert rules.robust_z([40.0] * 5, 40.0) is None
+
+
+def test_baseline_is_the_median_and_the_raw_median_absolute_deviation():
+    assert rules.baseline([10, 12, 14, 16, 18]) == (14, 2)
+    assert rules.baseline([5.0, 5.0, 5.0]) == (5.0, 0.0)
 
 
 def test_percentile_is_the_share_at_or_below():

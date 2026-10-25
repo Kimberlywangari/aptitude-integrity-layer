@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.session import SignIn
+
 MAX_AGE_MS = 48 * 3600 * 1000  # an event can wait offline for the whole resume window
 MAX_EVENTS_PER_BATCH = 100
 MAX_COMPLAINT_CHARS = 1000
@@ -108,8 +110,8 @@ class FinishRequest(BaseModel):
     chunks_total: int | None = Field(default=None, ge=0, le=100_000)
 
 
-class ResumeRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=200)  # the invitation code, as on the start page
+class ResumeRequest(SignIn):
+    """The same credentials as the start page."""
 
 
 class ResumeResponse(BaseModel):

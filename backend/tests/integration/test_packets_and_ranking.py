@@ -1,5 +1,5 @@
 """Evidence packets, the cohort baselines, and ranking a sitting, on the made-up closed sitting of
-sixteen candidates (the simulator's data stands in for the placeholder questions' sitting)."""
+sixteen candidates (the simulator's data stands in for the practice questions sitting)."""
 
 import json
 from datetime import timedelta
@@ -198,7 +198,7 @@ def test_a_packet_has_the_agreed_shape_and_a_complete_facts_block(db, sim):
                 assert flag["question_number"] in facts["question_numbers"]
         assert facts["counts"]["flags"] == len(packet["flags"])
         assert packet["pace_s_per_q"] in facts["times_s"]
-        assert packet["history_source"] == "synthetic"  # the placeholder questions' statistics
+        assert "history_source" not in packet
         referenced = {f["question_number"] for f in packet["flags"] if f["question_number"]}
         assert referenced <= {q["number"] for q in packet["questions"]}
 

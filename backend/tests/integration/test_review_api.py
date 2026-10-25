@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.models import Decision, Sitting
 from app.services.staff_auth import create_reviewer
 from scripts.simulate_cohort import SITTING_NAME, simulate
+from tests.support import Live
 
 PASSWORD = "correct horse battery"
 LONG_REASON = "Only a pace flag and nothing else on the video review."
@@ -40,7 +41,9 @@ def candidates_by_archetype(sim, name):
     "method,path",
     [
         ("get", "/api/review/queue"),
+        ("get", "/api/review/candidates"),
         ("get", "/api/review/candidates/sim-001"),
+        ("get", "/api/review/candidates/sim-001/events"),
         ("post", "/api/review/candidates/sim-001/shortlist"),
         ("post", "/api/review/candidates/sim-001/video-view"),
         ("post", "/api/review/decisions"),
@@ -90,8 +93,6 @@ def test_the_scripted_cases_are_found(client, sim, staff):
         assert items[candidate]["flag_kinds"].count("COPY_ATTEMPT") == 3
     for candidate in candidates_by_archetype(sim, "answer_runner"):
         assert "CORRECT_RUN_AFTER_GAP" in items[candidate]["flag_kinds"]
-    for candidate in candidates_by_archetype(sim, "fast_correct"):
-        assert "FAST_CORRECT_VS_HISTORY" in items[candidate]["flag_kinds"]
     for candidate in candidates_by_archetype(sim, "logging_blocker"):
         assert items[candidate]["flag_kinds"] == ["LOGGING_PROBLEM"]
         assert items[candidate]["logging_only"] is True
@@ -145,7 +146,7 @@ def test_the_candidate_page_holds_the_flags_the_breakdown_and_the_context(client
         "spread_percentile",
         "score_percentile",
     }
-    assert detail["history_source"] == "synthetic"
+    assert "history_source" not in detail  # no rule compares anyone with past candidates
 
     text = detail["explanation"]
     assert text["source"] == "rules" and text["status"] == "not_run"
@@ -190,6 +191,135 @@ def test_an_unknown_candidate_is_a_404(client, sim, staff):
     response = client.get("/api/review/candidates/cand-does-not-exist", headers=staff)
     assert response.status_code == 404
     assert response.json() == {"code": "candidate_not_found"}
+    response = client.get("/api/review/candidates/cand-does-not-exist/events", headers=staff)
+    assert response.status_code == 404
+    assert response.json() == {"code": "candidate_not_found"}
+
+
+# ------------------------------------------------------------------- everyone in the sitting
+
+
+def queued(client, staff) -> set[str]:
+    items = client.get("/api/review/queue", headers=staff).json()["items"]
+    return {i["candidate_id"] for i in items}
+
+
+def test_the_list_of_everyone_holds_candidates_the_queue_leaves_out(client, sim, staff):
+    body = client.get("/api/review/candidates", headers=staff).json()
+
+    assert body["sitting_id"] == sim.sitting_id
+    items = body["items"]
+    assert len(items) == len(sim.by_archetype)  # every sixteen, not only the flagged ones
+    assert all(i["status"] == "finished" for i in items)
+    assert all(i["total"] == 12 and i["resolved"] <= 12 for i in items)
+
+    in_queue = {i["candidate_id"] for i in items if i["in_queue"]}
+    assert in_queue == queued(client, staff)  # the two lists agree about who is in the queue
+    left_out = [i for i in items if not i["in_queue"]]
+    assert left_out, "the made-up sitting has honest candidates the queue does not show"
+
+    flagged = {i["candidate_id"]: i for i in items if i["flag_count"]}
+    for candidate in candidates_by_archetype(sim, "copier"):
+        assert flagged[candidate]["flag_kinds"].count("COPY_ATTEMPT") == 1  # listed once each
+
+
+def test_the_list_of_everyone_follows_invitation_order_and_the_chosen_sitting(client, sim, staff):
+    items = client.get("/api/review/candidates", headers=staff).json()["items"]
+    ids = [i["candidate_id"] for i in items]
+    assert ids == sorted(ids, key=lambda c: (len(c), c))
+
+    other = client.get("/api/review/candidates?sitting=99999", headers=staff).json()
+    assert other["sitting_id"] == sim.sitting_id  # an unknown sitting falls back, as the queue does
+
+
+def test_someone_the_queue_leaves_out_still_opens_but_their_video_stays_closed(
+    client, sim, staff
+):
+    in_queue = queued(client, staff)
+    everyone = client.get("/api/review/candidates", headers=staff).json()["items"]
+    candidate = next(i["candidate_id"] for i in everyone if i["candidate_id"] not in in_queue)
+
+    detail = client.get(f"/api/review/candidates/{candidate}", headers=staff)
+    assert detail.status_code == 200
+    assert detail.json()["rank"] == 0
+    assert detail.json()["video_available"] is False
+    assert detail.json()["segments"] == []
+
+    video = client.get(f"/api/review/candidates/{candidate}/video", headers=staff)
+    assert video.status_code == 403 and video.json() == {"code": "video_not_available"}
+
+    # a reviewer who shortlists them chooses to open it
+    assert client.post(
+        f"/api/review/candidates/{candidate}/shortlist", headers=staff
+    ).json() == {"shortlisted": True, "result_email_sent": False}
+    again = client.get(f"/api/review/candidates/{candidate}", headers=staff).json()
+    assert again["video_available"] is True
+
+
+def test_someone_in_the_queue_has_video_available(client, sim, staff):
+    candidate = candidates_by_archetype(sim, "copier")[0]
+    detail = client.get(f"/api/review/candidates/{candidate}", headers=staff).json()
+    assert detail["video_available"] is True
+
+
+# ----------------------------------------------------------------------------- the action log
+
+
+def test_the_action_log_lists_what_the_page_reported_in_order(client, sim, staff):
+    candidate = candidates_by_archetype(sim, "copier")[0]
+    log = client.get(f"/api/review/candidates/{candidate}/events", headers=staff).json()
+
+    assert log["candidate_id"] == candidate and log["status"] == "finished"
+    assert log["total_events"] == len(log["events"]) and log["truncated"] is False
+    times = [e["at_s"] for e in log["events"]]
+    assert times == sorted(times)
+
+    types = [e["type"] for e in log["events"]]
+    assert types.count("copy_attempt") == 3
+    assert "question_opened" in types and "answered" in types
+
+    # copy events carry a length and nothing else: never the text
+    for event in (e for e in log["events"] if e["type"] == "copy_attempt"):
+        assert set(event["detail"]) == {"length"}
+        assert isinstance(event["detail"]["length"], int)
+        assert event["question"] is not None  # it happened while a question was open
+
+    # the question a position belongs to comes from the question_opened event before it
+    opened = [e for e in log["events"] if e["type"] == "question_opened"]
+    assert all(e["question"] is not None and "position" not in e["detail"] for e in opened)
+
+
+def test_the_action_log_has_the_paper_question_by_question(client, sim, staff):
+    candidate = candidates_by_archetype(sim, "copier")[0]
+    log = client.get(f"/api/review/candidates/{candidate}/events", headers=staff).json()
+
+    paper = log["questions"]
+    assert [q["position"] for q in paper] == list(range(1, 13))
+    assert {q["result"] for q in paper} <= {"correct", "wrong", "skipped", "unanswered"}
+    for q in paper:
+        assert q["section"] in {"numerical", "verbal", "logical"}
+        assert set(q) == {
+            "position", "section", "difficulty", "opened_s", "answered_s", "time_s", "result",
+            "written_by",
+        }  # no question text, no options
+        assert q["written_by"] is None  # these came from the bank, not from an AI
+        if q["time_s"] is not None:
+            assert q["time_s"] == pytest.approx(q["answered_s"] - q["opened_s"], abs=0.2)
+
+
+def test_the_action_log_of_someone_who_never_started_is_empty_not_an_error(
+    client, db, seeded, sim, staff
+):
+    live = Live(client, db, seeded.invites[0].token).start()  # opened the link, never began
+    session = live.session()
+    log = client.get(
+        f"/api/review/candidates/{session.candidate_id}/events?sitting={session.sitting_id}",
+        headers=staff,
+    )
+    assert log.status_code == 200
+    body = log.json()
+    assert body["status"] == "created" and body["started_at"] is None
+    assert body["events"] == [] and body["total_events"] == 0 and body["heartbeats"] == 0
 
 
 # ----------------------------------------------------------------------------------- writing
@@ -264,12 +394,12 @@ def test_the_latest_of_several_decisions_is_the_one_that_counts(client, sim, sta
 def test_shortlisting_toggles_and_is_audited(client, sim, staff, db):
     top = client.get("/api/review/queue", headers=staff).json()["items"][0]["candidate_id"]
     first = client.post(f"/api/review/candidates/{top}/shortlist", headers=staff)
-    assert first.json() == {"shortlisted": True}
+    assert first.json() == {"shortlisted": True, "result_email_sent": False}
     queue = client.get("/api/review/queue", headers=staff).json()["items"]
     assert next(i for i in queue if i["candidate_id"] == top)["shortlisted"] is True
 
     second = client.post(f"/api/review/candidates/{top}/shortlist", headers=staff)
-    assert second.json() == {"shortlisted": False}
+    assert second.json() == {"shortlisted": False, "result_email_sent": False}
 
     details = [
         e["detail"]

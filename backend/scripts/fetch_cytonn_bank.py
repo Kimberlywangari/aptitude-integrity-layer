@@ -1,11 +1,17 @@
 """Load Cytonn's questions from their aptitude API into the question bank.
 
     python -m scripts.jobs fetch_cytonn_bank [--file PATH] [--save-raw PATH] [--dry-run] [--force]
+                                             [--no-images]
 
 Reads GET {APTITUDE_API_BASE_URL}/sections with the key in X-API-KEY (.env). One request per
 run. The key goes in the X-API-KEY header only: it is never printed, logged or put in a message.
 `--file` loads a response saved earlier instead of calling the API. `--save-raw` keeps the response
 as received; put it under data/, which git ignores (it holds the answer key).
+
+The questions arrive as HTML and become plain text. About 42% depend on a picture (almost all of
+Numerical, Logical, Error Checking and Office Assistant); the pictures are public files on Cytonn's
+site, fetched once and kept in our database so a candidate's test never depends on their website.
+`--no-images` loads without them, which leaves out every question that needs one.
 
 Questions Cytonn has not marked with a correct answer, or has marked with more than one, are
 skipped and listed. The rules are in app/services/cytonn_bank.py and the reasoning in
@@ -13,15 +19,21 @@ docs/plan/cytonn-api-question-bank.md.
 """
 
 import argparse
+import hashlib
 import json
 from collections import defaultdict
+from collections.abc import Iterator, Mapping
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
+from sqlalchemy import select
 
 from app.config import get_settings
-from app.services import cytonn_bank
+from app.models import QuestionImage
+from app.services import cytonn_bank, cytonn_images
 from app.services.cytonn_bank import BankInUse, LoadResult, ParsedBank
+from app.services.cytonn_images import ImageBlob
 
 TIMEOUT_S = 30.0
 
@@ -72,12 +84,41 @@ def fetch_sections(base_url: str, api_key: str, *, client: httpx.Client | None =
     return fetch_endpoint(base_url, api_key, "sections", client=client)
 
 
+class _AssumeFetched(Mapping[str, ImageBlob]):
+    """For a dry run: every picture is taken to be fetchable, so the report shows what a real run
+    would load without making 770 requests."""
+
+    def __getitem__(self, url: str) -> ImageBlob:
+        return ImageBlob("image/png", b"", hashlib.sha256(url.encode()).hexdigest())
+
+    def __contains__(self, url: object) -> bool:
+        return True
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
+
+
+def _progress(done: int, total: int) -> None:
+    if done == total or done % 100 == 0:
+        print(f"  {done} of {total} pictures")
+
+
 def _report(bank: ParsedBank, result: LoadResult, *, dry_run: bool, source: str) -> None:
     verb = "would be" if dry_run else "were"
     print(
         f"{result.created} questions created, {result.updated} updated, "
-        f"{result.unchanged} unchanged ({verb} applied from {source})"
+        f"{result.unchanged} unchanged ({verb} applied from {source}); "
+        f"{result.images_stored} pictures {'to store' if dry_run else 'stored'}"
     )
+    if result.no_image:
+        shown = ", ".join(str(i) for i in result.no_image[: cytonn_bank.SAMPLE])
+        print(
+            f"{len(result.no_image)} questions left out because a picture was not available "
+            f"(Cytonn ids {shown}{', ...' if len(result.no_image) > cytonn_bank.SAMPLE else ''})"
+        )
     for section, count in sorted(result.by_section.items()):
         minutes = bank.minutes.get(section)
         pace = f", {minutes:g} min per question" if minutes else ""
@@ -116,6 +157,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--force", action="store_true", help="load even while a session is in progress"
     )
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        help="do not fetch pictures: questions that need one are left out",
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -132,9 +178,20 @@ def main(argv: list[str] | None = None) -> None:
     except (FetchError, OSError, ValueError) as problem:  # ValueError covers bad JSON too
         raise SystemExit(f"not loaded: {problem}") from problem
 
+    host = urlsplit(settings.aptitude_api_base_url).hostname or ""
     with SessionLocal() as db:
+        pictures: Mapping[str, ImageBlob] = {}
+        failed: dict[str, str] = {}
+        if args.dry_run:
+            pictures = _AssumeFetched()
+        elif not args.no_images:
+            have = set(db.scalars(select(QuestionImage.source_url)))
+            wanted = [url for url in bank.images_needed if url not in have]
+            if wanted:
+                print(f"fetching {len(wanted)} pictures from {host} ...")
+                pictures, failed = cytonn_images.fetch_images(wanted, host, progress=_progress)
         try:
-            result = cytonn_bank.load_bank(db, bank, force=args.force)
+            result = cytonn_bank.load_bank(db, bank, force=args.force, images=pictures)
         except BankInUse as problem:
             db.rollback()
             raise SystemExit(f"not loaded: {problem}") from problem
@@ -143,6 +200,10 @@ def main(argv: list[str] | None = None) -> None:
         else:
             db.commit()
     _report(bank, result, dry_run=args.dry_run, source=source)
+    for url, why in list(failed.items())[: cytonn_bank.SAMPLE]:
+        print(f"picture {url} {why}")
+    if failed:
+        print(f"{len(failed)} pictures could not be fetched in all")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,23 @@
+Subject: Your Cytonn aptitude test
+
+Dear {name},
+
+You have been invited to take the Cytonn aptitude test.
+
+Your invitation code: {code}
+Open this link to begin: {link}
+
+When you start, you will be asked for the code and for this email address ({email}), and then to
+choose a password. Next time, your email and password are enough. Keep your password to yourself.
+
+Before you begin:
+- Use Google Chrome or Microsoft Edge on a laptop or desktop computer.
+- Allow your camera and microphone when asked, and use full screen. Your camera and microphone record for the whole test.
+- Turn off notifications on your computer.
+- Find a quiet place. You cannot go back to a question once you move on.
+- The test has {questions} questions. Each question gets 1 minute 45 seconds, so the test takes {minutes} minutes in all.
+{window}
+If you have any trouble, reply to this email or contact the person who invited you.
+
+Kind regards,
+Cytonn Recruitment

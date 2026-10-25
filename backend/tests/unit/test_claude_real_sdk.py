@@ -86,7 +86,8 @@ def test_the_request_asks_for_the_schema_through_output_config(server, ranker):
     request = server.requests[-1]
     body = request["body"]
     assert request["path"] == "/v1/messages"
-    assert "x-api-key" in request["headers"]
+    # the key travels as x-api-key (anthropic 1.x) or as a bearer token (2.x)
+    assert {"x-api-key", "authorization"} & set(request["headers"])
     assert body["model"] == "claude-sonnet-5-5"
     assert body["output_config"]["effort"] == "low"
     assert body["output_config"]["format"]["type"] == "json_schema"

@@ -1,14 +1,40 @@
 from pydantic import BaseModel, Field
 
 
-class StartRequest(BaseModel):
-    token: str = Field(min_length=1, max_length=200)
+class SignIn(BaseModel):
+    """What the start and resume pages send. What each combination means is in services/login.py:
+    code and email for the first sign-in (with `new_password` to choose a password), email and
+    password after that, and the code alone for a candidate made without an email."""
+
+    token: str | None = Field(default=None, max_length=200)  # the invitation code
+    email: str | None = Field(default=None, max_length=254)
+    password: str | None = Field(default=None, max_length=200)
+    new_password: str | None = Field(default=None, max_length=200)
+
+
+class StartRequest(SignIn):
+    pass
 
 
 class StartResponse(BaseModel):
     session_id: str
     access_token: str
     status: str  # created | in_progress | finished: where the client should route
+
+
+class PaperResponse(BaseModel):
+    """How far the candidate's questions have got. Always `ready` for a bank sitting."""
+
+    status: str  # pending | ready | failed
+    written: int
+    total: int
+    # seconds waited so far while pending, and whether the candidate may ask again (after a
+    # failure, or after waiting longer than the limit)
+    waited_s: int | None = None
+    can_retry: bool = False
+    # The candidate's own name, so the page can say whose test this is. Read only with their own
+    # session's token; it goes nowhere else (not to reviewers, packets or the AI).
+    candidate_name: str | None = None
 
 
 class BeginRequest(BaseModel):
@@ -32,6 +58,10 @@ class QuestionResponse(BaseModel):
     text: str
     options: list[OptionView]
     remaining_s: float
+    question_remaining_s: float  # at 0 the server closes the question and the next one opens
+    # Addresses of the pictures the text's [[image N]] markers stand for (N counts from 1). Empty
+    # unless the question depends on a picture.
+    images: list[str] = []
 
 
 class AnswerRequest(BaseModel):

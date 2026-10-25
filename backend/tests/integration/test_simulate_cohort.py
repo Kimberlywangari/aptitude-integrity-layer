@@ -3,7 +3,7 @@ touches what was seeded for real people."""
 
 from sqlalchemy import func, select
 
-from app.models import Candidate, Flag, Sitting, TestSession
+from app.models import Candidate, Flag, SessionQuestion, Sitting, TestSession
 from scripts.simulate_cohort import SITTING_NAME, purge, simulate
 
 
@@ -62,3 +62,28 @@ def test_the_same_seed_gives_the_same_cohort(db, seeded):
     )
     assert flags_first == flags_second
     assert flags_first  # and it is not vacuous
+
+
+def test_it_needs_no_past_candidate_statistics_and_ignores_written_questions(db, seeded):
+    from app.models import Question, QuestionStats
+
+    db.execute(QuestionStats.__table__.delete())  # a bank with no history at all
+    for section in ("numerical", "verbal", "logical"):  # and some questions an AI wrote
+        db.add(
+            Question(
+                id=f"G{section[:3]}{'0' * 12}", section=section, difficulty="easy",
+                correct_option="A", text="written for someone", source="ai",
+            )
+        )
+    db.flush()
+
+    result = simulate(db, seed=3)
+
+    assert result.created and result.candidates == 16
+    used = db.scalars(
+        select(Question.source)
+        .join(SessionQuestion, SessionQuestion.question_id == Question.id)
+        .join(TestSession, TestSession.id == SessionQuestion.session_id)
+        .where(TestSession.sitting_id == result.sitting_id)
+    ).all()
+    assert used and "ai" not in set(used)
