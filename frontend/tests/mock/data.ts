@@ -11,14 +11,17 @@ import type {
   CandidateDetail,
   CandidateRow,
   ComplaintItem,
+  EmailState,
   FlagItem,
   HealthCheck,
   InnocentSignal,
   MicSilence,
   NextUp,
+  OutcomeStatus,
   OverviewTiles,
   PastDecision,
   QueueItem,
+  ResultPanel,
   SittingRef,
   VideoSegment,
   VideoSeek,
@@ -277,10 +280,23 @@ function breakdown(flags: FlagItem[]): BreakdownLine[] {
   return lines
 }
 
+/** What a person (or the pass mark) decided for a candidate, and whether the email has gone. */
+export interface MockResult {
+  result: 'pass' | 'fail'
+  basis: 'score' | 'review'
+  reason: string | null
+  by: string
+  at: string
+  emailState: EmailState
+  appeal: boolean
+}
+
 export interface MockState {
   decisions: Map<string, PastDecision[]>
   shortlisted: Set<string>
   audit: AuditEntry[]
+  results: Map<string, MockResult>
+  passMark: number | null
 }
 
 export function initialState(): MockState {
@@ -316,7 +332,7 @@ export function initialState(): MockState {
       detail: '30 days after the decision',
     },
   ]
-  return { decisions, shortlisted, audit }
+  return { decisions, shortlisted, audit, results: new Map(), passMark: null }
 }
 
 // People the queue leaves out: nothing to flag, or still sitting. They show in "Everyone".
@@ -333,6 +349,61 @@ const QUIET: Quiet[] = [
   { id: 'cand-020', status: 'in_progress', resolved: 7, score: 0, pace: 0 },
   { id: 'cand-021', status: 'created', resolved: 0, score: 0, pace: 0 },
 ]
+
+export const QUESTION_TOTAL = 12
+/** A steady made-up score for each candidate: 0 to 12, the same every time. */
+export const scoreOf = (id: string) => (Number(id.replace(/\D/g, '')) * 5) % 13
+
+/** Where a candidate stands, worked out the way the server's status function does. */
+export function outcomeStatus(id: string, state: MockState): OutcomeStatus {
+  const seed = SEEDS.find((s) => s.id === id)
+  const quiet = QUIET.find((q) => q.id === id)
+  const finished = Boolean(seed) || quiet?.status === 'finished'
+  const stored = state.results.get(id)
+  if (stored?.result === 'fail' && stored.appeal) return 'under_appeal'
+  if (stored?.result === 'pass') return 'passed'
+  if (stored?.result === 'fail') return stored.basis === 'score' ? 'failed_score' : 'failed_review'
+  if (finished) {
+    if (state.passMark !== null && scoreOf(id) < state.passMark) return 'failed_score'
+    if (seed) return (state.decisions.get(id) ?? []).length ? 'in_review' : 'waiting_review'
+    return 'ready'
+  }
+  return quiet?.status === 'in_progress' ? 'in_progress' : 'invited'
+}
+
+export function buildResult(id: string, state: MockState): ResultPanel {
+  const seed = SEEDS.find((s) => s.id === id)
+  const quiet = QUIET.find((q) => q.id === id)
+  const finished = Boolean(seed) || quiet?.status === 'finished'
+  const stored = state.results.get(id)
+  const decided = (state.decisions.get(id) ?? []).length > 0
+  const blocked_by = !finished
+    ? 'not_finished'
+    : stored
+      ? 'already_emailed'
+      : seed && !decided
+        ? 'review_first'
+        : null
+  return {
+    score: finished ? scoreOf(id) : 0,
+    total: QUESTION_TOTAL,
+    pass_mark: state.passMark,
+    status: outcomeStatus(id, state),
+    result: stored?.result ?? null,
+    basis: stored?.basis ?? null,
+    reason: stored?.reason ?? null,
+    decided_by: stored?.by ?? null,
+    decided_at: stored?.at ?? null,
+    email_state: stored?.emailState ?? 'none',
+    can_record: blocked_by === null,
+    blocked_by,
+    reasons: [
+      { key: 'focus', text: 'During the test your screen left the test page or left full screen more than once.' },
+      { key: 'copy', text: 'The record shows attempts to copy from, or paste into, the test page.' },
+      { key: 'recording', text: 'Your camera or microphone recording was missing for a large part of the test.' },
+    ],
+  }
+}
 
 function quietDetail(id: string, state: MockState): CandidateDetail | null {
   const quiet = QUIET.find((q) => q.id === id)
@@ -367,6 +438,7 @@ function quietDetail(id: string, state: MockState): CandidateDetail | null {
     segments: [],
     video_deleted_at: null,
     video_purge_on: null,
+    result: buildResult(id, state),
   }
 }
 
@@ -430,6 +502,7 @@ export function buildDetail(id: string, state: MockState): CandidateDetail | nul
     segments: videoSegments,
     video_deleted_at: seed.videoDeletedAt ?? null,
     video_purge_on: purgeOn,
+    result: buildResult(id, state),
   }
 }
 

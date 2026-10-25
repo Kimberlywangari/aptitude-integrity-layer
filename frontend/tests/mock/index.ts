@@ -18,6 +18,7 @@ import type {
   InvitesResponse,
   InviteStatus,
   MailStatus,
+  PassMarkPreview,
   PreviewList,
   QuestionBankSummary,
   QuestionListResponse,
@@ -38,12 +39,18 @@ import { getStaff } from '../../src/lib/staffSession'
 import { MIN_REASON_CHARS } from '../../src/lib/reviewTypes'
 import type {
   AuditEntry,
+  BulkPassResponse,
   CandidatesResponse,
   DecisionOutcome,
   DecisionRequest,
+  EmailState,
   LoginResponse,
+  OutcomeItem,
+  OutcomesResponse,
+  OutcomeStatus,
   OverviewResponse,
   QueueResponse,
+  ResultRequest,
 } from '../../src/lib/reviewTypes'
 import {
   buildActionLog,
@@ -51,7 +58,11 @@ import {
   buildDetail,
   buildOverview,
   buildQueue,
+  buildResult,
   initialState,
+  outcomeStatus,
+  QUESTION_TOTAL,
+  scoreOf,
   SITTINGS,
 } from './data'
 import type { MockState } from './data'
@@ -94,7 +105,10 @@ let invitees: Invitee[]
 let mailStatus: MailStatus
 let mailTestFails: boolean
 let emailed: Set<string> // candidates who have been sent a result email
-let resultsState: Omit<ResultsPlan, 'sitting_closed' | 'preview_passed' | 'preview_not_passed'>
+let resultsState: Omit<
+  ResultsPlan,
+  'sitting_closed' | 'pass_mark' | 'preview_passed' | 'preview_not_passed' | 'preview_not_passed_review'
+>
 let complaintCount: number
 let manifestCalls: Map<string, number>
 
@@ -111,6 +125,7 @@ function reset(): void {
       blueprint: null,
       question_mode: 'practice',
       status: 'open',
+      pass_mark: null,
       counts: { finished: 14, in_progress: 2, not_started: 4, papers_pending: 0, papers_failed: 0 },
     },
     {
@@ -123,6 +138,7 @@ function reset(): void {
       blueprint: null,
       question_mode: 'practice',
       status: 'closed',
+      pass_mark: null,
       counts: { finished: 12, in_progress: 0, not_started: 0, papers_pending: 0, papers_failed: 0 },
     },
   ]
@@ -143,11 +159,11 @@ function reset(): void {
   mailTestFails = false
   emailed = new Set()
   resultsState = {
-    passed: 3,
-    not_passed: 5,
+    sent_passed: 3,
+    sent_not_passed: 1,
+    queued: 0,
+    failed: 0,
     held_back: ['cand-007'],
-    sent_passed: 0,
-    sent_not_passed: 0,
     did_not_finish: 2,
     without_email: 0,
   }
@@ -188,10 +204,6 @@ export function setMockMail(patch: Partial<MailStatus> & { testFails?: boolean }
 /** Marks candidates as already sent a result email, for the reviewer's shortlist note. */
 export function setMockEmailed(ids: string[]): void {
   emailed = new Set(ids)
-}
-
-export function setMockResults(patch: Partial<typeof resultsState>): void {
-  resultsState = { ...resultsState, ...patch }
 }
 
 /** Tests call these; the app does not. */
@@ -311,6 +323,133 @@ function randomCode(): string {
 
 // ---- router
 
+/** One person's result, with the checks the server makes. Throws the server's error codes. */
+function recordResult(id: string, request: ResultRequest, by: string): void {
+  const panel = buildResult(id, state)
+  if (panel.blocked_by) fail(409, panel.blocked_by)
+  if (request.result !== 'pass' && request.result !== 'fail') fail(422, 'invalid_result')
+  let reason: string | null = null
+  if (request.result === 'fail') {
+    const known = panel.reasons.find((r) => r.key === request.reason_key)
+    const custom = request.reason_key === undefined || request.reason_key === null || request.reason_key === 'other'
+    if (!known && !custom) fail(422, 'invalid_reason')
+    reason = known ? known.text : (request.reason_text ?? '').trim()
+    if (!reason) fail(422, 'reason_required')
+    if (reason.length > 200) fail(422, 'reason_too_long', { max: 200 })
+  }
+  state.results.set(id, {
+    result: request.result,
+    basis: 'review',
+    reason,
+    by,
+    at: new Date().toISOString(),
+    emailState: 'queued',
+    appeal: false,
+  })
+  audit(by, 'decision', id, `${request.result} email queued`)
+}
+
+const PAGE_SIZE = 50
+const ALL_STATUSES: OutcomeStatus[] = [
+  'invited',
+  'in_progress',
+  'waiting_review',
+  'in_review',
+  'ready',
+  'passed',
+  'failed_score',
+  'failed_review',
+  'under_appeal',
+  'incomplete',
+]
+const ALL_EMAIL: EmailState[] = ['none', 'queued', 'sent', 'failed']
+
+/** The outcomes list the way the server builds it: counts over the whole sitting, then a page. */
+function outcomesFor(url: URL, admin: boolean): OutcomesResponse {
+  const requested = Number(url.searchParams.get('sitting') ?? SITTINGS[0].id)
+  const sittingId = SITTINGS.some((s) => s.id === requested) ? requested : SITTINGS[0].id
+  const status = url.searchParams.get('status')
+  const email = url.searchParams.get('email')
+  if (status && !ALL_STATUSES.includes(status as OutcomeStatus)) fail(422, 'invalid_status')
+  if (email && !ALL_EMAIL.includes(email as EmailState)) fail(422, 'invalid_email_state')
+  const needle = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+  const page = Math.max(1, Number(url.searchParams.get('page') ?? 1))
+  const rows = buildCandidates(sittingId, state).map((row) => {
+    const panel = buildResult(row.candidate_id, state)
+    const finished = row.status === 'finished'
+    const item: OutcomeItem = {
+      candidate_id: row.candidate_id,
+      status: outcomeStatus(row.candidate_id, state),
+      score: finished ? scoreOf(row.candidate_id) : null,
+      total: finished ? QUESTION_TOTAL : null,
+      flag_count: row.flag_count,
+      email_state: panel.email_state,
+      has_email: true,
+      result_at: panel.decided_at,
+      can_mark_passed: false,
+    }
+    item.can_mark_passed =
+      (item.status === 'ready' || item.status === 'in_review') && item.email_state === 'none'
+    if (admin) {
+      item.name = `Person ${row.candidate_id.replace(/\D/g, '')}`
+      item.email = 'p***@example.test'
+    }
+    return item
+  })
+  const counts = Object.fromEntries(ALL_STATUSES.map((k) => [k, 0])) as Record<OutcomeStatus, number>
+  const emailCounts = Object.fromEntries(ALL_EMAIL.map((k) => [k, 0])) as Record<EmailState, number>
+  for (const item of rows) {
+    counts[item.status] += 1
+    emailCounts[item.email_state] += 1
+  }
+  const matching = rows.filter(
+    (i) =>
+      (!status || i.status === status) &&
+      (!email || i.email_state === email) &&
+      (!needle || i.candidate_id.includes(needle)),
+  )
+  return {
+    sittings: SITTINGS,
+    sitting_id: sittingId,
+    pass_mark: sittingId === 1 ? state.passMark : null,
+    question_count: QUESTION_TOTAL,
+    sitting_closed: sittings.find((s) => s.id === sittingId)?.status === 'closed',
+    counts,
+    email_counts: emailCounts,
+    total: rows.length,
+    matching: matching.length,
+    page,
+    page_size: PAGE_SIZE,
+    items: matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+  }
+}
+
+/** How many would newly fall below `value`, and how many would stop being below it. */
+function previewMark(sitting: AdminSitting, value: number | null): PassMarkPreview {
+  const current = sitting.pass_mark ?? null
+  let newly = 0
+  let cleared = 0
+  if (sitting.id === 1) {
+    for (const row of buildCandidates(1, state)) {
+      if (row.status !== 'finished' || state.results.has(row.candidate_id)) continue
+      const score = scoreOf(row.candidate_id)
+      const was = current !== null && score < current
+      const will = value !== null && score < value
+      if (will && !was) newly += 1
+      if (was && !will) cleared += 1
+    }
+  }
+  const closed = sitting.status === 'closed'
+  return {
+    current,
+    value,
+    newly_below: newly,
+    no_longer_below: cleared,
+    sitting_closed: closed,
+    emails_now: closed ? newly : 0,
+  }
+}
+
 /**
  * The server's document reader, in a few lines: it reads the file as text, and a file whose first
  * words are a code word makes the error the real one would. A table is asked for as CSV.
@@ -419,6 +558,45 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
       sitting_id: sittingId,
       items: buildCandidates(sittingId, state),
     } satisfies CandidatesResponse
+  }
+
+  if (route === 'GET /api/review/outcomes') {
+    requireStaff(token)
+    return outcomesFor(url, false)
+  }
+
+  if ((m = route.match(/^POST \/api\/review\/candidates\/([^/]+)\/result$/))) {
+    const t = requireStaff(token)
+    if (!buildDetail(m[1], state)) fail(404, 'candidate_not_found')
+    recordResult(m[1], bodyOf<ResultRequest>(body), emailOf(t))
+    return { status: state.results.get(m[1])!.result === 'pass' ? 'passed' : 'failed_review' }
+  }
+
+  if ((m = route.match(/^POST \/api\/review\/candidates\/([^/]+)\/result\/resend$/))) {
+    const t = requireStaff(token)
+    if (!bodyOf<{ confirm?: boolean }>(body).confirm) fail(422, 'confirmation_required')
+    const stored = state.results.get(m[1])
+    if (!stored) fail(409, 'no_result')
+    stored!.emailState = 'queued'
+    audit(emailOf(t), 'decision', m[1], `${stored!.result} email sent again`)
+    return undefined
+  }
+
+  if (route === 'POST /api/review/results/bulk-pass') {
+    const t = requireStaff(token)
+    const ids = [...new Set(bodyOf<{ candidate_ids?: string[] }>(body).candidate_ids ?? [])]
+    const done: BulkPassResponse = { queued: 0, refused: [] }
+    for (const id of ids) {
+      try {
+        if (!buildDetail(id, state)) fail(404, 'candidate_not_found')
+        recordResult(id, { result: 'pass' }, emailOf(t))
+        done.queued += 1
+      } catch (error) {
+        if (!(error instanceof ApiError)) throw error
+        done.refused.push({ candidate_id: id, code: error.code })
+      }
+    }
+    return done
   }
 
   if ((m = route.match(/^GET \/api\/review\/candidates\/([^/]+)\/events$/))) {
@@ -693,27 +871,63 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
     if (!sitting) fail(404, 'sitting_not_found')
     return {
       sitting_closed: sitting!.status === 'closed',
+      pass_mark: sitting!.pass_mark ?? null,
       ...resultsState,
-      preview_passed: { subject: 'Your Cytonn aptitude test result', body: 'Dear [candidate\'s name],\n\nYou passed.\n' },
-      preview_not_passed: { subject: 'Your Cytonn aptitude test result', body: 'Dear [candidate\'s name],\n\nNot this time.\n' },
+      preview_passed: {
+        subject: 'Your Cytonn aptitude test result: you have passed',
+        body: "Dear [candidate's name],\n\nYou passed.\n",
+      },
+      preview_not_passed: {
+        subject: 'Your Cytonn aptitude test result',
+        body: "Dear [candidate's name],\n\nNot this time.\n",
+      },
+      preview_not_passed_review: {
+        subject: 'Your Cytonn aptitude test result',
+        body: "Dear [candidate's name],\n\nA person looked at your sitting.\n",
+      },
     } satisfies ResultsPlan
   }
 
-  if ((m = route.match(/^POST \/api\/admin\/sittings\/(\d+)\/results\/send$/))) {
+  if ((m = route.match(/^GET \/api\/admin\/sittings\/(\d+)\/pass-mark\/preview$/))) {
     requireAdmin(token)
     const sitting = sittings.find((s) => s.id === Number(m![1]))
     if (!sitting) fail(404, 'sitting_not_found')
-    const kind = bodyOf<{ kind: 'passed' | 'not_passed' }>(body).kind
-    if (kind === 'not_passed' && sitting!.status !== 'closed') fail(409, 'sitting_not_closed')
-    const queued = kind === 'passed' ? resultsState.passed : resultsState.not_passed
-    if (kind === 'passed') {
-      resultsState.sent_passed += queued
-      resultsState.passed = 0
-    } else {
-      resultsState.sent_not_passed += queued
-      resultsState.not_passed = 0
+    const raw = url.searchParams.get('value')
+    const value = raw === null || raw === '' ? null : Number(raw)
+    if (value !== null && (!Number.isInteger(value) || value < 1 || value > sitting!.question_count)) {
+      fail(422, 'invalid_pass_mark', { min: 1, max: sitting!.question_count })
     }
-    return { queued }
+    return previewMark(sitting!, value)
+  }
+
+  if ((m = route.match(/^POST \/api\/admin\/sittings\/(\d+)\/pass-mark$/))) {
+    const t = requireAdmin(token)
+    const sitting = sittings.find((s) => s.id === Number(m![1]))
+    if (!sitting) fail(404, 'sitting_not_found')
+    const value = bodyOf<{ pass_mark?: number | null }>(body).pass_mark ?? null
+    if (value !== null && (!Number.isInteger(value) || value < 1 || value > sitting!.question_count)) {
+      fail(422, 'invalid_pass_mark', { min: 1, max: sitting!.question_count })
+    }
+    const preview = previewMark(sitting!, value)
+    sitting!.pass_mark = value
+    if (sitting!.id === 1) state.passMark = value
+    const queued = sitting!.status === 'closed' ? preview.newly_below : 0
+    audit(emailOf(t), 'admin', null, `pass mark of "${sitting!.name}" changed to ${value}`)
+    return { pass_mark: value, queued }
+  }
+
+  if ((m = route.match(/^POST \/api\/admin\/candidates\/([^/]+)\/appeal$/))) {
+    const t = requireAdmin(token)
+    const stored = state.results.get(m[1])
+    if (!stored || stored.result !== 'fail') fail(409, 'not_failed')
+    stored!.appeal = bodyOf<{ under_appeal?: boolean }>(body).under_appeal === true
+    audit(emailOf(t), 'decision', m[1], stored!.appeal ? 'marked under appeal' : 'appeal closed')
+    return undefined
+  }
+
+  if (route === 'GET /api/admin/outcomes') {
+    requireAdmin(token)
+    return outcomesFor(url, true)
   }
 
   if (route === 'POST /api/admin/invites') {

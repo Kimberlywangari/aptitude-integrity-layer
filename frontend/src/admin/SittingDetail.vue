@@ -16,6 +16,7 @@ import type {
 } from '../lib/adminTypes'
 import { formatDateTime } from '../lib/format'
 import { MAIL, RESEND_TITLE } from './mailText'
+import PassMarkPanel from './PassMarkPanel.vue'
 import ReissuedLink from './ReissuedLink.vue'
 import ResultsPanel from './ResultsPanel.vue'
 import { paperOf, stateOf, windowOf } from './sittingText'
@@ -341,6 +342,11 @@ function startDelete() {
     </div>
     <p v-if="isOpen" class="muted">This list refreshes by itself while the sitting is open.</p>
 
+    <PassMarkPanel
+      :sitting-id="sitting.id"
+      :pass-mark="sitting.pass_mark ?? null"
+      :question-count="sitting.question_count"
+    />
     <ResultsPanel :sitting-id="sitting.id" />
   </template>
 </template>

@@ -39,6 +39,7 @@ const items = computed<Item[]>(() => [
     on: (p) => p === '/review' || p.startsWith('/review/candidates/'),
     count: true,
   },
+  { to: '/outcomes', label: 'Outcomes', icon: 'check', on: (p) => p === '/outcomes' },
   { to: '/review/audit', label: 'Audit log', icon: 'clipboard', on: (p) => p === '/review/audit' },
   ...(props.role === 'admin'
     ? [

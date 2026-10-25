@@ -1,71 +1,47 @@
 <script setup lang="ts">
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+import { RouterLink } from 'vue-router'
 import Banner from '../components/Banner.vue'
-import BaseButton from '../components/BaseButton.vue'
-import { api, ApiError } from '../lib/api'
+import { api } from '../lib/api'
 import type { ResultsPlan } from '../lib/adminTypes'
 
-// The result emails. A reviewer shortlists (that is the pass); an admin sends. Nothing here decides
-// who passes: it only tells each person what a human already decided.
+// Where the result emails of this sitting stand. Nothing is sent from here: a reviewer or an admin
+// records each result on the candidate's page (or passes several from the Outcomes list), and the
+// email goes at that moment. A low score is turned down by the pass mark when the sitting closes.
 const props = defineProps<{ sittingId: number }>()
 
-const queryClient = useQueryClient()
-const key = computed(() => ['admin', 'results', props.sittingId])
-
-const { data: plan, isError } = useQuery({
-  queryKey: key,
+const {
+  data: plan,
+  isError,
+} = useQuery({
+  queryKey: ['admin', 'results', props.sittingId],
   queryFn: () => api<ResultsPlan>(`/api/admin/sittings/${props.sittingId}/results`),
 })
-
-type Kind = 'passed' | 'not_passed'
-const confirming = ref<Kind | null>(null)
-const queuedNow = ref<{ kind: Kind; n: number } | null>(null)
-
-const { mutate: send, isPending, isError: sendFailed, error: sendError } = useMutation({
-  mutationFn: (kind: Kind) =>
-    api<{ queued: number }>(`/api/admin/sittings/${props.sittingId}/results/send`, {
-      method: 'POST',
-      body: { kind },
-    }),
-  onSuccess: async (data, kind) => {
-    queuedNow.value = { kind, n: data.queued }
-    confirming.value = null
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: key.value }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'sittings', props.sittingId] }),
-      queryClient.invalidateQueries({ queryKey: ['admin', 'mail'] }),
-    ])
-  },
-})
-
-const sendMessage = computed(() =>
-  sendError.value instanceof ApiError && sendError.value.code === 'sitting_not_closed'
-    ? 'Close the sitting first.'
-    : 'Could not queue the emails.',
-)
-
-const label = (kind: Kind) => (kind === 'passed' ? 'pass' : 'not-passed')
-const count = (kind: Kind) => (plan.value ? (kind === 'passed' ? plan.value.passed : plan.value.not_passed) : 0)
 </script>
 
 <template>
   <section v-if="plan" class="panel" aria-labelledby="results-heading">
     <h2 id="results-heading">Result emails</h2>
     <p class="muted">
-      A reviewer shortlists the people who pass. You send each person one short email: a pass email to the
-      shortlisted, and, once the sitting is closed, a not-passed email to everyone else who finished. Nobody
-      who did not finish is written to, and nobody is told anything about flags, video or review.
+      Each person gets one email: a pass, a short note that their score was below the pass mark, or, after
+      a person has reviewed the sitting, a note with the reason and how to appeal. Nobody who did not
+      finish is written to. Results are recorded on the
+      <RouterLink to="/outcomes">Outcomes</RouterLink> page.
     </p>
 
     <ul class="facts-list">
-      <li><strong>{{ plan.passed }}</strong> ready for a pass email ({{ plan.sent_passed }} already sent)</li>
       <li>
-        <strong>{{ plan.not_passed }}</strong> ready for a not-passed email ({{ plan.sent_not_passed }}
-        already sent)
+        <strong>{{ plan.sent_passed }}</strong> pass {{ plan.sent_passed === 1 ? 'email' : 'emails' }} sent,
+        <strong>{{ plan.sent_not_passed }}</strong> not-passed
+        {{ plan.sent_not_passed === 1 ? 'email' : 'emails' }} sent
+      </li>
+      <li v-if="plan.queued > 0"><strong>{{ plan.queued }}</strong> on the way</li>
+      <li v-if="plan.failed > 0" id="failed-mail">
+        <strong>{{ plan.failed }}</strong> could not be sent. Retry them from the
+        <RouterLink to="/admin/invites">Invitations</RouterLink> page.
       </li>
       <li v-if="plan.held_back.length > 0" id="held-back">
-        <strong>{{ plan.held_back.length }}</strong> held back until a person decides:
+        <strong>{{ plan.held_back.length }}</strong> finished and waiting for a result:
         <span class="mono">{{ plan.held_back.join(', ') }}</span>
       </li>
       <li v-if="plan.did_not_finish > 0">{{ plan.did_not_finish }} did not finish and get no email</li>
@@ -73,45 +49,18 @@ const count = (kind: Kind) => (plan.value ? (kind === 'passed' ? plan.value.pass
     </ul>
 
     <details>
-      <summary>Read the two emails</summary>
-      <h3>Pass</h3>
+      <summary>Read the three emails</summary>
+      <h3>Passed</h3>
       <p class="muted">Subject: {{ plan.preview_passed.subject }}</p>
       <pre class="email">{{ plan.preview_passed.body }}</pre>
-      <h3>Not passed</h3>
+      <h3>Not passed: score below the pass mark</h3>
       <p class="muted">Subject: {{ plan.preview_not_passed.subject }}</p>
       <pre class="email">{{ plan.preview_not_passed.body }}</pre>
+      <h3>Not passed: after a person reviewed the sitting</h3>
+      <p class="muted">Subject: {{ plan.preview_not_passed_review.subject }}</p>
+      <pre class="email">{{ plan.preview_not_passed_review.body }}</pre>
       <p class="muted">The wording is in <code>backend/app/mail_templates</code>.</p>
     </details>
-
-    <div v-for="kind in (['passed', 'not_passed'] as Kind[])" :key="kind" class="send-row">
-      <template v-if="confirming === kind">
-        <p role="alert">
-          Send {{ count(kind) }} {{ label(kind) }} {{ count(kind) === 1 ? 'email' : 'emails' }} now? An email
-          cannot be taken back.
-        </p>
-        <BaseButton :busy="isPending" @click="send(kind)">Yes, send</BaseButton>
-        <BaseButton variant="secondary" @click="confirming = null">Cancel</BaseButton>
-      </template>
-      <BaseButton
-        v-else
-        variant="secondary"
-        :disabled="count(kind) === 0 || (kind === 'not_passed' && !plan.sitting_closed)"
-        @click="confirming = kind"
-      >
-        Send {{ label(kind) }} emails ({{ count(kind) }})
-      </BaseButton>
-      <span v-if="kind === 'not_passed' && !plan.sitting_closed" class="muted">
-        Close the sitting first.
-      </span>
-    </div>
-
-    <Banner v-if="queuedNow" tone="good" role="status">
-      <p>
-        {{ queuedNow.n }} {{ label(queuedNow.kind) }} {{ queuedNow.n === 1 ? 'email is' : 'emails are' }}
-        queued and will go out in a moment.
-      </p>
-    </Banner>
-    <Banner v-if="sendFailed" tone="bad" role="alert"><p>{{ sendMessage }}</p></Banner>
   </section>
   <Banner v-else-if="isError" tone="bad" role="alert"><p>Could not load the result emails.</p></Banner>
 </template>
@@ -120,14 +69,6 @@ const count = (kind: Kind) => (plan.value ? (kind === 'passed' ? plan.value.pass
 .facts-list {
   margin: 0.75rem 0;
   padding-left: 1.1rem;
-}
-
-.send-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  margin: 0.6rem 0;
 }
 
 .email {

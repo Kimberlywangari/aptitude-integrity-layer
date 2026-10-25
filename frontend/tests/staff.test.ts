@@ -2,7 +2,7 @@ import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api, ApiError } from '../src/lib/api'
-import { loadCytonnIntoMock, resetMock, setMockEmailed, setMockLatency, setMockMail, setMockResults } from './mock'
+import { loadCytonnIntoMock, resetMock, setMockEmailed, setMockLatency, setMockMail } from './mock'
 import { clearStaff, getStaff, saveStaff } from '../src/lib/staffSession'
 import { clearQueryClient } from '../src/staff/queryClient'
 import { renderApp, until } from './helpers/render'
@@ -223,6 +223,7 @@ describe('staff app', () => {
       expect(first.w.findAll('.rail-nav a').map((a) => a.text().replace(/\d+$/, '').trim())).toEqual([
         'Overview',
         'Review queue',
+        'Outcomes',
         'Audit log',
       ])
 
@@ -1367,60 +1368,6 @@ describe('staff app', () => {
       const { w } = await renderAt('/admin/sittings/1')
       await until(() => rows(w).length === 20)
       expect(w.findAll('th').map((th) => th.text())).not.toContain('Questions')
-    })
-
-    describe('result emails', () => {
-      it('shows who is ready for each email and asks before sending the pass emails', async () => {
-        const { w } = await renderAt('/admin/sittings/1')
-        await untilText(w, 'Result emails')
-        expect(norm(w.text())).toContain('3 ready for a pass email (0 already sent)')
-        expect(norm(w.get('#held-back').text())).toContain('1 held back until a person decides: cand-007')
-        expect(norm(w.text())).toContain('2 did not finish and get no email')
-        // the sitting is still open, so no one can be told they did not pass yet
-        expect((button(w, 'Send not-passed emails (5)')!.element as HTMLButtonElement).disabled).toBe(true)
-        expect(w.text()).toContain('Close the sitting first.')
-
-        await button(w, 'Send pass emails (3)')!.trigger('click')
-        expect(norm(w.text())).toContain('Send 3 pass emails now? An email cannot be taken back.')
-        await button(w, 'Yes, send')!.trigger('click')
-
-        await untilText(w, '3 pass emails are queued')
-        expect(norm(w.text())).toContain('0 ready for a pass email (3 already sent)')
-      })
-
-      it('can cancel at the question and sends nothing', async () => {
-        const { w } = await renderAt('/admin/sittings/1')
-        await untilText(w, 'Result emails')
-        await button(w, 'Send pass emails (3)')!.trigger('click')
-        await button(w, 'Cancel')!.trigger('click')
-        expect(button(w, 'Send pass emails (3)')).toBeDefined()
-        expect(w.text()).not.toContain('are queued')
-      })
-
-      it('lets the not-passed emails go once the sitting is closed', async () => {
-        const { w } = await renderAt('/admin/sittings/2') // the closed one
-        await untilText(w, 'Result emails')
-        expect((button(w, 'Send not-passed emails (5)')!.element as HTMLButtonElement).disabled).toBe(false)
-        await button(w, 'Send not-passed emails (5)')!.trigger('click')
-        await button(w, 'Yes, send')!.trigger('click')
-        await untilText(w, '5 not-passed emails are queued')
-      })
-
-      it('has nothing to send when nobody is ready', async () => {
-        setMockResults({ passed: 0, not_passed: 0, held_back: [] })
-        const { w } = await renderAt('/admin/sittings/2')
-        await untilText(w, 'Result emails')
-        expect((button(w, 'Send pass emails (0)')!.element as HTMLButtonElement).disabled).toBe(true)
-        expect(w.find('#held-back').exists()).toBe(false)
-      })
-
-      it('lets an admin read both emails before sending', async () => {
-        const { w } = await renderAt('/admin/sittings/1')
-        await untilText(w, 'Result emails')
-        expect(w.get('details').text()).toContain('You passed.')
-        expect(w.get('details').text()).toContain("Dear [candidate's name],")
-        expect(w.get('details').text()).toContain('Not this time.')
-      })
     })
   })
 

@@ -38,6 +38,7 @@ const {
       queryClient.invalidateQueries({ queryKey: ['queue'] }),
       queryClient.invalidateQueries({ queryKey: ['candidates'] }),
       queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      queryClient.invalidateQueries({ queryKey: ['outcomes'] }),
       queryClient.invalidateQueries({ queryKey: ['audit'] }),
     ])
   },
