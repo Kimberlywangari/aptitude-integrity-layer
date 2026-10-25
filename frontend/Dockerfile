@@ -14,7 +14,11 @@ RUN npm run build
 
 FROM nginx:1.28-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Empty unless production mounts something over it (see nginx.conf).
+RUN touch /etc/nginx/real-ip.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# The capture spike page is a developer tool, not part of the product.
+RUN rm -rf /usr/share/nginx/html/spike
 
 EXPOSE 80
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=5 \
