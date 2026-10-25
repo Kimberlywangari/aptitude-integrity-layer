@@ -146,6 +146,33 @@ class VideoSegment(BaseModel):
     duration_s: float
 
 
+EmailState = Literal["none", "queued", "sent", "failed"]
+ResultKind = Literal["pass", "fail"]
+
+
+class ReasonOption(BaseModel):
+    key: str
+    text: str
+
+
+class ResultPanel(BaseModel):
+    """Score, pass mark and what was decided, for the page's result panel. No name, no address."""
+
+    score: int
+    total: int
+    pass_mark: int | None
+    status: str
+    result: ResultKind | None
+    basis: Literal["score", "review"] | None
+    reason: str | None
+    decided_by: str | None  # a staff email, "pass-mark rule" or "removed account"
+    decided_at: datetime | None
+    email_state: EmailState
+    can_record: bool
+    blocked_by: str | None  # not_finished | already_emailed | no_email | review_first
+    reasons: list[ReasonOption]
+
+
 class CandidateDetail(BaseModel):
     session_id: str
     candidate_id: str
@@ -170,6 +197,7 @@ class CandidateDetail(BaseModel):
     segments: list[VideoSegment]
     video_deleted_at: datetime | None
     video_purge_on: datetime | None
+    result: ResultPanel
 
 
 class LogEvent(BaseModel):
@@ -218,6 +246,63 @@ class ShortlistResponse(BaseModel):
     # true when a result email to this candidate is already queued or sent, so changing the
     # shortlist now will not change what they were told. Never an address, never a name.
     result_email_sent: bool = False
+
+
+class OutcomeItem(BaseModel):
+    candidate_id: str
+    status: str
+    score: int | None
+    total: int | None
+    flag_count: int
+    email_state: EmailState
+    has_email: bool  # whether there is an address to write to; never the address
+    result_at: datetime | None
+    can_mark_passed: bool
+
+
+class OutcomesResponse(BaseModel):
+    sittings: list[SittingRef]
+    sitting_id: int
+    pass_mark: int | None
+    question_count: int
+    sitting_closed: bool
+    counts: dict[str, int]  # by status, over the whole sitting
+    email_counts: dict[str, int]
+    total: int
+    matching: int
+    page: int
+    page_size: int
+    items: list[OutcomeItem]
+
+
+class ResultRequest(BaseModel):
+    result: ResultKind
+    # a failed candidate is told a reason: one of the fixed ones, or one line typed by the person
+    reason_key: str | None = Field(default=None, max_length=20)
+    reason_text: str | None = Field(default=None, max_length=1000)
+
+
+class ResultResponse(BaseModel):
+    status: str
+
+
+class ResendRequest(BaseModel):
+    confirm: bool = False
+
+
+class BulkPassRequest(BaseModel):
+    sitting_id: int
+    candidate_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+class Refusal(BaseModel):
+    candidate_id: str
+    code: str
+
+
+class BulkPassResponse(BaseModel):
+    queued: int
+    refused: list[Refusal]
 
 
 class VideoViewRequest(BaseModel):

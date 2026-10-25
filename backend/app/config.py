@@ -108,6 +108,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     mail_from: str = ""  # the address candidates see; most providers insist it is the account's own
     mail_from_name: str = "Cytonn Aptitude Test"
+    # Where a candidate is told to write to appeal a result. Empty: the sending address.
+    appeal_email: str = ""
 
     # Cytonn's read-only aptitude API, used only by the fetch_cytonn_bank job. The key is a shared
     # secret: it stays in .env and is never printed or logged.

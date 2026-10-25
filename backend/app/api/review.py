@@ -16,10 +16,12 @@ from app.core.staff_token import issue_staff_token
 from app.core.video_url import read_video_token
 from app.db import get_db
 from app.errors import ApiError
-from app.models import Reviewer, TestSession, VideoSegment
+from app.models import Reviewer, Sitting, TestSession, VideoSegment
 from app.schemas.review import (
     ActionLog,
     AuditResponse,
+    BulkPassRequest,
+    BulkPassResponse,
     CandidateDetail,
     CandidatesResponse,
     DecisionRequest,
@@ -27,13 +29,17 @@ from app.schemas.review import (
     LoginRequest,
     LoginResponse,
     MeResponse,
+    OutcomesResponse,
     OverviewResponse,
     QueueResponse,
+    ResendRequest,
+    ResultRequest,
+    ResultResponse,
     ShortlistResponse,
     VideoViewRequest,
 )
+from app.services import mail, outcomes, staff_auth
 from app.services import overview as overview_service
-from app.services import results, staff_auth
 from app.services import review as review_service
 from app.services.rate_limit import AttemptLimiter
 from app.services.video import ffmpeg
@@ -203,7 +209,7 @@ def shortlist(
     clock: Clock = Depends(get_clock),
 ) -> ShortlistResponse:
     now_on = review_service.toggle_shortlist(db, clock, reviewer, candidate_id, sitting)
-    emailed = results.result_email_exists(db, candidate_id)
+    emailed = outcomes.result_email_exists(db, candidate_id)
     db.commit()
     return ShortlistResponse(shortlisted=now_on, result_email_sent=emailed)
 
@@ -235,6 +241,76 @@ def decide(
     )
     db.commit()
     return DecisionResponse(decided_at=decided_at)
+
+
+# ------------------------------------------------------------ results and the outcomes list
+# A reviewer or an admin records a result and the system sends the email. IDs only, never names.
+
+
+@router.get("/outcomes", response_model=OutcomesResponse)
+def get_outcomes(
+    sitting: int | None = None,
+    status: str | None = None,
+    email: str | None = None,
+    q: str | None = None,
+    page: int = 1,
+    _: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+) -> OutcomesResponse:
+    data = outcomes.view(db, sitting, status=status, email_state=email, search=q, page=page)
+    return OutcomesResponse.model_validate(data)
+
+
+@router.post("/candidates/{candidate_id}/result", response_model=ResultResponse)
+def record_result(
+    candidate_id: str,
+    body: ResultRequest,
+    sitting: int | None = None,
+    reviewer: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
+) -> ResultResponse:
+    status = outcomes.record_result(
+        db, clock, settings, reviewer, candidate_id, sitting,
+        body.result, body.reason_key, body.reason_text,
+    )  # fmt: skip
+    db.commit()
+    mail.launch_sending(clock)
+    return ResultResponse(status=status)
+
+
+@router.post("/candidates/{candidate_id}/result/resend", status_code=204)
+def resend_result(
+    candidate_id: str,
+    body: ResendRequest,
+    sitting: int | None = None,
+    reviewer: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    outcomes.resend(db, clock, settings, reviewer, candidate_id, sitting, body.confirm)
+    db.commit()
+    mail.launch_sending(clock)
+    return Response(status_code=204)
+
+
+@router.post("/results/bulk-pass", response_model=BulkPassResponse)
+def bulk_pass(
+    body: BulkPassRequest,
+    reviewer: Reviewer = Depends(require_reviewer),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
+) -> BulkPassResponse:
+    sitting = db.get(Sitting, body.sitting_id)
+    if sitting is None:
+        raise ApiError(404, "sitting_not_found")
+    done = outcomes.bulk_pass(db, clock, settings, reviewer, sitting, body.candidate_ids)
+    db.commit()
+    mail.launch_sending(clock)
+    return BulkPassResponse.model_validate(done)
 
 
 @router.get("/audit", response_model=AuditResponse)

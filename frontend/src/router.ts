@@ -59,6 +59,15 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
   {
+    path: '/outcomes',
+    component: () => import('./staff/StaffLayout.vue'),
+    meta: { staff: true },
+    children: [
+      { path: '', component: () => import('./reviewer/Outcomes.vue') },
+      { path: ':rest(.*)*', redirect: '/outcomes' },
+    ],
+  },
+  {
     path: '/review',
     component: () => import('./staff/StaffLayout.vue'),
     meta: { staff: true },

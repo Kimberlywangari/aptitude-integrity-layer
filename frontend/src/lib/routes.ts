@@ -24,5 +24,5 @@ export function loginPathFor(pathname: string): string {
 
 /** Only ever return to a staff page, never an arbitrary address. */
 export function safeNext(next: string | null): string | null {
-  return next && /^\/(review|admin|overview)(\/|\?|$)/.test(next) ? next : null
+  return next && /^\/(review|admin|overview|outcomes)(\/|\?|$)/.test(next) ? next : null
 }

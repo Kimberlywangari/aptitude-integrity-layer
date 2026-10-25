@@ -1,7 +1,15 @@
 // Reviewer-facing wording. Nothing here may read as a verdict: the AI ranks and explains, a person
 // decides.
 
-import type { AiStatus, Band, DecisionOutcome, LogQuestion, SessionStatus } from '../lib/reviewTypes'
+import type {
+  AiStatus,
+  Band,
+  DecisionOutcome,
+  EmailState,
+  LogQuestion,
+  OutcomeStatus,
+  SessionStatus,
+} from '../lib/reviewTypes'
 
 export const AI_LABEL =
   'AI-generated and advisory only. It ranks and explains; it is not a verdict and it decides nothing.'
@@ -141,3 +149,39 @@ export function orderBasis(status: AiStatus, strength: number | null): string {
   }
   return status === 'fallback' ? 'Rules only (AI check failed)' : 'Rules only'
 }
+
+// ---- results and the outcomes list. Plain words for staff; a status is where a candidate stands,
+// never a verdict from the system.
+
+export const STATUS_PILLS: Record<OutcomeStatus, { label: string; tone: string }> = {
+  invited: { label: 'Not started', tone: 'plain' },
+  in_progress: { label: 'Sitting now', tone: 'moderate' },
+  waiting_review: { label: 'Waiting for review', tone: 'high' },
+  in_review: { label: 'Reviewed, no result yet', tone: 'moderate' },
+  ready: { label: 'Ready for a result', tone: 'plain' },
+  passed: { label: 'Passed', tone: 'ok' },
+  failed_score: { label: 'Below pass mark', tone: 'warn' },
+  failed_review: { label: 'Failed after review', tone: 'warn' },
+  under_appeal: { label: 'Under appeal', tone: 'moderate' },
+  incomplete: { label: 'Did not finish', tone: 'plain' },
+}
+export const STATUS_ORDER = Object.keys(STATUS_PILLS) as OutcomeStatus[]
+
+export const EMAIL_PILLS: Record<EmailState, { label: string; tone: string }> = {
+  none: { label: 'Not sent', tone: 'plain' },
+  queued: { label: 'Sending', tone: 'moderate' },
+  sent: { label: 'Sent', tone: 'ok' },
+  failed: { label: 'Failed to send', tone: 'warn' },
+}
+
+/** Why a result cannot be recorded right now, in the words the panel uses. */
+export const BLOCKED_BY: Record<string, string> = {
+  not_finished: 'This candidate has not finished the test, so there is no result to send.',
+  already_emailed: 'A result email has already gone to this candidate and cannot be taken back.',
+  no_email: 'There is no email address on file for this candidate, so nothing can be sent.',
+  review_first: 'This candidate is flagged. Record your decision above first, then send the result.',
+}
+
+export const RESULT_NOTE =
+  'You decide, the system sends. A pass or a fail goes to the candidate as an email at once and ' +
+  'cannot be taken back. A failed candidate is told the reason you pick and how to appeal.'

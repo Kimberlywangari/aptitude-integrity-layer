@@ -1,6 +1,14 @@
 from app.services.candidate_list import parse
 from app.services.mail import mask, render
 
+# what the result emails are filled in with (services/outcomes.py: compose)
+RESULT_VALUES = {
+    "result_line": "Your result: 9 of 12 questions correct. The pass mark for this sitting was 10.",
+    "appeal_email": "appeals@example.test",
+    "candidate_id": "cand-001",
+    "reason": "During the test your screen left the test page or left full screen more than once.",
+}
+
 
 def names_and_emails(raw, already=frozenset()):
     people, problems = parse(raw, already)
@@ -56,13 +64,26 @@ def test_a_very_long_name_is_refused():
 def test_an_email_is_masked_for_lists_and_the_name_is_put_in_by_value():
     assert mask("jane.doe@gmail.com") == "j***@gmail.com"
     assert mask(None) is None
-    subject, body = render("passed", name="Zoe {curly} Brace")
+    subject, body = render("passed", name="Zoe {curly} Brace", **RESULT_VALUES)
     assert "Dear Zoe {curly} Brace," in body and subject
 
 
 def test_result_emails_never_mention_what_the_system_saw():
-    for kind in ("passed", "not_passed"):
-        _, body = render(kind, name="Ada")
+    """Nothing about flags, video, the camera or the AI in any of them. The email sent after a
+    person reviewed a sitting is the one place "review" belongs: it says a person looked."""
+    watched = ("flag", "video", "integrity", "cheat", " ai ", "camera", "threshold", "weight")
+    for kind in ("passed", "not_passed_score", "not_passed_review"):
+        _, body = render(kind, name="Ada", **RESULT_VALUES)
         text = body.lower()
-        for word in ("flag", "video", "review", "integrity", "cheat", " ai ", "camera"):
+        for word in watched:
             assert word not in text, (kind, word)
+        if kind != "not_passed_review":
+            assert "review" not in text, kind
+
+
+def test_every_result_email_tells_the_candidate_where_to_write_and_whom_to_quote():
+    for kind in ("not_passed_score", "not_passed_review"):
+        _, body = render(kind, name="Ada", **RESULT_VALUES)
+        assert "appeals@example.test" in body and "cand-001" in body, kind
+    _, passed = render("passed", name="Ada", **RESULT_VALUES)
+    assert "9 of 12" in passed and "pass mark" in passed.lower()

@@ -33,6 +33,7 @@ import {
   orderBasis,
 } from './copy'
 import DecisionForm from './DecisionForm.vue'
+import ResultPanel from './ResultPanel.vue'
 import VideoPlayer from './VideoPlayer.vue'
 import type { JumpTarget, Mark } from './VideoPlayer.vue'
 
@@ -371,6 +372,8 @@ function jumpToMark(id: string) {
     </section>
 
     <DecisionForm :session-id="data.session_id" :candidate-id="data.candidate_id" />
+
+    <ResultPanel :candidate-id="data.candidate_id" :panel="data.result" />
 
     <section class="panel">
       <h2>Compared with the sitting</h2>

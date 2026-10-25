@@ -10,9 +10,11 @@ finished session's flags are recomputed as part of closing.
 import argparse
 
 from app.clock import SystemClock
+from app.config import get_settings
 from app.errors import ApiError
 from app.models import AuditLog
 from app.services import admin as admin_service
+from app.services import outcomes
 from scripts.common import add_sitting_argument, resolve_sitting
 
 
@@ -39,6 +41,8 @@ def main(argv: list[str] | None = None) -> None:
             if "unfinished" in problem.extra:
                 hint = f" ({problem.extra['unfinished']} unfinished; --force to close anyway)"
             raise SystemExit(f"not closed: {problem.code}{hint}") from problem
+        # the pass-mark rule queues its rejection emails; the worker (or the API) sends them
+        turned_down = outcomes.apply_score_rule(db, clock, get_settings(), sitting)
         detail = admin_service.audit_detail_for_close(sitting, unfinished)
         db.add(
             AuditLog(
@@ -50,6 +54,8 @@ def main(argv: list[str] | None = None) -> None:
         )
         db.commit()
         print(f"sitting {sitting.id} ({sitting.name}) closed" + (" [forced]" if unfinished else ""))
+        if sitting.pass_mark is not None:
+            print(f"pass mark {sitting.pass_mark}: {turned_down} rejection emails queued")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,8 @@ export interface AdminSitting {
   blueprint: Record<string, number> | null // questions from each section; null = spread evenly
   question_mode: QuestionMode
   status: 'open' | 'closed'
+  /** Correct answers needed to pass; empty means none is set. */
+  pass_mark?: number | null
   counts: SittingCounts
 }
 
@@ -123,15 +125,27 @@ export interface EmailText {
 
 export interface ResultsPlan {
   sitting_closed: boolean
-  passed: number
-  not_passed: number
-  held_back: string[]
+  pass_mark: number | null
   sent_passed: number
   sent_not_passed: number
+  queued: number
+  failed: number
+  /** Finished, with no result recorded yet: a person (or the close, for a low score) must act. */
+  held_back: string[]
   did_not_finish: number
   without_email: number
   preview_passed: EmailText
   preview_not_passed: EmailText
+  preview_not_passed_review: EmailText
+}
+
+export interface PassMarkPreview {
+  current: number | null
+  value: number | null
+  newly_below: number
+  no_longer_below: number
+  sitting_closed: boolean
+  emails_now: number
 }
 
 export interface InvitesResponse {

@@ -32,4 +32,7 @@ class Sitting(Base):
     # `bank` needs a blueprint.
     question_mode: Mapped[str] = mapped_column(String(8), default="bank", server_default="bank")
     duration_s: Mapped[int] = mapped_column(Integer)
+    # How many correct answers pass. None: no pass mark is set and nobody is turned down for a low
+    # score. A person chooses it; changing it is previewed first (services/outcomes.py).
+    pass_mark: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")

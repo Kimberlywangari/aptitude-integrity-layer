@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.review import OutcomeItem, OutcomesResponse
+
 # A summary of a few thousand questions is well under this; it only stops an absurd upload.
 MAX_CSV_CHARS = 5_000_000
 
@@ -30,6 +32,7 @@ class SittingOut(BaseModel):
     blueprint: dict[str, int] | None
     question_mode: QuestionMode
     status: Literal["open", "closed"]
+    pass_mark: int | None = None
     counts: SittingCountsOut
 
 
@@ -267,23 +270,48 @@ class EmailTextOut(BaseModel):
 
 class ResultsPlanResponse(BaseModel):
     sitting_closed: bool
-    passed: int  # would get the "passed" email now
-    not_passed: int  # would get the "not passed" email (needs the sitting closed)
-    held_back: list[str]  # candidate ids still under review; a person must decide first
+    pass_mark: int | None
     sent_passed: int
     sent_not_passed: int
+    queued: int  # result emails waiting to go
+    failed: int  # ... and those that ran out of tries
+    held_back: list[str]  # finished, no result recorded yet: a person (or the close) must act
     did_not_finish: int
     without_email: int
     preview_passed: EmailTextOut
-    preview_not_passed: EmailTextOut
+    preview_not_passed: EmailTextOut  # turned down for the score
+    preview_not_passed_review: EmailTextOut  # turned down after a person reviewed the sitting
 
 
-class SendResultsRequest(BaseModel):
-    kind: Literal["passed", "not_passed"]
+class PassMarkRequest(BaseModel):
+    pass_mark: int | None = None  # empty switches the pass mark off
 
 
-class SendResultsResponse(BaseModel):
-    queued: int
+class PassMarkPreviewResponse(BaseModel):
+    current: int | None
+    value: int | None
+    newly_below: int  # would be turned down for their score
+    no_longer_below: int  # would stop being below it
+    sitting_closed: bool
+    emails_now: int  # how many rejection emails would be queued at once
+
+
+class PassMarkResponse(BaseModel):
+    pass_mark: int | None
+    queued: int  # rejection emails queued by the change (a closed sitting only)
+
+
+class AppealRequest(BaseModel):
+    under_appeal: bool
+
+
+class AdminOutcomeItem(OutcomeItem):
+    name: str | None = None
+    email: str | None = None  # masked: j***@example.org
+
+
+class AdminOutcomesResponse(OutcomesResponse):
+    items: list[AdminOutcomeItem]  # type: ignore[assignment]
 
 
 class ExtractedTextResponse(BaseModel):

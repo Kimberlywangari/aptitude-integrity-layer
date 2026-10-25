@@ -189,6 +189,79 @@ export interface CandidateDetail {
   segments: VideoSegment[]
   video_deleted_at: string | null
   video_purge_on: string | null
+  result: ResultPanel
+}
+
+export type EmailState = 'none' | 'queued' | 'sent' | 'failed'
+
+/** The result emails: what a person decided, and whether it can be recorded now. No name, no address. */
+export interface ResultPanel {
+  score: number
+  total: number
+  pass_mark: number | null
+  status: OutcomeStatus
+  result: 'pass' | 'fail' | null
+  basis: 'score' | 'review' | null
+  reason: string | null
+  decided_by: string | null
+  decided_at: string | null
+  email_state: EmailState
+  can_record: boolean
+  blocked_by: 'not_finished' | 'already_emailed' | 'no_email' | 'review_first' | null
+  reasons: { key: string; text: string }[]
+}
+
+export interface ResultRequest {
+  result: 'pass' | 'fail'
+  reason_key?: string | null
+  reason_text?: string | null
+}
+
+export type OutcomeStatus =
+  | 'invited'
+  | 'in_progress'
+  | 'waiting_review'
+  | 'in_review'
+  | 'ready'
+  | 'passed'
+  | 'failed_score'
+  | 'failed_review'
+  | 'under_appeal'
+  | 'incomplete'
+
+export interface OutcomeItem {
+  candidate_id: string
+  status: OutcomeStatus
+  score: number | null
+  total: number | null
+  flag_count: number
+  email_state: EmailState
+  has_email: boolean
+  result_at: string | null
+  can_mark_passed: boolean
+  /** Only on the admin's copy of the list: the name, and the address with its middle hidden. */
+  name?: string | null
+  email?: string | null
+}
+
+export interface OutcomesResponse {
+  sittings: SittingRef[]
+  sitting_id: number
+  pass_mark: number | null
+  question_count: number
+  sitting_closed: boolean
+  counts: Record<OutcomeStatus, number>
+  email_counts: Record<EmailState, number>
+  total: number
+  matching: number
+  page: number
+  page_size: number
+  items: OutcomeItem[]
+}
+
+export interface BulkPassResponse {
+  queued: number
+  refused: { candidate_id: string; code: string }[]
 }
 
 export interface DecisionRequest {

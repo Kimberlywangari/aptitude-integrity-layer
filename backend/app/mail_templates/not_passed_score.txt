@@ -1,0 +1,14 @@
+Subject: Your Cytonn aptitude test result
+
+Dear {name},
+
+Thank you for taking the Cytonn aptitude test and for the time and effort you put into it.
+
+{result_line} We will not be taking your application any further at this time.
+
+What this means: the pass mark is the same for everyone who sat the test with you, and your score was below it. This result is about this test only. It is not a judgement of you as a person or of your wider experience.
+
+What happens next: nothing further is needed from you. If you think your score is wrong, for example because you had a technical problem during the test, you can write to {appeal_email} and quote your reference, {candidate_id}. A person will read it.
+
+Kind regards,
+Cytonn Recruitment
