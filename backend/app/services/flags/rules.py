@@ -21,6 +21,15 @@ PACE_OUTLIER = "PACE_OUTLIER"
 SPREAD_OUTLIER = "SPREAD_OUTLIER"
 LOGGING_PROBLEM = "LOGGING_PROBLEM"
 
+# The page events that the rules above read. Each is something the candidate is told is recorded
+# (the notice on the test screen), so the notice and the rules cannot disagree: a rule reads these
+# names and WARN_EVENT_TYPES is built from them.
+FOCUS_EVENT = "focus_lost"
+FOCUS_RETURN_EVENT = "focus_returned"
+COPY_EVENTS = ("copy_attempt", "cut_attempt")
+SCREENSHOT_EVENT = "screenshot_attempt"
+WARN_EVENT_TYPES = frozenset({FOCUS_EVENT, *COPY_EVENTS, SCREENSHOT_EVENT})
+
 # 0.6745 makes the median absolute deviation comparable with a standard deviation.
 MAD_SCALE = 0.6745
 
@@ -92,7 +101,7 @@ def pair_spans(
 
 
 def focus_losses(events: list[Ev], end: datetime | None) -> list[Span]:
-    return pair_spans(events, "focus_lost", "focus_returned", end)
+    return pair_spans(events, FOCUS_EVENT, FOCUS_RETURN_EVENT, end)
 
 
 def connection_drops(events: list[Ev], end: datetime | None) -> list[Span]:
@@ -169,7 +178,7 @@ def copy_attempt_flags(
     """One flag per copy or cut attempt. Only the length is kept, never the text."""
     drafts = []
     for event in sorted(events, key=lambda e: e.ts):
-        if event.type not in ("copy_attempt", "cut_attempt"):
+        if event.type not in COPY_EVENTS:
             continue
         drafts.append(
             FlagDraft(
@@ -196,7 +205,7 @@ def screenshot_key_flags(
             {"combo": str(event.payload.get("combo", ""))},
         )
         for event in sorted(events, key=lambda e: e.ts)
-        if event.type == "screenshot_attempt"
+        if event.type == SCREENSHOT_EVENT
     ]
 
 

@@ -12,6 +12,7 @@
 import { api, ApiError } from './api'
 import type { EventIn, EventsResponse } from './api'
 import { tracked } from './connection'
+import { noteRecorded } from './flagNotice'
 import { getSessionId } from './session'
 import { getStore } from './store'
 import type { StoredEvent } from './store'
@@ -95,9 +96,10 @@ async function drain(keepalive: boolean): Promise<boolean> {
       ...(event.payload ? { payload: event.payload } : {}),
     }))
     try {
-      await tracked(() =>
+      const reply = await tracked(() =>
         api<EventsResponse>('/api/events', { method: 'POST', body: { events }, keepalive }),
       )
+      if (reply?.warn) noteRecorded()
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 401) {

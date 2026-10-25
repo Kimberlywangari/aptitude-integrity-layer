@@ -21,6 +21,11 @@ from app.clock import Clock
 from app.models import Event, TestSession
 from app.schemas.recording import EventIn
 from app.services.flags.refresh import refresh_session_flags
+from app.services.flags.rules import WARN_EVENT_TYPES
+
+# An event this recent, of a kind a rule reads, makes the page show its notice. An older one (a log
+# sent late after a reload or a dropped connection) is recorded all the same but would only confuse.
+WARN_FRESH = timedelta(seconds=15)
 
 Cleaner = Callable[[Any], Any]
 
@@ -117,6 +122,7 @@ class IngestResult:
     accepted: int
     duplicates: int
     rejected: int
+    warn: bool = False  # something just stored is of a kind that can raise a flag
 
 
 def server_time_of(now: datetime, age_ms: int, floor: datetime) -> datetime:
@@ -168,8 +174,13 @@ def ingest(db: Session, clock: Clock, session: TestSession, items: list[EventIn]
     # the 48 hours) can change the session's flags, so they are worked out again.
     if stored and session.status == "finished":
         refresh_session_flags(db, session.id)
+    warn = any(
+        event_type in WARN_EVENT_TYPES and now - server_ts <= WARN_FRESH
+        for event_type, server_ts, _ in stored
+    )
     return IngestResult(
         accepted=len(stored),
         duplicates=len(items) - rejected - len(stored),
         rejected=rejected,
+        warn=warn,
     )

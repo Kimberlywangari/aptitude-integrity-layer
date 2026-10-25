@@ -51,11 +51,39 @@ def test_events_are_stored_with_the_servers_own_time(running, db, clock):
     response = running.events(event(1, "focus_lost"), event(2, "focus_returned", age_ms=4500))
 
     assert response.status_code == 200
-    assert response.json() == {"accepted": 2, "duplicates": 0, "rejected": 0}
+    assert response.json() == {"accepted": 2, "duplicates": 0, "rejected": 0, "warn": True}
     first, second = stored_events(db, running.session_id)
     assert first.server_ts == clock.now()
     assert second.server_ts == clock.now() - timedelta(milliseconds=4500)
     assert first.received_at == second.received_at == clock.now()
+
+
+@pytest.mark.parametrize(
+    "kind", ["focus_lost", "copy_attempt", "cut_attempt", "screenshot_attempt"]
+)
+def test_an_event_that_can_raise_a_flag_makes_the_page_tell_the_candidate(running, kind):
+    payload = {"combo": "PrintScreen"} if kind == "screenshot_attempt" else None
+    assert running.events(event(1, kind, payload=payload)).json()["warn"] is True
+
+
+@pytest.mark.parametrize(
+    "kind", ["question_opened", "answered", "focus_returned", "paste_attempt", "idle_start"]
+)
+def test_an_ordinary_event_says_nothing_to_the_candidate(running, kind):
+    assert running.events(event(1, kind)).json()["warn"] is False
+
+
+def test_an_old_event_sent_late_is_kept_but_does_not_trigger_the_notice(running, db, clock):
+    clock.advance(120)  # so an event a minute old still falls after the session began
+    late = running.events(event(1, "copy_attempt", age_ms=60_000))
+    assert late.json()["accepted"] == 1 and late.json()["warn"] is False
+    assert [e.type for e in stored_events(db, running.session_id)] == ["copy_attempt"]
+
+
+def test_sending_a_flag_event_again_does_not_warn_twice(running):
+    assert running.events(event(1, "copy_attempt")).json()["warn"] is True
+    again = running.events(event(1, "copy_attempt")).json()
+    assert (again["duplicates"], again["warn"]) == (1, False)
 
 
 def test_sending_a_batch_again_changes_nothing(running, db):
@@ -64,7 +92,7 @@ def test_sending_a_batch_again_changes_nothing(running, db):
 
     again = running.events(*batch, event(3)).json()
 
-    assert again == {"accepted": 1, "duplicates": 2, "rejected": 0}
+    assert again == {"accepted": 1, "duplicates": 2, "rejected": 0, "warn": True}
     assert len(stored_events(db, running.session_id)) == 3
 
 
@@ -76,7 +104,7 @@ def test_a_repeat_inside_one_batch_is_counted_once(running, db):
 
 def test_an_unknown_event_type_is_rejected_but_the_rest_of_the_batch_lands(running, db):
     response = running.events(event(1, "keystroke_log"), event(2, "focus_lost")).json()
-    assert response == {"accepted": 1, "duplicates": 0, "rejected": 1}
+    assert response == {"accepted": 1, "duplicates": 0, "rejected": 1, "warn": True}
     assert [e.type for e in stored_events(db, running.session_id)] == ["focus_lost"]
 
 

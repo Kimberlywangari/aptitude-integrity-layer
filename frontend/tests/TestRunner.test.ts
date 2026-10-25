@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TestRunner from '../src/candidate/TestRunner.vue'
-import { CAMERA_LOST_BANNER, FULLSCREEN_COVER_TITLE } from '../src/candidate/copy'
+import { CAMERA_LOST_BANNER, FLAG_NOTICE, FULLSCREEN_COVER_TITLE } from '../src/candidate/copy'
 import { api, ApiError } from '../src/lib/api'
 import type { QuestionResponse } from '../src/lib/api'
 import { logEvent } from '../src/lib/eventLog'
+import { clearNotice, noteRecorded } from '../src/lib/flagNotice'
 import { startTestRuntime } from '../src/lib/runtime'
 import { clearSession, saveSession } from '../src/lib/session'
 import { fs, resetFullscreen, setFullscreen } from './helpers/fakeFullscreen'
@@ -108,6 +109,23 @@ describe('TestRunner', () => {
     expect(w.findAll('label.option')).toHaveLength(4)
     expect(timer(w).text()).toBe('10:00')
     expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBe('0')
+  })
+
+  describe('the notice that something was recorded', () => {
+    afterEach(clearNotice)
+
+    it('appears over the question without moving it or touching the clocks', async () => {
+      const { w } = await renderPage()
+      const before = [timer(w).text(), w.get('#question-text').text()]
+      expect(w.text()).not.toContain(FLAG_NOTICE)
+
+      noteRecorded(0)
+      await wait()
+      expect(w.get('[role=status].flag-notice').text()).toBe(FLAG_NOTICE)
+      expect([timer(w).text(), w.get('#question-text').text()]).toEqual(before)
+      expect(disabled(w, 'Skip')).toBe(false) // the answer buttons are still usable
+      expect(vi.mocked(api)).toHaveBeenCalledTimes(1) // it asked the server nothing
+    })
   })
 
   describe('a question that depends on a picture', () => {
