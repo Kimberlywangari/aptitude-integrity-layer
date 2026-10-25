@@ -78,13 +78,13 @@ Claude is in `docs/plan/ai-provider-switch.md` (both local; `docs/` is not commi
 
 ### Invitations and emails
 
-On a sitting, the admin pastes `name, email` lines (or uploads a file); each person gets one code and
-is emailed their link. The first time, the candidate types the code and their email and then chooses
+On a sitting, the admin pastes `name, email` lines (or chooses a file in any common format: PDF, Word,
+Excel, PowerPoint, OpenDocument, RTF, HTML or plain text; the server reads the words out of it); each person
+gets one code and is emailed their link. Sending uses one mail connection for the whole batch. The first time, the candidate types the code and their email and then chooses
 a password (8 or more characters, kept only as a bcrypt hash); after that, email and password are
 enough and the code is not needed. A forgotten password is fixed by the admin's **Resend link**, which
 clears it and sends a new link. A second device cannot take over a test that is running unless the
-first has been silent for a minute. Reviewers shortlist; the admin then sends pass emails, and
-not-passed emails after the sitting closes. Nothing is sent until mail is set up in `.env` (`SMTP_*`,
+first has been silent for a minute. Nothing is sent until mail is set up in `.env` (`SMTP_*`,
 guide in `docs/plan/email-setup.md`); until then emails wait in a queue. Names and emails never reach
 the AI or the review screens.
 
@@ -93,12 +93,30 @@ browser tests would send invitations through your real mail account. Start it wi
 is not there: `SMTP_HOST=127.0.0.1 SMTP_PORT=1 SMTP_USER=x SMTP_PASSWORD=x MAIL_FROM=a@b.invalid`
 (an *empty* value does not work on Windows: an empty environment variable is deleted, not set).
 
+### Results, the pass mark and the outcomes list
+
+A person decides every result and the system sends the email. On a candidate's page a reviewer or an admin
+picks pass or fail (a fail is given a short reason: one of three fixed ones or one typed line) and presses
+**Send result email**. A flagged candidate cannot be sent a result until a decision is recorded. The
+**Outcomes** page (both roles) lists everyone by where they stand: not started, sitting now, waiting for
+review, reviewed, ready for a result, passed, below the pass mark, failed after review, under appeal, did not
+finish; it filters, searches and pages, and several candidates who can be passed are passed at once from it.
+Reviewers see candidate IDs only; the admin's copy adds names and a masked address and can be downloaded as CSV.
+
+The admin can set a **pass mark** on a sitting (correct answers needed; empty switches it off). Changing it
+is previewed first. When the sitting is closed, anyone who finished below it is sent a short email with
+their score and the mark, and nobody else is touched; flags are never part of that. A candidate turned down
+after a review is told the reason and how to appeal: `APPEAL_EMAIL` in `.env`, or `MAIL_FROM` if it is empty.
+
 ### How a test is timed
 
 Every question gets 1.75 minutes (105 s). A sitting's time is its question count times that, and
 a question that is not answered in time is closed by the server (it counts as skipped) and the next
 one opens. A screenshot key press (PrintScreen, Win+Shift+S, Cmd+Shift+3/4/5) is logged as the key
-combination only and flagged at 2 points; a browser cannot see the screenshot itself.
+combination only and flagged at 2 points; a browser cannot see the screenshot itself. When the page has
+just recorded something that can raise a flag (leaving the page, copying, a screenshot key) the candidate sees
+a short notice that a reviewer will see it and nothing has been decided. A reviewer sees each question's time
+beside what the rest of the sitting took.
 
 Switches for testing (put them in `frontend/.env.development.local`, which git ignores; every one is
 on unless set to `off`, and all must be on for the pilot): `VITE_MIC_CHECK=off` leaves out the
@@ -137,6 +155,12 @@ npm run e2e -- sittings
 `e2e/sitting-page.spec.ts` checks a sitting's own page the same way: the admin clicks a sitting in the
 list, sees who has opened their link and who has not, filters by it, deletes the sitting by typing its
 name, and the codes made for it stop working. Same two settings; run it with `npm run e2e -- sitting-page`.
+
+`e2e/results.spec.ts` covers the staff side of results in a real browser: the outcomes list, passing
+several people at once, failing one after a review, the pass mark on a closed sitting, the CSV download, and
+uploading a list as a PDF, RTF or HTML file. It needs the made-up cohort with addresses that cannot receive
+mail (`python -m scripts.jobs simulate_cohort --with-emails`), the same two admin settings, and works once per
+cohort. Start the API with `SMTP_HOST=127.0.0.1 SMTP_PORT=1 ...` as above so nothing can be sent.
 
 ## Layout
 

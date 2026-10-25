@@ -67,6 +67,23 @@ cd frontend; npm run e2e    # a real browser, whole journey; needs a stack, E2E_
 
 The full list is in master plan section 1.
 
+## Results, the pass mark and the outcomes
+
+- A person decides every result, and the system sends the email: `services/outcomes.py` holds the one
+  status function (`status_of`) that the outcomes list, its counts, the result panel and the emails all
+  read, and the routes that record a result (`/api/review/candidates/{id}/result`, both roles; the server
+  checks the role). A flagged candidate has no result until a decision is recorded; once an email is
+  queued or sent the result is final, and a resend needs the person to confirm.
+- The pass mark (`sittings.pass_mark`, correct answers) is the only automatic outcome, and only for a low
+  score: it runs when a sitting is closed and when a closed sitting's mark is changed (previewed first), and
+  it never reads flags or touches anyone already emailed or decided by a person. A turned-down-after-review
+  email carries a reason a person chose (never AI text, a rule name or a threshold) and the appeal address.
+- The outcomes list has two routes so a reviewer's response can never carry a name: `/api/review/outcomes`
+  (IDs only) and `/api/admin/outcomes` (names, masked addresses, CSV). `test_privacy_of_names.py` covers both.
+- Uploads (invite list, question import) go through `POST /api/admin/extract-text`, which decides the file
+  kind from its bytes. Only `pypdf` is a dependency of it; everything else is the standard library. Legacy
+  `.doc`/`.xls`/`.ppt` and scanned PDFs are refused with a reason, never guessed at.
+
 ## Candidate sign-in
 
 - A candidate with an email signs in with the code and email, then chooses a password at their first
@@ -85,6 +102,10 @@ The full list is in master plan section 1.
 - Every question gets 105 s (`QUESTION_SECONDS` in `backend/app/services/test_flow.py`); a sitting's
   time is its question count times that, set by the server. Tests that move the fake clock past 105 s
   inside one question will see it close.
+- The notice on the test screen ("recorded and a reviewer will see it") is driven by the server: the reply
+  to `POST /api/events` carries `warn`, true for a fresh event whose type is in
+  `flags/rules.py: WARN_EVENT_TYPES`, which the rules themselves read, so the notice and the rules cannot
+  disagree. It names no rule and no number, fades only, never touches the question clock.
 - `SCREENSHOT_KEY` (weight 2.0) comes from the `screenshot_attempt` event, which carries only a key
   combination from a fixed list. Do not describe it as detecting a screenshot: the page sees keys.
 - Tests pin `precheck_gate`, `ai_provider` and `chunk_fail_rate` in `tests/conftest.py`, so a
