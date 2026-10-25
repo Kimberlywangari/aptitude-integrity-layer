@@ -13,6 +13,8 @@ import logging
 import smtplib
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formataddr
@@ -46,24 +48,67 @@ class Mailer(Protocol):
 
 
 class SmtpMailer:
+    """Sends over SMTP with STARTTLS. On its own each `send` makes a connection and closes it.
+    Inside `keep_open()` one connection serves every email in the run, which is what makes a batch
+    fast: the connect, the encryption and the login are paid once, not once per email."""
+
     def __init__(
         self, host: str, port: int, user: str, password: str, from_address: str, from_name: str
     ) -> None:
         self._host, self._port = host, port
         self._user, self._password = user, password
         self._sender = formataddr((from_name, from_address)) if from_name else from_address
+        self._conn: smtplib.SMTP | None = None
+        self._holding = False
+
+    def _connect(self) -> smtplib.SMTP:
+        smtp = smtplib.SMTP(self._host, self._port, timeout=SMTP_TIMEOUT_S)
+        try:
+            smtp.starttls()
+            if self._user:
+                smtp.login(self._user, self._password)
+        except BaseException:
+            smtp.close()
+            raise
+        return smtp
+
+    def _drop(self) -> None:
+        conn, self._conn = self._conn, None
+        if conn is not None:
+            try:
+                conn.quit()
+            except (smtplib.SMTPException, OSError):
+                conn.close()
+
+    @contextmanager
+    def keep_open(self) -> Iterator["SmtpMailer"]:
+        """Hold one connection for the emails sent inside the block."""
+        self._holding = True
+        try:
+            yield self
+        finally:
+            self._holding = False
+            self._drop()
 
     def send(self, to: str, subject: str, body: str) -> None:
         message = EmailMessage()
         message["From"], message["To"], message["Subject"] = self._sender, to, subject
         message.set_content(body)
         try:
-            with smtplib.SMTP(self._host, self._port, timeout=SMTP_TIMEOUT_S) as smtp:
-                smtp.starttls()
-                if self._user:
-                    smtp.login(self._user, self._password)
+            try:
+                smtp = self._conn or self._connect()
                 smtp.send_message(message)
+            except smtplib.SMTPServerDisconnected:
+                # a server closes a connection that sat idle: one fresh connection, one more try
+                self._conn = None
+                smtp = self._connect()
+                smtp.send_message(message)
+            self._conn = smtp if self._holding else None
+            if not self._holding:
+                smtp.quit()
         except (smtplib.SMTPException, OSError) as problem:
+            # whatever state the connection is in, the next email starts from a clean one
+            self._drop()
             # never the password: SMTPAuthenticationError text carries the server's words only
             raise MailError(f"{type(problem).__name__}: {problem}"[:300]) from problem
 
@@ -170,20 +215,22 @@ def send_queued(
         )
     )
     sent = failed = 0
-    for row in rows:
-        row.attempts += 1
-        try:
-            mailer.send(row.to_address, row.subject, row.body or "")
-        except MailError as problem:
-            row.error = str(problem)[:300]
-            if row.attempts >= MAX_ATTEMPTS:
-                row.status = "failed"
-                failed += 1
-        else:
-            row.status, row.sent_at, row.error = "sent", clock.now(), None
-            row.body = None  # an invite's body holds a live code: do not keep it once it is read
-            sent += 1
-        db.commit()
+    keep_open = getattr(mailer, "keep_open", None)  # a mailer that can reuse one connection
+    with keep_open() if keep_open else nullcontext():
+        for row in rows:
+            row.attempts += 1
+            try:
+                mailer.send(row.to_address, row.subject, row.body or "")
+            except MailError as problem:
+                row.error = str(problem)[:300]
+                if row.attempts >= MAX_ATTEMPTS:
+                    row.status = "failed"
+                    failed += 1
+            else:
+                row.status, row.sent_at, row.error = "sent", clock.now(), None
+                row.body = None  # an invite's body holds a live code: do not keep it once read
+                sent += 1
+            db.commit()
     return SendReport(sent, failed)
 
 
