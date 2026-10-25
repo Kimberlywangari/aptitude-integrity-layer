@@ -311,6 +311,24 @@ function randomCode(): string {
 
 // ---- router
 
+/**
+ * The server's document reader, in a few lines: it reads the file as text, and a file whose first
+ * words are a code word makes the error the real one would. A table is asked for as CSV.
+ */
+async function extractText(url: URL, body: unknown, token: string | null) {
+  requireAdmin(token)
+  const text = body instanceof Blob ? await body.text() : String(body ?? '')
+  const want = url.searchParams.get('want') === 'table' ? 'table' : 'text'
+  if (!text.trim()) fail(422, 'empty_file')
+  if (text.startsWith('LEGACY')) fail(415, 'legacy_office_format')
+  if (text.startsWith('SCANNED')) fail(422, 'scanned_pdf')
+  if (text.startsWith('LOCKED')) fail(422, 'password_protected')
+  if (want === 'table' && !text.includes(',')) fail(422, 'no_table_found')
+  // a stand-in for a spreadsheet: its words come back as the comma-separated rows the server makes
+  const kind = text.startsWith('SHEET:') ? 'xlsx' : 'text'
+  return { text: kind === 'xlsx' ? text.slice('SHEET:'.length) : text, kind }
+}
+
 export async function mockApi<T>(
   path: string,
   method: string,
@@ -320,6 +338,7 @@ export async function mockApi<T>(
   if (latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, latencyMs))
   const url = new URL(path, 'http://mock.local')
   const route = `${method} ${url.pathname}`
+  if (route === 'POST /api/admin/extract-text') return (await extractText(url, body, token)) as T
   const result = dispatch(route, url, body, token)
   return result as T
 }

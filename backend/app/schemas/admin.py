@@ -284,3 +284,8 @@ class SendResultsRequest(BaseModel):
 
 class SendResultsResponse(BaseModel):
     queued: int
+
+
+class ExtractedTextResponse(BaseModel):
+    text: str  # plain text, or CSV rows when a table was asked for
+    kind: str  # what the file turned out to be: pdf, docx, xlsx, ...
