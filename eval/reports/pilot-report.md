@@ -13,7 +13,7 @@ Address volunteers used: ____ · Sitting name and ID: ____ · Build tag: ____
 | Volunteers who sat | ____ (honest ____, scripted ____) |
 | Finished sessions | ____ (the cohort checks need 8 or more, and a closed sitting) |
 | Cohort checks ran? | yes / no |
-| Question statistics used | Cytonn's / made up (`history_source` in the flag detail) |
+| Questions came from | the bank / written by the AI for each candidate |
 | Questions and test length | ____ questions, ____ minutes |
 | AI model | `gemma4:e2b` through Ollama / other: ____ |
 | Browsers | Chrome ____, Edge ____ |

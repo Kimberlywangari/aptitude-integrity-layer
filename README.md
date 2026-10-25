@@ -30,6 +30,24 @@ npm run dev                                 # http://localhost:5173 (proxies /ap
 Open `http://localhost:5173/candidate?t=<token>` in Chrome or Edge with a token from
 `data/invites.csv`. The first screens ask for the camera, the microphone and full screen.
 
+### A sitting, its invitations, and where its questions come from
+
+On the admin page (`/admin`) a new sitting takes its questions from one of three places, with its
+own count per section and its own time:
+
+- **Cytonn's questions**: the seven sections of Cytonn's bank. Load them once (they carry pictures,
+  which are copied into our database, so the test never depends on Cytonn's website):
+  `python -m scripts.jobs fetch_cytonn_bank` (needs `X-API-KEY` in `.env`), or from a saved copy
+  `... fetch_cytonn_bank --file ..\data\aptitude-sections-raw.json`.
+- **Written by AI for each candidate**: needs Ollama running (or Claude; see `.env.example`). Try a
+  small paper first, the local model writes about a question a minute. "Try the writer" shows one.
+- **Practice questions**: the made-up bank, for trying things out.
+
+Every invitation code is made *for one sitting* and opens that sitting's paper, whichever other
+sittings are open: Invitations page (pick the sitting, download the CSV), or
+`python -m scripts.jobs create_invites --sitting "<name or id>" --count 20`, which writes
+`data\invites-sitting-<id>.csv` with the links.
+
 ### The whole thing in containers (what the pilot runs)
 
 ```powershell
@@ -48,6 +66,39 @@ those sessions have no video: `docker compose stop worker` while working with si
 On Docker Desktop for Windows every browser appears to the API as one address (the Docker
 gateway), so the limit of 20 wrong invitation codes per five minutes is shared between them. On a
 Linux host the real addresses come through.
+
+### On a server (HTTPS)
+
+`docker-compose.prod.yml` adds a Caddy proxy that gets the HTTPS certificate, closes every port but
+80 and 443, and sets `ENV=production` (the API then refuses to start with a weak secret, an `http://`
+address or the camera gate off). Fill in `.env` from `.env.example`, then
+`docker compose -f docker-compose.prod.yml up -d --build`. `deploy/backup.sh` takes the backups. The
+full steps are in `docs/plan/hosting-cytonn-server.md`, and moving the AI from a local model to
+Claude is in `docs/plan/ai-provider-switch.md` (both local; `docs/` is not committed).
+
+### Invitations and emails
+
+On a sitting, the admin pastes `name, email` lines (or uploads a file); each person gets one code and
+is emailed their link. The first time, the candidate types the code and their email and then chooses
+a password (8 or more characters, kept only as a bcrypt hash); after that, email and password are
+enough and the code is not needed. A forgotten password is fixed by the admin's **Resend link**, which
+clears it and sends a new link. A second device cannot take over a test that is running unless the
+first has been silent for a minute. Reviewers shortlist; the admin then sends pass emails, and
+not-passed emails after the sitting closes. Nothing is sent until mail is set up in `.env` (`SMTP_*`,
+guide in `docs/plan/email-setup.md`); until then emails wait in a queue. Names and emails never reach
+the AI or the review screens.
+
+**Automated runs must never send real mail.** The API reads `.env`, so a scratch API started for the
+browser tests would send invitations through your real mail account. Start it with a mail server that
+is not there: `SMTP_HOST=127.0.0.1 SMTP_PORT=1 SMTP_USER=x SMTP_PASSWORD=x MAIL_FROM=a@b.invalid`
+(an *empty* value does not work on Windows: an empty environment variable is deleted, not set).
+
+### How a test is timed
+
+Every question gets 1.75 minutes (105 s). A sitting's time is its question count times that, and
+a question that is not answered in time is closed by the server (it counts as skipped) and the next
+one opens. A screenshot key press (PrintScreen, Win+Shift+S, Cmd+Shift+3/4/5) is logged as the key
+combination only and flagged at 2 points; a browser cannot see the screenshot itself.
 
 Switches for testing (put them in `frontend/.env.development.local`, which git ignores; every one is
 on unless set to `off`, and all must be on for the pilot): `VITE_MIC_CHECK=off` leaves out the
@@ -72,6 +123,20 @@ $env:E2E_BASE_URL = "http://localhost:8080"   # where the app is served (the def
 $env:E2E_TOKEN    = "<an unused invitation code>"
 npm run e2e
 ```
+
+`e2e/sittings.spec.ts` does the other half in a real browser: an admin makes a sitting (Cytonn's,
+practice, and with `E2E_AI=1` an AI one) and a code for it on the real screens, and a candidate who
+opens that code sits exactly that sitting, with its sections, its number of questions, its pictures
+and its time. It needs an admin account and Cytonn's questions loaded:
+
+```powershell
+$env:E2E_ADMIN_EMAIL = "you@cytonn.com"; $env:E2E_ADMIN_PASSWORD = "<its password>"
+npm run e2e -- sittings
+```
+
+`e2e/sitting-page.spec.ts` checks a sitting's own page the same way: the admin clicks a sitting in the
+list, sees who has opened their link and who has not, filters by it, deletes the sitting by typing its
+name, and the codes made for it stop working. Same two settings; run it with `npm run e2e -- sitting-page`.
 
 ## Layout
 

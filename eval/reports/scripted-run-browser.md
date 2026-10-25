@@ -18,11 +18,11 @@ Date: ____ · Operator: ____ · Chrome version: ____ · Edge version: ____ · Wi
    so the real pre-check and the strict gate are in play.
 3. For each browser: open the link, go through the pre-check, **press the full screen button**,
    and do each action below, noting the question number and the clock time.
-4. Close the sitting (`close_sitting --force` is fine here) and compute flags:
+4. Close the sitting (`close_sitting --force` is fine here). Closing works out the flags, and each
+   candidate's own flags are already there once they finish, so the reviewer app can be opened now:
 
    ```powershell
    docker compose exec api python -m scripts.jobs close_sitting --sitting "Browser run" --force
-   docker compose exec api python -m scripts.jobs compute_flags --sitting "Browser run"
    ```
 
 5. Open each candidate in the reviewer app and fill in the table.
