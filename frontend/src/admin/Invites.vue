@@ -18,6 +18,7 @@ import type {
 import { invitesToCsv } from '../lib/csv'
 import { formatDateTime } from '../lib/format'
 import { formatInviteCode } from '../lib/inviteCode'
+import { documentProblem, readDocument } from '../lib/readDocument'
 import { MAIL, RESEND_TITLE } from './mailText'
 import ReissuedLink from './ReissuedLink.vue'
 
@@ -106,9 +107,23 @@ watch(listText, (text) => {
   if (text !== checkedText.value) checked.value = null
 })
 
+// Any file that holds written content will do; the server reads it and says if it cannot.
+const reading = ref(false)
+const fileProblem = ref<string | null>(null)
 async function onFile(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (file) listText.value = await file.text()
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  reading.value = true
+  fileProblem.value = null
+  try {
+    listText.value = (await readDocument(file, 'text')).text
+  } catch (error) {
+    fileProblem.value = documentProblem(error) ?? 'Could not read that file. Try again.'
+  } finally {
+    reading.value = false
+    input.value = '' // so the same file can be chosen again after a fix
+  }
 }
 
 const {
@@ -296,9 +311,12 @@ function downloadCsv() {
       placeholder="Ada Lovelace, ada@example.org"
     />
     <p class="muted">
-      Or choose a file:
-      <input type="file" accept=".csv,.txt,text/csv,text/plain" aria-label="Upload a list" @change="onFile" />
+      Or choose a file with the list in it: a spreadsheet, a Word file, a PDF, a CSV or any other file
+      with written content.
+      <input type="file" aria-label="Upload a list" :disabled="reading" @change="onFile" />
     </p>
+    <p v-if="reading" role="status">Reading the file...</p>
+    <Banner v-if="fileProblem" tone="bad" role="alert"><p>{{ fileProblem }}</p></Banner>
 
     <div class="actions">
       <BaseButton

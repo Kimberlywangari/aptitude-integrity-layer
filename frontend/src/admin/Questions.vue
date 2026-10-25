@@ -12,6 +12,7 @@ import type {
   QuestionRow,
   RetireResponse,
 } from '../lib/adminTypes'
+import { documentProblem, readDocument } from '../lib/readDocument'
 
 const REQUIRED = [
   'question_id',
@@ -28,6 +29,8 @@ const PAGE = 100
 const DIFFICULTY_PILL = { easy: 'low', medium: 'moderate', hard: 'high' } as const
 
 function importMessage(error: unknown): string {
+  const unreadable = documentProblem(error)
+  if (unreadable) return unreadable
   if (error instanceof ApiError) {
     if (error.code === 'sitting_open') {
       return 'A sitting is open. Close it before changing the question bank.'
@@ -89,10 +92,11 @@ const {
 } = useMutation({
   mutationFn: async () => {
     if (!summaryFile.value) throw new Error('no file')
+    // a spreadsheet, a Word table or a CSV: whichever it is saved as, it arrives here as CSV rows
     const body: ImportRequest = {
       filename: summaryFile.value.name,
-      summary_csv: await summaryFile.value.text(),
-      bank_csv: bankFile.value ? await bankFile.value.text() : null,
+      summary_csv: (await readDocument(summaryFile.value, 'table')).text,
+      bank_csv: bankFile.value ? (await readDocument(bankFile.value, 'table')).text : null,
     }
     return api<ImportReport>('/api/admin/questions/import', { method: 'POST', body })
   },
@@ -239,13 +243,14 @@ function submit() {
   <form class="panel" @submit.prevent="submit">
     <h2>Import Cytonn's question summary</h2>
     <p class="muted">
-      A CSV with these columns: {{ REQUIRED.join(', ') }}. If it has no question text, add the
-      question-bank export too and the two are joined on question_id.
+      A table with these columns: {{ REQUIRED.join(', ') }}. It can be a spreadsheet (.xlsx, .ods), a
+      table in a Word file, or a CSV. If it has no question text, add the question-bank export too and
+      the two are joined on question_id.
     </p>
     <label class="field" for="summary">Question summary (required)</label>
-    <input id="summary" type="file" accept=".csv,text/csv" @change="summaryFile = fileOf($event)" />
+    <input id="summary" type="file" @change="summaryFile = fileOf($event)" />
     <label class="field" for="bank">Question-bank export (optional)</label>
-    <input id="bank" type="file" accept=".csv,text/csv" @change="bankFile = fileOf($event)" />
+    <input id="bank" type="file" @change="bankFile = fileOf($event)" />
     <BaseButton type="submit" :disabled="!summaryFile" :busy="importing">
       {{ importing ? 'Importing...' : 'Import' }}
     </BaseButton>

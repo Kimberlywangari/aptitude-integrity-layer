@@ -5,10 +5,12 @@ transaction as the change itself, so there is never an action without its record
 """
 
 from dataclasses import asdict
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_clock, get_video_store, require_admin
 from app.clock import Clock
@@ -26,6 +28,7 @@ from app.schemas.admin import (
     DeleteSittingRequest,
     DeleteSittingResponse,
     EmailTextOut,
+    ExtractedTextResponse,
     ImportReportOut,
     ImportRequest,
     InviteListResponse,
@@ -55,7 +58,7 @@ from app.schemas.admin import (
     TestMailRequest,
 )
 from app.services import admin as admin_service
-from app.services import mail, question_import, results
+from app.services import documents, mail, question_import, results
 from app.services.qgen.categories import CATEGORIES, MAX_PER_CATEGORY, MAX_TOTAL
 from app.services.qgen.writers import check_available
 from app.services.staff_auth import record_action
@@ -439,6 +442,30 @@ def send_results(
     db.commit()
     mail.launch_sending(clock)
     return SendResultsResponse(queued=queued)
+
+
+# ---------------------------------------------------------------------------------- documents
+
+
+@router.post("/extract-text", response_model=ExtractedTextResponse)
+async def extract_text(
+    request: Request,
+    want: Literal["text", "table"] = "text",
+    _: Reviewer = Depends(require_admin),
+) -> ExtractedTextResponse:
+    """The written content of an uploaded file of any common kind (PDF, Word, Excel, slides,
+    OpenDocument, RTF, HTML, text), for the invite list and the question import. The file is the
+    request body, read once, never stored, and its kind comes from its bytes, not its name."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > documents.MAX_BYTES:
+        raise documents.refuse("file_too_large", 413, max_mb=documents.MAX_BYTES // 1_048_576)
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > documents.MAX_BYTES:  # no length given, or a lie: stop reading
+            raise documents.refuse("file_too_large", 413, max_mb=documents.MAX_BYTES // 1_048_576)
+    found = await run_in_threadpool(documents.extract, bytes(data), want)
+    return ExtractedTextResponse(text=found.text, kind=found.kind)
 
 
 # ---------------------------------------------------------------------------------- the bank

@@ -18,6 +18,7 @@ dependencies = [
     "python-multipart",
     "bcrypt",
     "itsdangerous",
+    "pypdf",  # reads the text out of an uploaded PDF (services/documents.py)
 ]
 
 [project.optional-dependencies]
