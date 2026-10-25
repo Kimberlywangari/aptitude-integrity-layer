@@ -237,8 +237,11 @@ export const UPLOAD_STUCK =
   'The upload is not moving. You can finish now. A person will see that your upload was ' +
   'incomplete, and you can tell us what happened with the form below.'
 
-export const FINISHED_TITLE = 'You have finished'
+export const FINISHED_TITLE = 'You are finished'
 export const FINISHED_BODY = 'Thank you. You can close this window.'
+// Only while the page is still in full screen, and only once the recording has been sent.
+export const FINISHED_LEAVE = 'Press Esc to leave full screen.'
+export const FINISHED_LEAVE_BUTTON = 'Exit full screen'
 
 export const COMPLAINT_TITLE = 'Tell us what went wrong'
 export const COMPLAINT_NOTE_LABEL = 'What happened? (up to 1000 characters)'

@@ -5,6 +5,8 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import {
   DEVICE_NOTICE_CHECKBOX,
+  FINISHED_LEAVE,
+  FINISHED_LEAVE_BUTTON,
   FINISHED_TITLE,
   NOTIFICATIONS_CHECKBOX,
   UPLOAD_DONE,
@@ -150,4 +152,11 @@ test('a candidate takes the whole test, recorded and logged, and everything arri
   await expect(page.getByText(UPLOAD_DONE)).toBeVisible({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Finish', exact: true }).click()
   await expect(page.getByText(FINISHED_TITLE)).toBeVisible()
+
+  // ---- the recording is safe, so the candidate is told how to leave full screen, and can
+  expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(true)
+  await expect(page.getByText(FINISHED_LEAVE)).toBeVisible()
+  await page.getByRole('button', { name: FINISHED_LEAVE_BUTTON }).click()
+  await expect(page.getByText(FINISHED_LEAVE)).toBeHidden()
+  expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true)
 })

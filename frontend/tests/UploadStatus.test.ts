@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import UploadStatus from '../src/candidate/UploadStatus.vue'
 import {
+  FINISHED_LEAVE,
+  FINISHED_LEAVE_BUTTON,
   FINISHED_TITLE,
   UPLOAD_CLOSED,
   UPLOAD_DONE,
@@ -10,6 +12,8 @@ import {
 import { api } from '../src/lib/api'
 import { flushEvents, logEvent, startEventLog } from '../src/lib/eventLog'
 import { resetMock, setMockLatency } from './mock'
+import { fs, resetFullscreen, setFullscreen } from './helpers/fakeFullscreen'
+import { leaveFullscreen } from '../src/lib/fullscreen'
 import { clearSession, saveSession } from '../src/lib/session'
 import { startUploader } from '../src/lib/uploader'
 import type { UploadStatus as LocalUpload } from '../src/lib/uploader'
@@ -18,6 +22,7 @@ import { mountPage, settle } from './helpers/render'
 vi.mock('../src/lib/api', async (importOriginal) =>
   (await import('./helpers/mockedApi')).withMockedApi(await importOriginal()),
 )
+vi.mock('../src/lib/fullscreen', async () => (await import('./helpers/fakeFullscreen')).fullscreenModule)
 vi.mock('../src/lib/eventLog', () => ({
   startEventLog: vi.fn(),
   logEvent: vi.fn(() => Promise.resolve()),
@@ -63,6 +68,8 @@ describe('UploadStatus', () => {
     setMockLatency(0)
     resetMock()
     saveSession('s1', 'tok')
+    resetFullscreen()
+    vi.mocked(leaveFullscreen).mockClear()
     up.status = { ...EMPTY }
     up.listeners.clear()
     vi.mocked(startUploader).mockClear()
@@ -193,5 +200,62 @@ describe('UploadStatus', () => {
     const late = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(late)
     expect(late.defaultPrevented).toBe(false)
+  })
+
+  describe('leaving full screen', () => {
+    const uploaded = async (w: Page) => {
+      await wait(3000 * 6) // everything uploaded
+      await press(w, 'Finish')
+    }
+
+    it('offers nothing while the recording is still going up', async () => {
+      setFullscreen(true)
+      const w = await renderPage()
+      await wait(0)
+      expect(w.text()).not.toContain(FINISHED_LEAVE)
+      expect(hasButton(w, FINISHED_LEAVE_BUTTON)).toBe(false)
+    })
+
+    it('says the test is finished, how to leave full screen, and has a button that does it', async () => {
+      setFullscreen(true)
+      const w = await renderPage()
+      await uploaded(w)
+      expect(w.text()).toContain(FINISHED_TITLE)
+      expect(w.text()).toContain(FINISHED_LEAVE)
+      expect(w.text()).toContain('Press Esc to leave full screen.')
+
+      await press(w, FINISHED_LEAVE_BUTTON)
+      expect(leaveFullscreen).toHaveBeenCalledTimes(1)
+      expect(fs.active).toBe(false)
+      expect(w.text()).not.toContain(FINISHED_LEAVE) // out of full screen, so nothing left to say
+      expect(hasButton(w, FINISHED_LEAVE_BUTTON)).toBe(false)
+    })
+
+    it('says nothing when the candidate is already out of full screen', async () => {
+      const w = await renderPage()
+      await uploaded(w)
+      expect(w.text()).toContain(FINISHED_TITLE)
+      expect(w.text()).not.toContain(FINISHED_LEAVE)
+    })
+
+    it('goes away by itself when the candidate presses Esc', async () => {
+      setFullscreen(true)
+      const w = await renderPage()
+      await uploaded(w)
+      expect(w.text()).toContain(FINISHED_LEAVE)
+      setFullscreen(false) // what the browser does on Esc
+      await wait(0)
+      expect(w.text()).not.toContain(FINISHED_LEAVE)
+    })
+
+    it('is offered after finishing anyway too', async () => {
+      setFullscreen(true)
+      const w = await renderPage()
+      await wait(0)
+      setLocal({ halted: 'closed' })
+      await wait(0)
+      await press(w, 'Finish anyway')
+      expect(w.text()).toContain(FINISHED_LEAVE)
+    })
   })
 })
