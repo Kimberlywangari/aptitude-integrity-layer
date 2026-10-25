@@ -7,7 +7,8 @@ def answer(answer_id, text, correct=False):
     return {"id": answer_id, "answer": text, "is_correct": correct}
 
 
-def question(question_id=10, text="What is 12 + 7?", answers=None):
+def question(question_id=10, text=None, answers=None):
+    text = text or f"What is {question_id} + 7?"  # each its own, or they would be copies
     if answers is None:
         answers = [answer(101, "17"), answer(102, "19", True), answer(103, "21")]
     return {"id": question_id, "question": text, "answers": answers}
@@ -33,7 +34,7 @@ def test_the_guides_example_parses():
     assert bank.skipped == [] and bank.warnings == []
     (parsed,) = bank.questions
     assert (parsed.id, parsed.cytonn_id, parsed.section) == ("C10", 10, "numerical reasoning")
-    assert parsed.text == "What is 12 + 7?"
+    assert parsed.text == "What is 10 + 7?"
     assert parsed.options == ((101, "17"), (102, "19"), (103, "21"))
     assert parsed.correct_answer_id == 102
     assert bank.minutes == {"numerical reasoning": 1.5}
@@ -121,19 +122,134 @@ def test_minutes_per_question_is_none_when_it_is_not_a_positive_number(minutes):
     assert parse(section([question()], minutes=minutes)).minutes == {"numerical reasoning": None}
 
 
-def test_text_that_would_print_badly_is_warned_about_not_rejected():
-    markup = question(10, text="<p>What is <b>2 + 2</b>?</p>")
+def test_a_very_long_text_or_answer_is_warned_about_not_rejected():
     long_text = question(11, text="x" * 2001)
-    twins = question(12, answers=[answer(1, "Same", True), answer(2, "same")])
-    clean = question(13)
+    long_answer = question(12, answers=[answer(1, "y" * 501, True), answer(2, "short")])
 
-    bank = parse(section([markup, long_text, twins, clean]))
+    bank = parse(section([long_text, long_answer, question(13)]))
 
-    assert [q.cytonn_id for q in bank.questions] == [10, 11, 12, 13]
-    assert len(bank.warnings) == 3
-    assert any("HTML" in w and "10" in w for w in bank.warnings)
+    assert [q.cytonn_id for q in bank.questions] == [11, 12, 13]
+    assert len(bank.warnings) == 2
     assert any("over 2000" in w and "11" in w for w in bank.warnings)
-    assert any("same text" in w and "12" in w for w in bank.warnings)
+    assert any("answer over 500" in w and "12" in w for w in bank.warnings)
+
+
+def test_html_is_turned_into_the_plain_text_the_screen_shows():
+    html = (
+        "<p>Revenue rose by <strong>12%</strong> to &pound;1,050 in 2&nbsp;years.</p>"
+        "<p>10<sup>3</sup> is a <em>thousand</em>; the 1<sup>st</sup> quarter.</p>"
+    )
+    (parsed,) = parse(section([question(10, text=html)])).questions
+    assert parsed.text == (
+        "Revenue rose by 12% to £1,050 in 2 years.\n\n10³ is a thousand; the 1st quarter."
+    )
+
+
+def test_answers_are_converted_too_and_a_leading_letter_is_taken_off_when_they_all_have_one():
+    lettered = [
+        answer(1, "A. Allow the AI to decide", False),
+        answer(2, "B. Use it as a first pass", True),
+        answer(3, "C. Ask them to re-submit", False),
+    ]
+    (parsed,) = parse(section([question(10, answers=lettered)])).questions
+    assert [t for _, t in parsed.options] == [
+        "Allow the AI to decide",
+        "Use it as a first pass",
+        "Ask them to re-submit",
+    ]
+    # one that merely starts like a letter is a real answer
+    mixed = [answer(1, "A. Smith", True), answer(2, "Jones"), answer(3, "Brown")]
+    (kept,) = parse(section([question(11, answers=mixed)])).questions
+    assert kept.options[0][1] == "A. Smith"
+    entity = [answer(1, "&pound;5", True), answer(2, "&euro;5")]
+    (decoded,) = parse(section([question(12, answers=entity)])).questions
+    assert [t for _, t in decoded.options] == ["£5", "€5"]
+
+
+def test_a_picture_leaves_a_marker_and_its_address_is_cleaned_and_kept_in_order():
+    html = (
+        "<p>Study the chart.</p>"
+        '<p><img src="https://hr.cytonn.com/../storage/aptitude/q92.PNG" alt="" /></p>'
+        "<p>What comes next?</p>"
+        '<p><img src="https://hr.cytonn.com/storage/aptitude/q93.PNG"></p>'
+    )
+    (parsed,) = parse(section([question(10, text=html)])).questions
+    assert parsed.text == "Study the chart.\n\n[[image 1]]\n\nWhat comes next?\n\n[[image 2]]"
+    assert parsed.images == (
+        "https://hr.cytonn.com/storage/aptitude/q92.PNG",
+        "https://hr.cytonn.com/storage/aptitude/q93.PNG",
+    )
+
+
+def test_a_question_with_nothing_but_a_picture_is_kept():
+    html = '<p><img src="https://hr.cytonn.com/storage/aptitude/q1.PNG" alt=""></p>'
+    bank = parse(section([question(10, text=html)]))
+    assert [q.text for q in bank.questions] == ["[[image 1]]"]
+    assert bank.images_needed == ["https://hr.cytonn.com/storage/aptitude/q1.PNG"]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "why"),
+    [
+        ({"text": '<p>Look: <img src="not a web address"></p>'}, "a picture has no usable"),
+        ({"text": '<img src="javascript:alert(1)">'}, "a picture has no usable"),
+        (
+            {
+                "answers": [
+                    {"id": 1, "answer": '<img src="https://hr.cytonn.com/a.png">', "is_correct": 1},
+                    answer(2, "b"),
+                ]
+            },
+            "an answer contains a picture",
+        ),
+        (
+            {"answers": [answer(1, "Same", True), answer(2, "same")]},
+            "two answers have the same text",
+        ),
+    ],
+)
+def test_a_question_that_cannot_be_shown_properly_is_left_out_and_says_why(kwargs, why):
+    bank = parse(section([question(10, **kwargs)]))
+    assert bank.questions == []
+    assert bank.skipped[0][1].startswith(why)
+
+
+def test_a_copy_under_another_id_is_left_out_but_the_first_is_kept():
+    bank = parse(
+        section([question(20, text="Same words"), question(10, text="Same words")], name="Verbal")
+    )
+    assert [q.cytonn_id for q in bank.questions] == [10]
+    assert bank.skipped == [(20, "a copy of question 10")]
+
+
+def test_two_copies_that_disagree_about_the_answer_are_both_left_out():
+    first = question(10, text="Same words", answers=[answer(1, "True", True), answer(2, "False")])
+    second = question(11, text="Same words", answers=[answer(5, "True"), answer(6, "False", True)])
+    bank = parse(section([first, second]))
+    assert bank.questions == []
+    assert sorted(i for i, _ in bank.skipped) == [10, 11]
+    assert "different answer" in bank.skipped[0][1]
+
+
+def test_questions_that_differ_only_by_underlining_are_not_copies():
+    plain = question(10, text="<p>Which word means dictates?</p>")
+    underlined = question(11, text="<p>Which word means <u>dictates</u>?</p>")
+    assert [q.cytonn_id for q in parse(section([plain, underlined])).questions] == [10, 11]
+
+
+def test_questions_about_one_passage_share_a_key_and_a_short_question_has_none():
+    passage = (
+        "The Silk Road, stretching from China to the Mediterranean Sea, was not a single road but "
+        "a web of routes used for centuries. "
+    )
+    one = question(10, text=passage + "It connected which two regions of the world?")
+    two = question(11, text=passage + "What does the passage say it was not?")
+    short = question(12, text="What is 2 + 2?")
+    other = question(13, text="A different passage altogether, with enough words to be long. " * 3)
+    keys = {q.cytonn_id: q.passage_key for q in parse(section([one, two, short, other])).questions}
+    assert keys[10] == keys[11] and keys[10] is not None
+    assert keys[12] is None
+    assert keys[13] not in (None, keys[10])
 
 
 @pytest.mark.parametrize(

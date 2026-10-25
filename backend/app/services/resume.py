@@ -12,9 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.clock import Clock
-from app.core.security import hash_token, new_token, normalise_invite_code
+from app.core.security import hash_token, new_token
 from app.errors import ApiError
-from app.models import Candidate, TestSession
+from app.models import TestSession
+from app.services.login import find_candidate
 
 
 @dataclass(frozen=True)
@@ -25,15 +26,15 @@ class ResumeResult:
 
 
 def issue_upload_token(
-    db: Session, clock: Clock, invite_code: str, window_s: int
+    db: Session,
+    clock: Clock,
+    invite_code: str | None,
+    window_s: int,
+    email: str | None = None,
+    password: str | None = None,
+    new_password: str | None = None,
 ) -> ResumeResult:
-    candidate = db.scalar(
-        select(Candidate).where(
-            Candidate.invite_token_hash == hash_token(normalise_invite_code(invite_code))
-        )
-    )
-    if candidate is None:
-        raise ApiError(401, "invalid_invitation")
+    candidate = find_candidate(db, invite_code, email, password, new_password)
 
     session = db.scalar(
         select(TestSession)

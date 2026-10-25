@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.clock import Clock
 from app.models import Event, TestSession
 from app.schemas.recording import EventIn
+from app.services.flags.refresh import refresh_session_flags
 
 Cleaner = Callable[[Any], Any]
 
@@ -31,6 +32,18 @@ def _whole(low: int, high: int) -> Cleaner:
         return max(low, min(high, int(value)))
 
     return clean
+
+
+def _one_of(*allowed: str) -> Cleaner:
+    def clean(value: Any) -> str | None:
+        return value if value in allowed else None
+
+    return clean
+
+
+# The key combinations the page reports for a screenshot. The page cannot see the screenshot
+# itself, only that these keys were pressed.
+SCREENSHOT_COMBOS = ("PrintScreen", "Win+Shift+S", "Cmd+Shift+3", "Cmd+Shift+4", "Cmd+Shift+5")
 
 
 def _seconds(value: Any) -> float | None:
@@ -64,6 +77,7 @@ PAYLOAD_RULES: dict[str, dict[str, Cleaner]] = {
     "copy_attempt": {"length": _whole(0, 1_000_000)},
     "cut_attempt": {"length": _whole(0, 1_000_000)},
     "paste_attempt": {},
+    "screenshot_attempt": {"combo": _one_of(*SCREENSHOT_COMBOS)},
     "contextmenu_attempt": {},
     "idle_start": {},
     "idle_end": _DURATION,
@@ -150,6 +164,10 @@ def ingest(db: Session, clock: Clock, session: TestSession, items: list[EventIn]
                 session.recording_started_at = server_ts
 
     db.commit()
+    # Events that arrive after the test has ended (the page's last batch, an upload resumed within
+    # the 48 hours) can change the session's flags, so they are worked out again.
+    if stored and session.status == "finished":
+        refresh_session_flags(db, session.id)
     return IngestResult(
         accepted=len(stored),
         duplicates=len(items) - rejected - len(stored),

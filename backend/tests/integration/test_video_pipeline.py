@@ -5,8 +5,6 @@ is made by ffmpeg itself and written to a pipe, as a browser recorder does: no d
 index. It is then cut into arbitrary chunks, uploaded through the real endpoints and joined again.
 """
 
-import os
-import shutil
 import subprocess
 from datetime import timedelta
 
@@ -21,7 +19,7 @@ from app.services.video.store import LocalVideoStore
 from app.services.video.webm import Tracks, read_tracks
 from tests.support import Live
 
-FFMPEG = os.environ.get("FFMPEG_BIN") or shutil.which("ffmpeg")
+FFMPEG = ffmpeg.ffmpeg_path() if ffmpeg.available() else None
 pytestmark = pytest.mark.skipif(not FFMPEG, reason="ffmpeg is not installed")
 
 SECONDS = 24

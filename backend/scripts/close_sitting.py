@@ -1,9 +1,10 @@
-"""Close a sitting so its cohort checks can run.
+"""Close a sitting, which also works out its flags and runs the cohort checks.
 
     python -m scripts.jobs close_sitting --sitting <id or name> [--force]
 
 Refuses while anyone is still sitting or has not started, unless --force is given; a forced close
-is written to the audit log. Closing does not compute anything: run compute_flags next.
+is written to the audit log. Sessions whose time has run out are finished first, and every
+finished session's flags are recomputed as part of closing.
 """
 
 import argparse
@@ -25,10 +26,13 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    clock = SystemClock()
     with SessionLocal() as db:
         target = resolve_sitting(db, args.sitting)
         try:
-            sitting, unfinished = admin_service.close_sitting(db, target.id, force=args.force)
+            sitting, unfinished = admin_service.close_sitting(
+                db, target.id, force=args.force, clock=clock
+            )
         except ApiError as problem:
             db.rollback()
             hint = ""
@@ -40,7 +44,7 @@ def main(argv: list[str] | None = None) -> None:
             AuditLog(
                 reviewer_id=None,
                 action="admin",
-                ts=SystemClock().now(),
+                ts=clock.now(),
                 detail=f"{detail} (from the command line)",
             )
         )

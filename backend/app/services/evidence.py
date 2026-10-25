@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AudioSilence, Event, QuestionStats, SessionQuestion, TestSession
+from app.models import AudioSilence, Event, SessionQuestion, TestSession
 from app.services.flags import rules
 from app.services.flags.config import DEFAULTS, FlagConfig
 
@@ -102,23 +102,6 @@ def vs_sitting(
         own_pace,
         own_score,
     )
-
-
-def history_source(db: Session, session_id: str) -> str:
-    """`cytonn` only when every question that has statistics has Cytonn's own; otherwise the
-    baseline the per-question check used is partly made up, and a reviewer should know. `none` when
-    no question in the paper has any (questions loaded from the aptitude API have none), so the
-    per-question speed check could not run."""
-    sources = set(
-        db.scalars(
-            select(QuestionStats.source)
-            .join(SessionQuestion, SessionQuestion.question_id == QuestionStats.question_id)
-            .where(SessionQuestion.session_id == session_id)
-        )
-    )
-    if not sources:
-        return "none"
-    return "cytonn" if sources == {"cytonn"} else "synthetic"
 
 
 # ------------------------------------------------------------------------------------ signals
@@ -250,17 +233,17 @@ def precheck_view(report: dict[str, Any] | None) -> dict[str, Any]:
 
 _DESCRIBE = {
     "COPY_ATTEMPT": lambda d, q, on: f"a copy attempt{on} ({d.get('length', 0)} characters)",
+    "SCREENSHOT_KEY": lambda d, q, on: f"a screenshot key pressed{on} ({d.get('combo', '')})",
     "FOCUS_LOSS": lambda d, q, on: f"a {d.get('focus_lost_s', 0)} s loss of focus{on}",
     "LONG_HOLD_CORRECT": lambda d, q, on: (
         f"question {q} took {d.get('time_s')} s against the candidate's own median of "
-        f"{d.get('own_median_s')} s and was answered correctly"
+        f"{d.get('own_median_s')} s, with focus away for {d.get('focus_lost_s')} s of it, "
+        "and was answered correctly"
     ),
     "CORRECT_RUN_AFTER_GAP": lambda d, q, on: (
-        f"{d.get('run_length')} correct answers in a row straight after a {d.get('gap_s')} s gap"
-    ),
-    "FAST_CORRECT_VS_HISTORY": lambda d, q, on: (
-        f"{len(d.get('questions', []))} correct answers much faster than the usual quick time "
-        "for those questions"
+        f"{d.get('run_length')} correct answers in a row straight after a {d.get('gap_s')} s gap, "
+        f"averaging {d.get('mean_s')} s each against the candidate's own median of "
+        f"{d.get('own_median_s')} s"
     ),
     "PACE_OUTLIER": lambda d, q, on: (
         f"a mean time per question far {'faster' if d.get('direction') == 'fast' else 'slower'} "

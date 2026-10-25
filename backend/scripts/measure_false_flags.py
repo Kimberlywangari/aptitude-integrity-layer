@@ -30,7 +30,6 @@ EXPECTED = {
     "tab_lookup": "LONG_HOLD_CORRECT",
     "copier": "COPY_ATTEMPT",
     "answer_runner": "CORRECT_RUN_AFTER_GAP",
-    "fast_correct": "FAST_CORRECT_VS_HISTORY",
     "logging_blocker": "LOGGING_PROBLEM",
 }
 

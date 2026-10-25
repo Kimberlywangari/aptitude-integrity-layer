@@ -14,6 +14,7 @@ from scripts import (
     chunk_integrity,
     close_sitting,
     compute_flags,
+    create_invites,
     detect_silence,
     fetch_cytonn_bank,
     import_question_summary,
@@ -28,6 +29,7 @@ from scripts import (
     reviewers,
     seed_synthetic,
     simulate_cohort,
+    try_question_writer,
     video_offset,
 )
 
@@ -39,6 +41,7 @@ JOBS: dict[str, Callable[[list[str]], None]] = {
     "simulate_cohort": simulate_cohort.main,
     "close_sitting": close_sitting.main,
     "compute_flags": compute_flags.main,
+    "create_invites": create_invites.main,
     "assemble_videos": assemble_videos.main,
     "detect_silence": detect_silence.main,
     "build_packets": build_packets.main,
@@ -53,6 +56,7 @@ JOBS: dict[str, Callable[[list[str]], None]] = {
     "purge_videos": purge_videos.main,
     "loop": loop.main,
     "measure_false_flags": measure_false_flags.main,
+    "try_question_writer": try_question_writer.main,
     "create_reviewer": reviewers.create_main,
     "deactivate_reviewer": reviewers.deactivate_main,
 }

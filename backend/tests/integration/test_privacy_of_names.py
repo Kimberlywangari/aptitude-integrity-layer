@@ -1,0 +1,80 @@
+"""A candidate's name and email exist for the invitation and result emails and the admin's list.
+Nothing the AI reads and nothing a reviewer sees may carry them. This test gives every simulated
+candidate a name and an address nobody would otherwise write, then looks everywhere those could
+have leaked: the evidence packets, the exact text sent to a model, and every reviewer screen."""
+
+import json
+
+import pytest
+from sqlalchemy import select
+
+from app.models import Candidate, Sitting, TestSession
+from app.services.packets import build_packet
+from app.services.ranking import prompts
+from app.services.staff_auth import create_reviewer
+from scripts.simulate_cohort import SITTING_NAME, simulate
+
+PASSWORD = "correct horse battery"
+SURNAME = "Quillfeather"
+DOMAIN = "privacy-check.invalid"
+
+
+@pytest.fixture
+def named(db, seeded):
+    sim = simulate(db, seed=1)
+    db.flush()
+    for number, candidate in enumerate(
+        db.scalars(select(Candidate).where(Candidate.id.like("sim-%"))), start=1
+    ):
+        candidate.full_name = f"Zed {SURNAME}{number}"
+        candidate.email = f"zed.{SURNAME.lower()}{number}@{DOMAIN}"
+    assert number >= 10  # the names really are on the candidates being checked
+    db.flush()
+    return sim
+
+
+def mentions(text: str) -> list[str]:
+    return [needle for needle in (SURNAME, SURNAME.lower(), DOMAIN, "@") if needle in text]
+
+
+def test_packets_and_the_text_sent_to_a_model_never_hold_a_name_or_an_address(db, named):
+    sessions = list(db.scalars(select(TestSession).where(TestSession.candidate_id.like("sim-%"))))
+    built = 0
+    for session in sessions:
+        packet = build_packet(db, session)
+        if packet is None:  # not flagged: there is no packet to read
+            continue
+        built += 1
+        assert mentions(json.dumps(packet)) == []
+        for violations in (None, ["a cited time that is not in the packet"]):
+            sent = json.dumps(prompts.build_messages(packet, violations))
+            assert mentions(sent) == []
+    assert built >= 3
+
+
+def test_no_reviewer_screen_carries_a_name_or_an_address(client, db, clock, named):
+    account, _ = create_reviewer(db, clock, email="rev-only@staff.test", password=PASSWORD)
+    db.flush()
+    token = client.post(
+        "/api/review/login", json={"email": "rev-only@staff.test", "password": PASSWORD}
+    ).json()["token"]
+    staff = {"Authorization": f"Bearer {token}"}
+    sitting = db.scalar(select(Sitting.id).where(Sitting.name == SITTING_NAME))
+
+    queue = client.get("/api/review/queue", params={"sitting": sitting}, headers=staff).json()
+    listed = client.get("/api/review/candidates", params={"sitting": sitting}, headers=staff).json()
+    looked_at = [i["candidate_id"] for i in queue["items"]][:3]
+    pages = [queue, listed, client.get("/api/review/overview", headers=staff).json()]
+    for candidate_id in looked_at:
+        base = f"/api/review/candidates/{candidate_id}"
+        for tail in ("", "/events"):
+            response = client.get(base + tail, params={"sitting": sitting}, headers=staff)
+            assert response.status_code == 200, response.text
+            pages.append(response.json())
+    pages.append(client.get("/api/review/audit", headers=staff).json())
+
+    assert len(pages) >= 6
+    for page in pages:
+        # the audit log shows which reviewer did what, so staff addresses may appear; no other @
+        text = json.dumps(page).replace("rev-only@staff.test", "")
+        assert mentions(text) == []

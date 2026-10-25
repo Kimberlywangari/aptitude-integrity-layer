@@ -7,7 +7,7 @@ real ones are interchangeable.
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -44,7 +44,6 @@ class Packet(BaseModel):
     vs_sitting: dict[str, Any]
     score: int  # correct answers: context, never a flag
     pace_s_per_q: int  # context, never a flag
-    history_source: Literal["cytonn", "synthetic", "none"]
     # context only: leaving full screen is something a page cannot stop and an honest candidate
     # can do by accident
     fullscreen_exits: list[dict[str, int]]

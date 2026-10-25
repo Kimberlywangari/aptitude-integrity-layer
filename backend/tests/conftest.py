@@ -75,6 +75,13 @@ def cheap_password_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(passwords, "ROUNDS", 4)
 
 
+@pytest.fixture(autouse=True)
+def no_background_mail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A request that queues mail starts a thread that sends it with its own database session,
+    which would leave the test's transaction. Tests send with `mail.send_queued` and a fake."""
+    monkeypatch.setattr("app.services.mail.launch_sending", lambda clock=None: None)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
@@ -83,11 +90,21 @@ def clock() -> FakeClock:
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     """Test settings: public URL fixed, video kept in a throwaway folder. Tests replace fields
-    as they need."""
+    as they need. The behaviour switches are pinned here so a developer's own .env (a camera gate
+    on, a local model chosen) cannot change what the tests see."""
     return Settings(
         public_base_url=TEST_PUBLIC_URL,
         session_secret="test-secret",
         video_root=str(tmp_path / "video"),
+        precheck_gate="off",
+        ai_provider="rules",
+        chunk_fail_rate=0.0,
+        # whatever mail account a developer has put in .env, a test never has one: nothing a test
+        # does can send a real email
+        smtp_host="",
+        smtp_user="",
+        smtp_password="",
+        mail_from="",
     )
 
 

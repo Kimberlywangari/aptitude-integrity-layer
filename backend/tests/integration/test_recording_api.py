@@ -269,11 +269,28 @@ def test_begin_is_idempotent_once_running_even_with_the_gate_on(live, settings):
 
 
 def test_a_production_server_cannot_run_without_the_recording_gate():
+    ready = {"session_secret": "s" * 40, "public_base_url": "https://tests.invalid"}
     with pytest.raises(ValueError, match="PRECHECK_GATE"):
-        Settings(env="production", precheck_gate="off", session_secret="x")
+        Settings(env="production", precheck_gate="off", **ready)
     with pytest.raises(ValueError, match="PRECHECK_GATE"):
-        Settings(env="production", precheck_gate="precheck", session_secret="x")
-    assert Settings(env="production", precheck_gate="recording", session_secret="x")
+        Settings(env="production", precheck_gate="precheck", **ready)
+    assert Settings(env="production", precheck_gate="recording", **ready)
+
+
+def test_a_production_server_needs_its_own_secret_and_an_https_address():
+    base = {"env": "production", "precheck_gate": "recording"}
+    ready = {"session_secret": "s" * 40, "public_base_url": "https://tests.invalid"}
+    for secret in ("", "short", "change-me-dev-only" + "x" * 30):
+        with pytest.raises(ValueError, match="SESSION_SECRET"):
+            Settings(**base, **{**ready, "session_secret": secret})
+    with pytest.raises(ValueError, match="PUBLIC_BASE_URL"):
+        Settings(**base, **{**ready, "public_base_url": "http://localhost:5173"})
+
+
+def test_development_without_a_secret_gets_a_random_one_each_time():
+    first = Settings(env="development", session_secret="")
+    second = Settings(env="development", session_secret="")
+    assert len(first.session_secret) >= 32 and first.session_secret != second.session_secret
 
 
 # ---------------------------------------------------------------------------------- chunks

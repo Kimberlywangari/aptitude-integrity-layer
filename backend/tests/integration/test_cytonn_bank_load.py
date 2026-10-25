@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 from app.errors import ApiError
 from app.models import Option, Question, QuestionStats, SessionQuestion, Sitting, TestSession
-from app.services import admin, evidence
+from app.services import admin
 from app.services.cytonn_bank import BankInUse, load_bank, parse_sections
 from scripts.seed_synthetic import seed
 
@@ -16,7 +16,8 @@ def answer(answer_id, text, correct=False):
     return {"id": answer_id, "answer": text, "is_correct": correct}
 
 
-def api_question(question_id, text="What is 12 + 7?", answers=None):
+def api_question(question_id, text=None, answers=None):
+    text = text or f"What is {question_id} + 7?"  # each its own, or they would be copies
     if answers is None:
         answers = [answer(101, "17"), answer(102, "19", True), answer(103, "21")]
     return {"id": question_id, "question": text, "answers": answers}
@@ -204,7 +205,6 @@ def sitting_args(count):
         "name": "Real sitting",
         "opens_at": None,
         "closes_at": None,
-        "duration_s": 1800,
         "question_count": count,
     }
 
@@ -232,12 +232,3 @@ def test_a_total_that_is_too_big_still_gets_the_older_message(db):
         admin.create_sitting(db, **sitting_args(2))
     assert refused.value.code == "question_bank_too_small"
     assert refused.value.extra == {"available": 1}
-
-
-def test_the_reviewer_is_told_when_no_question_has_any_history(seeded):
-    load_bank(seeded, bank_of(api_question(10)))
-    sid = draw(seeded, "C10")
-    assert evidence.history_source(seeded, sid) == "none"
-
-    with_history = draw(seeded, "Q001", candidate="cand-002")
-    assert evidence.history_source(seeded, with_history) == "synthetic"

@@ -59,6 +59,29 @@ class QueueResponse(BaseModel):
     items: list[QueueItem]
 
 
+SessionStatus = Literal["created", "in_progress", "finished"]
+
+
+class CandidateRow(BaseModel):
+    """One line of the list of everyone in a sitting; `in_queue` says if the queue shows them."""
+
+    candidate_id: str
+    status: SessionStatus
+    resolved: int  # questions answered or skipped so far
+    total: int
+    flag_count: int
+    flag_kinds: list[str]
+    in_queue: bool
+    decision: Outcome | None
+    shortlisted: bool
+
+
+class CandidatesResponse(BaseModel):
+    sittings: list[SittingRef]
+    sitting_id: int
+    items: list[CandidateRow]
+
+
 class VideoSeek(BaseModel):
     segment: int
     seek_s: float
@@ -133,7 +156,6 @@ class CandidateDetail(BaseModel):
     rule_breakdown: list[BreakdownLine]
     score: int
     pace_s_per_q: float
-    history_source: Literal["cytonn", "synthetic", "none"]
     flags: list[FlagItem]
     # only the keys that apply are present, as the page expects (cohort_skipped, or percentiles)
     vs_sitting: dict[str, Any]
@@ -144,9 +166,41 @@ class CandidateDetail(BaseModel):
     complaints: list[ComplaintItem]
     decisions: list[PastDecision]
     shortlisted: bool
+    video_available: bool  # false: not flagged and not shortlisted, so the recording stays closed
     segments: list[VideoSegment]
     video_deleted_at: datetime | None
     video_purge_on: datetime | None
+
+
+class LogEvent(BaseModel):
+    type: str
+    at_s: float | None  # seconds from the start of the test; negative before the timer ran
+    question: int | None  # the question the candidate was on
+    detail: dict[str, Any]
+
+
+class LogQuestion(BaseModel):
+    position: int
+    section: str
+    difficulty: str | None
+    opened_s: float | None
+    answered_s: float | None
+    time_s: float | None
+    result: Literal["correct", "wrong", "skipped", "unanswered"]
+    # Set when an AI wrote this question for this candidate, such as "ollama:qwen2.5:7b"
+    written_by: str | None = None
+
+
+class ActionLog(BaseModel):
+    candidate_id: str
+    status: SessionStatus
+    started_at: datetime | None
+    finished_at: datetime | None
+    total_events: int
+    truncated: bool  # more events were stored than are listed
+    heartbeats: int
+    events: list[LogEvent]
+    questions: list[LogQuestion]
 
 
 class DecisionRequest(BaseModel):
@@ -161,6 +215,9 @@ class DecisionResponse(BaseModel):
 
 class ShortlistResponse(BaseModel):
     shortlisted: bool
+    # true when a result email to this candidate is already queued or sent, so changing the
+    # shortlist now will not change what they were told. Never an address, never a name.
+    result_email_sent: bool = False
 
 
 class VideoViewRequest(BaseModel):

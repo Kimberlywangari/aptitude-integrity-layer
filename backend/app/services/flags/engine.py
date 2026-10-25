@@ -18,7 +18,6 @@ from app.models import (
     Flag,
     Heartbeat,
     Question,
-    QuestionStats,
     SessionQuestion,
     Sitting,
     SittingStat,
@@ -48,15 +47,8 @@ class FlagRun:
 
 def load_record(db: Session, session: TestSession) -> SessionRecord:
     rows = db.execute(
-        select(
-            SessionQuestion,
-            Question.difficulty,
-            QuestionStats.p25_s,
-            QuestionStats.n,
-            QuestionStats.source,
-        )
+        select(SessionQuestion, Question.difficulty)
         .join(Question, Question.id == SessionQuestion.question_id)
-        .outerjoin(QuestionStats, QuestionStats.question_id == SessionQuestion.question_id)
         .where(SessionQuestion.session_id == session.id)
         .order_by(SessionQuestion.position)
     ).all()
@@ -69,11 +61,8 @@ def load_record(db: Session, session: TestSession) -> SessionRecord:
             answered_at=sq.answered_at,
             correct=sq.correct,
             skipped=sq.skipped,
-            p25_s=p25,
-            stats_n=n,
-            stats_source=source,
         )
-        for sq, difficulty, p25, n, source in rows
+        for sq, difficulty in rows
     ]
     events = [
         rules.Ev(e.type, e.server_ts, e.payload or {})
@@ -101,7 +90,7 @@ def load_record(db: Session, session: TestSession) -> SessionRecord:
 
 def session_drafts(record: SessionRecord, cfg: FlagConfig = DEFAULTS) -> list[rules.FlagDraft]:
     """Every per-session rule, in time order. Cohort rules need the whole sitting."""
-    losses = rules.focus_losses(record.events, record.end)
+    losses = rules.counted_losses(rules.focus_losses(record.events, record.end), cfg)
     idles = rules.idle_spans(record.events)
     drops = rules.connection_drops(record.events, record.end)
     gaps = rules.heartbeat_gaps(record.beats, record.start, record.end, cfg)
@@ -109,11 +98,11 @@ def session_drafts(record: SessionRecord, cfg: FlagConfig = DEFAULTS) -> list[ru
     drafts: list[rules.FlagDraft] = []
     drafts += rules.focus_loss_flags(losses, record.answers, cfg)
     drafts += rules.copy_attempt_flags(record.events, record.answers, cfg)
+    drafts += rules.screenshot_key_flags(record.events, record.answers, cfg)
     drafts += rules.long_hold_correct_flags(record.answers, losses, cfg)
     drafts += rules.correct_run_after_gap_flags(
         record.answers, rules.run_gaps(losses, idles, cfg), cfg
     )
-    drafts += rules.fast_correct_flags(record.answers, cfg)
     drafts += rules.logging_problem_flags(gaps, drops, record.events, cfg)
     return sorted(drafts, key=lambda d: d.ts)
 
@@ -136,8 +125,18 @@ def cohort_member(record: SessionRecord) -> rules.CohortMember | None:
     )
 
 
-def _store(db: Session, session_id: str, drafts: list[rules.FlagDraft]) -> None:
-    db.execute(delete(Flag).where(Flag.session_id == session_id, Flag.source == "rule"))
+# Flags that only a whole closed sitting can produce. A single session's rerun must not drop them.
+COHORT_KINDS = (rules.PACE_OUTLIER, rules.SPREAD_OUTLIER)
+
+
+def _store(
+    db: Session, session_id: str, drafts: list[rules.FlagDraft], keep: tuple[str, ...] = ()
+) -> None:
+    """Replace the session's rule flags with `drafts`, leaving the kinds in `keep` untouched."""
+    gone = delete(Flag).where(Flag.session_id == session_id, Flag.source == "rule")
+    if keep:
+        gone = gone.where(Flag.kind.not_in(keep))
+    db.execute(gone)
     for draft in drafts:
         db.add(
             Flag(
@@ -218,11 +217,12 @@ def compute_sitting_flags(
 def compute_session_flags(
     db: Session, session_id: str, cfg: FlagConfig = DEFAULTS
 ) -> list[rules.FlagDraft]:
-    """One session's own flags (no cohort rules). Replaces its earlier rule flags."""
+    """One session's own flags (no cohort rules). Replaces its earlier rule flags, except the
+    cohort ones a closed sitting gave it: those depend on the whole group, not on this session."""
     session = db.get(TestSession, session_id)
     if session is None:
         raise ValueError(f"no session {session_id}")
     found = session_drafts(load_record(db, session), cfg)
-    _store(db, session_id, found)
+    _store(db, session_id, found, keep=COHORT_KINDS)
     db.flush()
     return found

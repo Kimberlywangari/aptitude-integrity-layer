@@ -13,10 +13,9 @@ from app.models import Event, Flag, Option, Question, SessionQuestion
 from app.services.flags.engine import compute_session_flags
 from tests.support import Live
 
-# An ordinary answer. Session ids are random, so the paper (and each question's difficulty) differs
-# from run to run; this is long enough to be below nobody's "quick" and short enough to be below
-# nobody's "long hold" whatever the paper holds: a hard question's quick-answer line is at most
-# 47 s, and with every answer 50 s the long-hold line is 150 s.
+# An ordinary answer. Every ordinary answer takes the same time, so a candidate's own median is
+# this, the long-hold line is 90 s (its cap) and the "quick run" line is 25 s whatever the paper
+# holds.
 USUAL_S = 50
 
 
@@ -147,7 +146,7 @@ def test_tabbing_out_to_look_something_up_is_caught_as_focus_losses_and_long_cor
         s.send("focus_lost")
         s.wait(40)
         s.send("focus_returned")
-        s.wait(220)
+        s.wait(50)
 
     script.paper({3: lookup, 5: lookup, 7: lookup})
     found = script.flags()
@@ -155,18 +154,38 @@ def test_tabbing_out_to_look_something_up_is_caught_as_focus_losses_and_long_cor
     assert [f.position for f in found["FOCUS_LOSS"]] == [3, 5, 7]
     holds = found["LONG_HOLD_CORRECT"]
     assert [f.position for f in holds] == [3, 5, 7]
-    assert all(f.weight == 4 for f in holds)  # focus was lost during each: 3 + 1
-    assert all(f.detail["focus_lost_during"] for f in holds)
-    assert holds[0].detail["time_s"] > 3 * holds[0].detail["own_median_s"]
+    assert all(f.weight == 4 for f in holds)
+    assert all(f.detail["focus_lost_s"] == 40 for f in holds)
+    assert holds[0].detail["time_s"] > holds[0].detail["own_median_s"]
 
 
-def test_a_long_hold_on_a_question_answered_correctly_is_flagged_without_the_bonus(script):
+def test_a_long_hold_with_focus_on_the_page_the_whole_time_is_not_flagged(script):
     def slow(s, position):
-        s.wait(300)
+        s.wait(100)
 
-    script.paper({4: slow})  # answered correctly by default: flagged
+    script.paper({4: slow})  # answered correctly, and slowly, but nothing took them away
+    assert "LONG_HOLD_CORRECT" not in script.flags()
+
+
+def test_a_long_hold_needs_more_than_two_seconds_away(script):
+    def glance(s, position):  # 2 s away: not enough
+        s.wait(6)
+        s.send("focus_lost")
+        s.wait(2)
+        s.send("focus_returned")
+        s.wait(88)
+
+    def look(s, position):  # 3 s away: enough
+        s.wait(6)
+        s.send("focus_lost")
+        s.wait(3)
+        s.send("focus_returned")
+        s.wait(87)
+
+    script.paper({4: glance, 8: look})
     holds = script.flags()["LONG_HOLD_CORRECT"]
-    assert [f.position for f in holds] == [4] and holds[0].weight == 3  # no focus loss: no bonus
+    assert [f.position for f in holds] == [8]
+    assert holds[0].detail["focus_lost_s"] == 3
 
 
 def test_copying_the_question_is_caught_and_only_its_length_is_stored(script):
@@ -185,6 +204,20 @@ def test_copying_the_question_is_caught_and_only_its_length_is_stored(script):
     assert [e.payload for e in stored] == [{"length": 212}]  # the wording never reached the table
 
 
+def test_a_screenshot_key_is_flagged_at_two_points_and_only_the_key_combination_is_stored(script):
+    def snap(s, position):
+        s.wait(8)
+        s.send("screenshot_attempt", combo="PrintScreen", note="free text the page should not send")
+        s.wait(12)
+
+    script.paper({3: snap})
+    (flag,) = script.flags()["SCREENSHOT_KEY"]
+
+    assert flag.position == 3 and flag.weight == 2 and flag.detail == {"combo": "PrintScreen"}
+    stored = script.db.scalars(select(Event).where(Event.type == "screenshot_attempt")).all()
+    assert [e.payload for e in stored] == [{"combo": "PrintScreen"}]
+
+
 def test_cutting_counts_as_copying(script):
     def cut(s, position):
         s.wait(5)
@@ -195,7 +228,7 @@ def test_cutting_counts_as_copying(script):
     assert [f.position for f in script.flags()["COPY_ATTEMPT"]] == [2]
 
 
-def test_going_idle_then_answering_a_run_correctly_and_fast_is_caught(script):
+def test_going_idle_then_answering_a_run_correctly_and_fast_is_caught(script):  # S5
     def idle(s, position):
         s.send("idle_start")
         s.wait(90)
@@ -210,6 +243,18 @@ def test_going_idle_then_answering_a_run_correctly_and_fast_is_caught(script):
 
     (flag,) = found["CORRECT_RUN_AFTER_GAP"]
     assert flag.weight == 2 and flag.detail["run_length"] >= 3 and flag.detail["gap_s"] == 90
+    assert flag.detail["mean_s"] < 0.5 * flag.detail["own_median_s"]
+
+
+def test_a_run_after_a_gap_at_the_candidates_usual_pace_is_not_flagged(script):
+    def idle(s, position):
+        s.send("idle_start")
+        s.wait(60)
+        s.send("idle_end", duration_s=60)
+        s.wait(30)
+
+    script.paper({5: idle})  # they come back and carry on at their normal pace, all correct
+    assert "CORRECT_RUN_AFTER_GAP" not in script.flags()
 
 
 def test_a_focus_loss_of_a_second_or_more_counts_and_a_blink_does_not(script):
