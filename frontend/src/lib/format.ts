@@ -15,6 +15,16 @@ export function formatDateTime(iso: string | null): string {
   return date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+/** "Saturday 24 October at 15:07", in the time zone of whoever is reading: for a candidate told
+ *  when a test opens. Falls back to the raw text for something that is not a date. */
+export function formatOpensAt(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const day = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+  const time = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return `${day} at ${time}`
+}
+
 /** SOME_FLAG_KIND -> Some flag kind, for kinds the page has no wording for yet. */
 export function humaniseKind(kind: string): string {
   const text = kind.toLowerCase().replace(/_/g, ' ')

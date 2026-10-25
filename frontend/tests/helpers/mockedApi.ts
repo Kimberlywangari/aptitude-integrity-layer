@@ -8,7 +8,7 @@ import type * as ApiModule from '../../src/lib/api'
 export function withMockedApi(actual: typeof ApiModule): typeof ApiModule {
   const api = vi.fn(
     async (path: string, options: { method?: string; body?: unknown } = {}): Promise<unknown> => {
-      const { mockApi } = await import('../../src/lib/mock')
+      const { mockApi } = await import('../mock')
       const { getStaff } = await import('../../src/lib/staffSession')
       const { getAccessToken } = await import('../../src/lib/session')
       const staffPath = path.startsWith('/api/review') || path.startsWith('/api/admin')

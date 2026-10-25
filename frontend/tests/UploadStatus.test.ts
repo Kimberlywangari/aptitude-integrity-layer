@@ -9,7 +9,7 @@ import {
 } from '../src/candidate/copy'
 import { api } from '../src/lib/api'
 import { flushEvents, logEvent, startEventLog } from '../src/lib/eventLog'
-import { resetMock, setMockLatency } from '../src/lib/mock'
+import { resetMock, setMockLatency } from './mock'
 import { clearSession, saveSession } from '../src/lib/session'
 import { startUploader } from '../src/lib/uploader'
 import type { UploadStatus as LocalUpload } from '../src/lib/uploader'

@@ -90,6 +90,7 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('./admin/AdminLayout.vue'),
         children: [
           { path: '', component: () => import('./admin/Sittings.vue') },
+          { path: 'sittings/:id', component: () => import('./admin/SittingDetail.vue'), props: true },
           { path: 'questions', component: () => import('./admin/Questions.vue') },
           { path: 'invites', component: () => import('./admin/Invites.vue') },
         ],
@@ -140,6 +141,10 @@ export function createAppRouter(history = createWebHistory()) {
   const router = createRouter({ history, routes })
   router.beforeEach(staffGuard)
   router.beforeEach(candidateGuard)
+  router.afterEach((to) => {
+    const staff = to.matched.some((record) => record.meta?.staff)
+    document.title = staff ? 'Cytonn Review Console' : 'Cytonn Aptitude Test'
+  })
   return router
 }
 

@@ -3,12 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Banner from '../components/Banner.vue'
 import BaseButton from '../components/BaseButton.vue'
+import BrandMark from '../components/BrandMark.vue'
 import Icon from '../components/Icon.vue'
 import ProgressBar from '../components/ProgressBar.vue'
 import { useFullscreen } from '../composables/useFullscreen'
 import { api, ApiError, pathForError } from '../lib/api'
 import type { QuestionResponse, ResolveResponse } from '../lib/api'
 import { logEvent } from '../lib/eventLog'
+import { partsOf } from '../lib/questionText'
 import { fullscreenRequired } from '../lib/features'
 import { CANDIDATE_PATH } from '../lib/routes'
 import { startTestRuntime } from '../lib/runtime'
@@ -24,6 +26,7 @@ interface Clock {
 
 const WARN_BELOW_S = 300
 const DANGER_BELOW_S = 60
+const QUESTION_DANGER_BELOW_S = 15
 const LETTERS = 'ABCDEFGH'
 
 const router = useRouter()
@@ -32,6 +35,8 @@ const question = ref<QuestionResponse | null>(null)
 const selected = ref<number | null>(null)
 const clock = ref<Clock | null>(null)
 const left = ref<number | null>(null)
+const questionClock = ref<Clock | null>(null)
+const questionLeft = ref<number | null>(null)
 const busy = ref(false)
 const error = ref<string | null>(null)
 
@@ -48,7 +53,15 @@ function format(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+// The text cut at its picture markers, so each picture sits where the question put it.
+const parts = computed(() =>
+  question.value ? partsOf(question.value.text, question.value.images) : [],
+)
+
 const timeText = computed(() => (left.value === null ? '--:--' : format(left.value)))
+const questionTimeText = computed(() =>
+  questionLeft.value === null ? '--:--' : format(questionLeft.value),
+)
 const timerTone = computed(() => {
   if (left.value === null) return ''
   if (left.value < DANGER_BELOW_S) return 'danger'
@@ -88,6 +101,8 @@ async function load() {
     selected.value = null
     error.value = null
     sync(q.remaining_s)
+    questionClock.value = { remaining: q.question_remaining_s, syncedAt: performance.now() }
+    questionLeft.value = q.question_remaining_s
     // Only once the server has handed over a question, so a test that is already over never turns
     // the camera and the recording back on.
     if (!runtimeStarted) {
@@ -108,11 +123,16 @@ async function load() {
 function onTick() {
   const c = clock.value
   if (!c) return
-  const value = Math.max(0, c.remaining - (performance.now() - c.syncedAt) / 1000)
+  const now = performance.now()
+  const value = Math.max(0, c.remaining - (now - c.syncedAt) / 1000)
   left.value = value
-  if (value <= 0 && !refreshing) {
+  const q = questionClock.value
+  const questionValue = q ? Math.max(0, q.remaining - (now - q.syncedAt) / 1000) : null
+  questionLeft.value = questionValue
+  if ((value <= 0 || questionValue === 0) && !refreshing) {
     refreshing = true
-    // Ask the server: it answers 410 time_up (-> /done), or re-syncs if it disagrees.
+    // Ask the server: it answers 410 time_up (-> /done), closes a question whose time is out and
+    // hands over the next one, or re-syncs if it disagrees.
     void load().finally(() => {
       refreshing = false
     })
@@ -184,12 +204,22 @@ async function resolve(kind: 'answer' | 'skip') {
     <div v-bind="coverOn ? { inert: true } : {}">
       <header class="top">
         <div class="where">
+          <BrandMark compact class="test-logo" />
           <span class="count">Question {{ question.position }} of {{ question.total }}</span>
           <span class="chip section">{{ question.section }}</span>
         </div>
-        <div class="timer" :class="timerTone" role="timer">
-          <Icon name="clock" size="1.05em" />
-          <span>{{ timeText }}</span>
+        <div class="timers">
+          <span
+            class="qtimer"
+            :class="{ danger: questionLeft !== null && questionLeft < QUESTION_DANGER_BELOW_S }"
+            :aria-label="`This question: ${questionTimeText} left`"
+          >
+            This question {{ questionTimeText }}
+          </span>
+          <div class="timer" :class="timerTone" role="timer">
+            <Icon name="clock" size="1.05em" />
+            <span>{{ timeText }}</span>
+          </div>
         </div>
       </header>
       <ProgressBar label="Test progress" :value="question.position - 1" :max="question.total" />
@@ -199,7 +229,17 @@ async function resolve(kind: 'answer' | 'skip') {
 
       <Transition name="q" mode="out-in">
         <div :key="question.position" class="qcard">
-          <p id="question-text" class="question-text">{{ question.text }}</p>
+          <div id="question-text" class="question-text">
+            <template v-for="(part, index) in parts" :key="index">
+              <p v-if="part.kind === 'text'">{{ part.text }}</p>
+              <img
+                v-else
+                class="figure"
+                :src="part.src"
+                :alt="`Picture ${part.number} for this question`"
+              />
+            </template>
+          </div>
 
           <fieldset :disabled="busy">
             <legend class="sr-only">Choose one answer</legend>
@@ -249,6 +289,17 @@ async function resolve(kind: 'answer' | 'skip') {
   align-items: center;
 }
 
+/* Small and still, and left out on a narrow screen where the timers need the room. */
+.test-logo {
+  margin-right: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .test-logo {
+    display: none;
+  }
+}
+
 .count {
   font-weight: 650;
   letter-spacing: -0.01em;
@@ -258,6 +309,26 @@ async function resolve(kind: 'answer' | 'skip') {
   margin: 0;
   color: var(--muted);
   text-transform: capitalize;
+}
+
+.timers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.qtimer {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  transition: color 300ms var(--ease-out);
+}
+
+.qtimer.danger {
+  color: var(--danger);
+  font-weight: 650;
 }
 
 .timer {
@@ -298,9 +369,29 @@ async function resolve(kind: 'answer' | 'skip') {
   font-size: 1.2rem;
   line-height: 1.45;
   letter-spacing: -0.005em;
+  text-wrap: pretty;
+}
+
+.question-text p {
+  margin: 0 0 0.85rem;
   /* Keep the line breaks a question carries: a passage above its question, or a list of values. */
   white-space: pre-line;
-  text-wrap: pretty;
+}
+
+.question-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* A chart or figure from the question. Drawn on its own light ground in both themes: they were
+   made for white paper, and dark lines on a dark page would vanish. */
+.question-text .figure {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.4rem 0 0.95rem;
+  background: var(--figure-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
 }
 
 /* Each option wears its letter instead of the radio dot; the real radio input is still the control. */

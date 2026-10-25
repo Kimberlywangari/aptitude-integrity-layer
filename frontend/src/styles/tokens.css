@@ -14,6 +14,7 @@
   --muted: #4d5f5a;
   --bg: #f2f6f5;
   --surface: #ffffff;
+  --logo-backing: transparent; /* the logo file has a white ground: light blends it into the page, dark sits it on white */
   --surface-2: #e9f1ef;
   --line: #c9d8d4;
   --line-soft: #dde8e5;
@@ -37,6 +38,7 @@
 
   --chip: #e9f1ef;
   --chip-ai: #e3f2c8;
+  --figure-bg: #ffffff; /* the ground a question's picture is drawn on, in both themes */
   --overlay: rgb(12 22 20 / 55%);
 
   /* The staff rail is dark in both themes, and so is the video surface. */
@@ -69,6 +71,7 @@
   --muted: #a0b2ac;
   --bg: #10181b;
   --surface: #192327;
+  --logo-backing: #ffffff;
   --surface-2: #213036;
   --line: #3a4f56;
   --line-soft: #2a3b41;

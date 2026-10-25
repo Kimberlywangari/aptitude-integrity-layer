@@ -37,6 +37,59 @@ export interface QueueResponse {
   items: QueueItem[]
 }
 
+export type SessionStatus = 'created' | 'in_progress' | 'finished'
+
+/** One line of the list of everyone in a sitting, flagged or not. */
+export interface CandidateRow {
+  candidate_id: string
+  status: SessionStatus
+  resolved: number // questions answered or skipped so far
+  total: number
+  flag_count: number
+  flag_kinds: string[]
+  in_queue: boolean // whether the queue shows them
+  decision: DecisionOutcome | null
+  shortlisted: boolean
+}
+
+export interface CandidatesResponse {
+  sittings: SittingRef[]
+  sitting_id: number
+  items: CandidateRow[]
+}
+
+/** One thing the candidate's page reported, in server time. */
+export interface LogEvent {
+  type: string
+  at_s: number | null // seconds from the start of the test; negative before the timer ran
+  question: number | null // the question the candidate was on
+  detail: Record<string, unknown>
+}
+
+export interface LogQuestion {
+  position: number
+  section: string
+  difficulty: string | null
+  opened_s: number | null
+  answered_s: number | null
+  time_s: number | null
+  result: 'correct' | 'wrong' | 'skipped' | 'unanswered'
+  /** Set when an AI wrote this question for this candidate, such as "ollama:qwen2.5:7b". */
+  written_by?: string | null
+}
+
+export interface ActionLog {
+  candidate_id: string
+  status: SessionStatus
+  started_at: string | null
+  finished_at: string | null
+  total_events: number
+  truncated: boolean // more events were stored than are listed
+  heartbeats: number
+  events: LogEvent[]
+  questions: LogQuestion[]
+}
+
 /** Where a moment sits in the saved video, or null when nothing was recorded at that moment. */
 export interface VideoSeek {
   segment: number
@@ -123,7 +176,6 @@ export interface CandidateDetail {
   rule_breakdown: BreakdownLine[]
   score: number
   pace_s_per_q: number
-  history_source: 'cytonn' | 'synthetic' | 'none'
   flags: FlagItem[]
   vs_sitting: VsSitting
   innocent_signals: InnocentSignal[]
@@ -133,6 +185,7 @@ export interface CandidateDetail {
   complaints: ComplaintItem[]
   decisions: PastDecision[]
   shortlisted: boolean
+  video_available: boolean // false: not flagged and not shortlisted, so the recording stays closed
   segments: VideoSegment[]
   video_deleted_at: string | null
   video_purge_on: string | null

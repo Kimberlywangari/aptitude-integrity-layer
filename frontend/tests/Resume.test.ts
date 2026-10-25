@@ -50,11 +50,28 @@ describe('Resume (finishing the upload of a test that is over)', () => {
     expect(w.text()).toContain('uploading page')
   })
 
-  it('does it by itself from an invitation link', async () => {
+  it('fills in the code from an invitation link, then sends it with the email', async () => {
     vi.mocked(api).mockResolvedValue(resumed)
     const w = await renderPage('/resume?t=ABCD-EFGH')
     await flushPromises()
-    expect(sentToken()).toBe('ABCDEFGH')
+    expect(vi.mocked(api)).not.toHaveBeenCalled()
+    await w.get('#email').setValue('ada@example.org')
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    const sent = (vi.mocked(api).mock.calls[0][1] as { body: { token: string; email: string } }).body
+    expect(sent).toEqual({ token: 'ABCDEFGH', email: 'ada@example.org' })
+    expect(w.text()).toContain('uploading page')
+  })
+
+  it('also takes an email and a password, with no code', async () => {
+    vi.mocked(api).mockResolvedValue(resumed)
+    const w = await renderPage()
+    await w.get('#email').setValue('ada@example.org')
+    await w.get('#password').setValue('her password')
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    const sent = (vi.mocked(api).mock.calls[0][1] as { body: Record<string, unknown> }).body
+    expect(sent).toEqual({ email: 'ada@example.org', password: 'her password' })
     expect(w.text()).toContain('uploading page')
   })
 
@@ -84,7 +101,7 @@ describe('Resume (finishing the upload of a test that is over)', () => {
     vi.mocked(api).mockRejectedValue(new ApiError(429, 'too_many_attempts', { retry_after_s: 90 }))
     const w = await renderPage()
     await submit(w, 'WRONG')
-    expect(w.get('[role=alert]').text()).toMatch(/Too many wrong codes\. Please wait .*minute/)
+    expect(w.get('[role=alert]').text()).toMatch(/Too many wrong tries\. Please wait .*minute/)
   })
 
   it('falls back to a plain message for anything unexpected, and allows another try', async () => {

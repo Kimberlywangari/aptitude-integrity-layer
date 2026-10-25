@@ -1,31 +1,50 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Banner from '../components/Banner.vue'
 import BaseButton from '../components/BaseButton.vue'
 import BrandMark from '../components/BrandMark.vue'
 import { api, ApiError } from '../lib/api'
 import type { SessionStatus, StartResponse } from '../lib/api'
-import { normaliseInviteCode } from '../lib/inviteCode'
+import { formatOpensAt } from '../lib/format'
 import { resumeUpload } from '../lib/resume'
 import { saveSession } from '../lib/session'
+import { canSignIn, MIN_PASSWORD_CHARS, signInBody } from '../lib/signIn'
+import type { SignIn } from '../lib/signIn'
 import { waitPhrase } from '../lib/wait'
-import { HELP_CONTACT, START_ERRORS, START_FALLBACK_ERROR } from './copy'
+import {
+  FORGOT_PASSWORD,
+  HELP_CONTACT,
+  notOpenYet,
+  PASSWORDS_DIFFER,
+  START_ERRORS,
+  START_FALLBACK_ERROR,
+  START_LEAD,
+  START_LEAD_CREATING,
+} from './copy'
+import SignInFields from './SignInFields.vue'
 
 const router = useRouter()
 const route = useRoute()
 
 const fromLink = typeof route.query.t === 'string' ? route.query.t : ''
 const token = ref(fromLink)
+const email = ref('')
+const password = ref('')
+const repeat = ref('')
+const creating = ref(false) // the code and email were right and no password exists yet: choose one
 const error = ref<string | null>(null)
 const busy = ref(false)
-const input = ref<HTMLInputElement | null>(null)
+const fields = ref<InstanceType<typeof SignInFields> | null>(null)
 
 function messageFor(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.code === 'too_many_attempts') {
       const seconds = typeof e.body.retry_after_s === 'number' ? e.body.retry_after_s : 60
-      return `Too many wrong codes. Please wait ${waitPhrase(seconds)} and try again.`
+      return `Too many wrong tries. Please wait ${waitPhrase(seconds)} and try again.`
+    }
+    if (e.code === 'sitting_not_open_yet' && typeof e.body.opens_at === 'string') {
+      return notOpenYet(formatOpensAt(e.body.opens_at))
     }
     if (START_ERRORS[e.code]) return START_ERRORS[e.code]
   }
@@ -38,21 +57,46 @@ function routeFor(status: SessionStatus): string {
   return '/precheck' // permissions and device check first; it hands over to /integrity
 }
 
-async function start(invitation: string) {
-  busy.value = true
+function credentials(): SignIn {
+  return creating.value
+    ? { token: token.value, email: email.value, password: '', newPassword: password.value }
+    : { token: token.value, email: email.value, password: password.value }
+}
+
+async function start() {
   error.value = null
+  if (creating.value) {
+    // checked here as well as on the server, so a typo does not cost a round trip
+    if (password.value.length < MIN_PASSWORD_CHARS) {
+      error.value = START_ERRORS.password_too_short
+      return
+    }
+    if (password.value !== repeat.value) {
+      error.value = PASSWORDS_DIFFER
+      return
+    }
+  }
+  const signIn = credentials()
+  busy.value = true
   try {
     const body = await api<StartResponse>('/api/session/start', {
       method: 'POST',
-      // Case, dashes and spaces are forgiven (lib/inviteCode.ts).
-      body: { token: normaliseInviteCode(invitation) },
+      body: signInBody(signIn),
     })
     saveSession(body.session_id, body.access_token)
     await router.replace(routeFor(body.status))
   } catch (e) {
+    if (e instanceof ApiError && e.code === 'password_needed') {
+      // not a mistake: the code and email are right, and it is their first time
+      creating.value = true
+      password.value = ''
+      repeat.value = ''
+      busy.value = false
+      return
+    }
     // Once the sitting has closed, a code can no longer start anything. If the candidate already
-    // took the test and part of the recording is still unsent, the same code finishes the upload.
-    if (e instanceof ApiError && e.code === 'no_open_sitting' && (await resumedUpload(invitation))) {
+    // took the test and part of the recording is still unsent, the same sign-in finishes the upload.
+    if (e instanceof ApiError && e.code === 'no_open_sitting' && (await resumedUpload(signIn))) {
       return
     }
     error.value = messageFor(e)
@@ -60,9 +104,9 @@ async function start(invitation: string) {
   }
 }
 
-async function resumedUpload(invitation: string): Promise<boolean> {
+async function resumedUpload(signIn: SignIn): Promise<boolean> {
   try {
-    await resumeUpload(invitation)
+    await resumeUpload({ ...signIn, newPassword: undefined })
     await router.replace('/uploading')
     return true
   } catch {
@@ -70,39 +114,38 @@ async function resumedUpload(invitation: string): Promise<boolean> {
   }
 }
 
-// An invitation link carries the code as ?t=..., so the candidate does not have to type it.
+// An invitation link carries the code as ?t=..., so the candidate only has to type their email and
+// password. The test never starts by itself: the sign-in is checked as a whole.
 onMounted(() => {
-  if (fromLink) void start(fromLink)
-  else input.value?.focus()
+  if (fromLink) fields.value?.focusEmail()
+  else fields.value?.focusCode()
 })
 
-function onSubmit() {
-  if (token.value.trim()) void start(token.value)
-}
+const ready = computed(() =>
+  creating.value
+    ? password.value !== '' && repeat.value !== ''
+    : canSignIn({ token: token.value, email: email.value, password: password.value }),
+)
 </script>
 
 <template>
   <main class="page narrow start">
     <BrandMark />
-    <h1>Enter your invitation code</h1>
-    <p class="lead">You will find it in the message that invited you.</p>
+    <h1>Start your test</h1>
+    <p class="lead">{{ creating ? START_LEAD_CREATING : START_LEAD }}</p>
 
-    <form class="card rise" @submit.prevent="onSubmit">
-      <label class="field" for="invitation">Invitation code</label>
-      <input
-        id="invitation"
-        ref="input"
-        v-model="token"
-        class="code"
-        autocomplete="off"
-        autocapitalize="characters"
-        autocorrect="off"
-        spellcheck="false"
-        placeholder="XXXX-XXXX"
-        :disabled="busy"
+    <form class="card rise" @submit.prevent="start()">
+      <SignInFields
+        ref="fields"
+        v-model:token="token"
+        v-model:email="email"
+        v-model:password="password"
+        v-model:repeat="repeat"
+        :creating="creating"
+        :busy="busy"
       />
-      <BaseButton type="submit" size="lg" block :busy="busy" :disabled="!token.trim()">
-        {{ busy ? 'Starting...' : 'Continue' }}
+      <BaseButton type="submit" size="lg" block :busy="busy" :disabled="!ready">
+        {{ creating ? 'Create password and continue' : busy ? 'Starting...' : 'Continue' }}
       </BaseButton>
     </form>
 
@@ -110,21 +153,6 @@ function onSubmit() {
       <p>{{ error }}</p>
       <p class="muted">{{ HELP_CONTACT }}</p>
     </Banner>
+    <p v-else-if="!creating" class="muted">{{ FORGOT_PASSWORD }}</p>
   </main>
 </template>
-
-<style scoped>
-.code {
-  margin-bottom: 1rem;
-  font-family: var(--font-mono);
-  font-size: max(16px, 1.35rem);
-  letter-spacing: 0.12em;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.code::placeholder {
-  color: var(--field-line);
-  text-transform: none;
-}
-</style>

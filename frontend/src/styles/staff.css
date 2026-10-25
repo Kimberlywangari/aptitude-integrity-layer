@@ -37,27 +37,13 @@
   background: var(--side-deep);
 }
 
-.rail-mark {
-  display: grid;
+.rail-logo {
   flex: none;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 3px var(--side-deep),
-    0 0 0 5px var(--lime);
-}
-
-.rail-mark svg {
-  width: 1.1rem;
-  height: 1.1rem;
-  fill: none;
-  stroke: var(--on-accent);
-  stroke-width: 2.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: auto;
+  height: 3rem;
+  padding: 0;
+  background: var(--logo-backing);
+  border-radius: 0.4rem;
 }
 
 .staff-brand strong {
@@ -496,6 +482,11 @@
   }
 }
 
+/* A row that opens something: the whole row is the target, the link inside it is the keyboard way in */
+.table tbody tr.clickable {
+  cursor: pointer;
+}
+
 .list {
   padding: 0;
   margin: 0;
@@ -726,14 +717,14 @@ select {
 }
 
 .video-card video,
-.video-placeholder {
+.no-video {
   display: block;
   width: 100%;
   min-height: 11rem;
   background: var(--video-bg);
 }
 
-.video-placeholder {
+.no-video {
   display: grid;
   place-items: center;
   padding: 1.25rem;
@@ -998,6 +989,95 @@ details.more > summary {
   padding: 0.2rem 0.4rem;
   margin: 0;
   text-align: center;
+}
+
+/* Where a sitting's questions come from: two plain choices, each with a line about what it means. */
+.mode .choice {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.6rem 0;
+  cursor: pointer;
+}
+
+.mode .choice input {
+  margin-top: 0.3rem;
+}
+
+.mode .choice .muted {
+  display: block;
+}
+
+.section-rows .muted.block {
+  display: block;
+  max-width: 46rem;
+  font-size: 0.88rem;
+}
+
+/* "Try the writer": one real question, shown the way a candidate would see it, with its key. */
+.sample {
+  padding: 1rem 0 0.25rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sample h3 {
+  margin: 0 0 0.25rem;
+}
+
+.sample-card {
+  padding: 1rem 1.1rem;
+  margin-top: 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.sample-text {
+  margin: 0 0 0.75rem;
+  white-space: pre-line;
+}
+
+.sample-options {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  list-style: none;
+}
+
+.sample-options li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.sample-options li.right {
+  background: var(--ok-tint);
+  border-color: var(--ok);
+}
+
+.sample-options .letter {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.bad-text {
+  color: var(--danger);
+}
+
+/* Marks a question an AI wrote for this candidate, in the reviewer's question table. */
+.ai-tag {
+  padding: 0.05rem 0.45rem;
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--text);
+  background: var(--chip-ai);
+  border-radius: 999px;
 }
 
 .tokenbox {

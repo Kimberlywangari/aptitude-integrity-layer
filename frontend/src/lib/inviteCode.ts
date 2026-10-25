@@ -24,6 +24,10 @@ export function normaliseInviteCode(input: string): string {
   return SHORT_CODE.test(cleaned) ? cleaned : trimmed
 }
 
+/** The address a candidate opens to start with this code. */
+export const inviteLink = (code: string) =>
+  `${window.location.origin}/?t=${formatInviteCode(code)}`
+
 /** XXXX-XXXX for a short code; anything else is returned as it is. */
 export function formatInviteCode(code: string): string {
   const half = INVITE_LENGTH / 2

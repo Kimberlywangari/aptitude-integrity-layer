@@ -33,7 +33,7 @@ describe('api() token choice', () => {
   })
 })
 
-// Every screen talks to the real server. The fixtures in src/lib/mock are for the screen tests.
+// Every screen talks to the real server; the screen-test fixtures live in tests/mock.
 describe('no fixtures in the app', () => {
   const fetchMock = vi.fn()
 

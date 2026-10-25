@@ -1,7 +1,7 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetMock, setMockLatency } from '../src/lib/mock'
+import { resetMock, setMockLatency } from './mock'
 import { clearStaff, saveStaff } from '../src/lib/staffSession'
 import DecisionForm from '../src/reviewer/DecisionForm.vue'
 

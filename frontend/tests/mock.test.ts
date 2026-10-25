@@ -7,7 +7,7 @@ import type {
   InvitesResponse,
   QuestionListResponse,
 } from '../src/lib/adminTypes'
-import { mockApi, resetMock, setMockLatency } from '../src/lib/mock'
+import { mockApi, resetMock, setMockLatency } from './mock'
 import { clearStaff, saveStaff } from '../src/lib/staffSession'
 import type { CandidateDetail, OverviewResponse, QueueResponse } from '../src/lib/reviewTypes'
 

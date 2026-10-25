@@ -7,6 +7,7 @@ import BaseButton from '../components/BaseButton.vue'
 import { api, ApiError } from '../lib/api'
 import { formatDateTime, formatElapsed, humaniseKind, ordinal } from '../lib/format'
 import type {
+  ActionLog,
   CandidateDetail as Detail,
   InnocentSignal,
   VideoSeek,
@@ -17,12 +18,18 @@ import {
   AI_LABEL,
   CONTEXT_ONLY,
   DETAIL_LABELS,
+  EVENT_LABELS,
   FACT_CHECKED,
   FLAG_LABELS,
   INNOCENT_LABELS,
+  LOG_DETAIL_LABELS,
+  LOG_NOTE,
   OUTCOME_LABELS,
+  RESULT_LABELS,
   RETENTION_NOTE,
   RULES_LABEL,
+  STATUS_LABELS,
+  VIDEO_CLOSED,
   orderBasis,
 } from './copy'
 import DecisionForm from './DecisionForm.vue'
@@ -40,17 +47,30 @@ const { data, isPending, isError, error } = useQuery({
   queryFn: () => api<Detail>(`/api/review/candidates/${encodeURIComponent(props.id)}`),
 })
 
+// Set when the shortlist was changed after a result email had already gone to this candidate.
+const alreadyEmailed = ref(false)
 const { mutate: toggleShortlist, isPending: shortlisting } = useMutation({
   mutationFn: () =>
-    api<{ shortlisted: boolean }>(`/api/review/candidates/${encodeURIComponent(props.id)}/shortlist`, {
-      method: 'POST',
-    }),
-  onSuccess: async () => {
+    api<{ shortlisted: boolean; result_email_sent?: boolean }>(
+      `/api/review/candidates/${encodeURIComponent(props.id)}/shortlist`,
+      { method: 'POST' },
+    ),
+  onSuccess: async (result) => {
+    alreadyEmailed.value = result.result_email_sent === true
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['candidate', props.id] }),
       queryClient.invalidateQueries({ queryKey: ['queue'] }),
+      queryClient.invalidateQueries({ queryKey: ['candidates'] }),
     ])
   },
+})
+
+// The action log is the biggest thing on the page, so it is fetched only when someone asks for it.
+const logOpen = ref(false)
+const { data: log, isPending: logPending, isError: logError } = useQuery({
+  queryKey: ['candidate-log', computed(() => props.id)],
+  queryFn: () => api<ActionLog>(`/api/review/candidates/${encodeURIComponent(props.id)}/events`),
+  enabled: logOpen,
 })
 
 function jump(seek: VideoSeek | null, label: string, flagId?: string) {
@@ -65,7 +85,10 @@ function jump(seek: VideoSeek | null, label: string, flagId?: string) {
   }).catch(() => undefined)
 }
 
-function detailText(detail: Record<string, unknown>): string {
+function detailText(
+  detail: Record<string, unknown>,
+  labels: Record<string, string> = DETAIL_LABELS,
+): string {
   return Object.entries(detail)
     .map(([key, value]) => {
       const shown = Array.isArray(value)
@@ -75,10 +98,16 @@ function detailText(detail: Record<string, unknown>): string {
             ? 'yes'
             : 'no'
           : String(value)
-      return `${DETAIL_LABELS[key] ?? humaniseKind(key)}: ${shown}`
+      return `${labels[key] ?? humaniseKind(key)}: ${shown}`
     })
     .join(' · ')
 }
+
+const eventLabel = (type: string) => EVENT_LABELS[type] ?? humaniseKind(type)
+const seconds = (value: number | null) => (value === null ? '-' : `${value} s`)
+/** Before the timer ran (the page loading, the devices being reported) there is no m:ss to show. */
+const eventTime = (at: number | null) =>
+  at === null ? '-' : at < 0 ? 'Before start' : formatElapsed(at)
 
 function cohortLines(vs: VsSitting): string[] {
   if (vs.cohort_skipped) {
@@ -138,7 +167,7 @@ function jumpToMark(id: string) {
 
   <template v-else-if="isError">
     <Banner tone="bad" role="alert">
-      <p>{{ notFound ? 'That candidate is not in the review queue.' : 'Could not load the candidate.' }}</p>
+      <p>{{ notFound ? 'That candidate was not found.' : 'Could not load the candidate.' }}</p>
     </Banner>
     <p><RouterLink to="/review">Back to the queue</RouterLink></p>
   </template>
@@ -165,6 +194,13 @@ function jumpToMark(id: string) {
         </div>
       </div>
 
+      <Banner v-if="alreadyEmailed" tone="warn" role="status">
+        <p>
+          This candidate has already been sent their result email, so changing the shortlist now does not
+          change what they were told. Tell the admin if that email was wrong.
+        </p>
+      </Banner>
+
       <div class="ai-card">
         <h3>{{ aiShown ? 'What the AI makes of the flags' : 'What the rules found' }}</h3>
         <p>{{ data.explanation.text }}</p>
@@ -179,12 +215,17 @@ function jumpToMark(id: string) {
     </section>
 
     <VideoPlayer
+      v-if="data.video_available"
       :segments="data.segments"
       :target="target"
       :deleted-at="data.video_deleted_at"
       :marks="marks"
       @mark="jumpToMark"
     />
+    <section v-else class="panel">
+      <h2>Video</h2>
+      <p class="muted">{{ VIDEO_CLOSED }}</p>
+    </section>
 
     <section class="panel">
       <h2>Flags</h2>
@@ -243,6 +284,92 @@ function jumpToMark(id: string) {
       </div>
     </section>
 
+    <section class="panel">
+      <div class="row-between">
+        <h2>Action log</h2>
+        <BaseButton
+          variant="secondary"
+          :aria-expanded="logOpen"
+          aria-controls="action-log"
+          @click="logOpen = !logOpen"
+        >
+          {{ logOpen ? 'Hide the action log' : 'Show the action log' }}
+        </BaseButton>
+      </div>
+      <p class="muted">{{ LOG_NOTE }}</p>
+
+      <div v-if="logOpen" id="action-log">
+        <p v-if="logPending" role="status">Loading the action log...</p>
+        <Banner v-else-if="logError" tone="bad" role="alert">
+          <p>Could not load the action log.</p>
+        </Banner>
+        <template v-else-if="log">
+          <p class="muted">
+            {{ STATUS_LABELS[log.status] }} · {{ log.total_events }} events ·
+            {{ log.heartbeats }} heartbeats<template v-if="log.started_at"> · started {{ formatDateTime(log.started_at) }}</template>
+          </p>
+          <p v-if="log.truncated" class="muted">
+            Showing the first {{ log.events.length }} of {{ log.total_events }} events.
+          </p>
+
+          <h3 class="context-title">Question by question</h3>
+          <p v-if="log.questions.length === 0" class="muted">There is no paper yet.</p>
+          <div v-else class="table-wrap">
+            <table class="table">
+              <caption class="sr-only">The paper, question by question</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Section</th>
+                  <th scope="col">Level</th>
+                  <th scope="col">Opened</th>
+                  <th scope="col">Time taken</th>
+                  <th scope="col">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="q in log.questions" :key="q.position">
+                  <td>{{ q.position }}</td>
+                  <td>
+                    {{ q.section }}
+                    <span v-if="q.written_by" class="ai-tag" :title="`Written by ${q.written_by}`">AI</span>
+                  </td>
+                  <td>{{ q.difficulty ?? '-' }}</td>
+                  <td>{{ q.opened_s === null ? '-' : formatElapsed(q.opened_s) }}</td>
+                  <td>{{ seconds(q.time_s) }}</td>
+                  <td>{{ RESULT_LABELS[q.result] }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="context-title">Everything the page reported</h3>
+          <p v-if="log.events.length === 0" class="muted">The page has reported nothing yet.</p>
+          <div v-else class="table-wrap log-scroll">
+            <table class="table">
+              <caption class="sr-only">Every event, in order</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">What happened</th>
+                  <th scope="col">Question</th>
+                  <th scope="col">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(e, i) in log.events" :key="i">
+                  <td :title="e.at_s === null ? undefined : `${e.at_s} s`">{{ eventTime(e.at_s) }}</td>
+                  <td>{{ eventLabel(e.type) }}</td>
+                  <td>{{ e.question ?? '-' }}</td>
+                  <td>{{ detailText(e.detail, LOG_DETAIL_LABELS) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+    </section>
+
     <DecisionForm :session-id="data.session_id" :candidate-id="data.candidate_id" />
 
     <section class="panel">
@@ -250,14 +377,6 @@ function jumpToMark(id: string) {
       <ul>
         <li v-for="line in cohortLines(data.vs_sitting)" :key="line">{{ line }}</li>
       </ul>
-      <p v-if="data.history_source === 'synthetic'" class="muted">
-        The per-question history behind the "far faster than past candidates" flag is synthetic
-        sample data, not Cytonn's.
-      </p>
-      <p v-else-if="data.history_source === 'none'" class="muted">
-        There is no past-candidate timing for these questions, so the "far faster than past
-        candidates" flag could not be checked.
-      </p>
     </section>
 
     <section class="panel">
@@ -308,5 +427,16 @@ function jumpToMark(id: string) {
 <style scoped>
 .context-title {
   margin-top: 1rem;
+}
+
+/* A long test is a few hundred lines: scroll them inside the panel, headings kept in view. */
+.log-scroll {
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.log-scroll th {
+  position: sticky;
+  top: 0;
 }
 </style>
