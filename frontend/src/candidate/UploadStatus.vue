@@ -6,6 +6,7 @@ import BaseButton from '../components/BaseButton.vue'
 import BrandMark from '../components/BrandMark.vue'
 import ProgressBar from '../components/ProgressBar.vue'
 import SuccessMark from '../components/SuccessMark.vue'
+import { useFullscreen } from '../composables/useFullscreen'
 import { api } from '../lib/api'
 import type { ManifestResponse } from '../lib/api'
 import { flushEvents, logEvent, startEventLog } from '../lib/eventLog'
@@ -15,6 +16,8 @@ import { onUploadStatus, startUploader, uploadStatus } from '../lib/uploader'
 import type { UploadStatus as LocalUpload } from '../lib/uploader'
 import {
   FINISHED_BODY,
+  FINISHED_LEAVE,
+  FINISHED_LEAVE_BUTTON,
   FINISHED_TITLE,
   UPLOAD_CLOSED,
   UPLOAD_DONE,
@@ -29,6 +32,7 @@ const FAILURES_BEFORE_FINISH = 3
 const STALLED_AFTER_MS = 60_000
 
 const router = useRouter()
+const fullscreen = useFullscreen()
 const sessionId = getSessionId()
 const manifest = ref<ManifestResponse | null>(null)
 const failures = ref(0)
@@ -134,6 +138,14 @@ const percent = computed(() =>
           <p class="lead">{{ FINISHED_BODY }}</p>
         </div>
       </div>
+      <!-- Nothing is offered while the recording is still going up; the page is in full screen until
+           the candidate leaves it, so this goes by itself once they do (Esc or the button). -->
+      <section v-if="fullscreen.active.value" class="card rise leave">
+        <p>{{ FINISHED_LEAVE }}</p>
+        <BaseButton variant="secondary" @click="fullscreen.leave()">
+          {{ FINISHED_LEAVE_BUTTON }}
+        </BaseButton>
+      </section>
     </template>
 
     <template v-else>
@@ -198,5 +210,9 @@ const percent = computed(() =>
 
 .done .lead {
   margin: 0;
+}
+
+.leave {
+  margin-top: 1.25rem;
 }
 </style>
