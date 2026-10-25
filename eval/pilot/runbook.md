@@ -173,15 +173,18 @@ in its volume, so the files they read or write are copied in and out with `docke
    It exits with an error if any chunk is missing or changed. For anyone whose upload is not
    complete, write down who and why. Do not close the sitting early to hide it.
 
-2. **Close the sitting.** It refuses while anyone is still in progress or has not started. A
-   forced close (`--force`) works and is written to the audit log; say in the report if you used it.
+2. **Close the sitting.** It refuses while anyone is still in progress or has not started, except
+   anyone whose time has already run out: they are finished at that moment. A forced close
+   (`--force`) works and is written to the audit log; say in the report if you used it. Closing also
+   works out every candidate's flags, the cohort checks included, so the reviewer app has them at once.
 
    ```powershell
    docker compose exec api python -m scripts.jobs close_sitting --sitting "Pilot 28 Oct"
    ```
 
-3. **Process it, timing every step.** This computes flags (the cohort checks too), joins the
-   video, scans the audio, builds the packets and ranks with Ollama:
+3. **Process it, timing every step.** This computes the flags again (a candidate's own flags are
+   also worked out as they finish), joins the video, scans the audio, builds the packets and ranks
+   with Ollama:
 
    ```powershell
    docker compose exec api python -m scripts.jobs process_sitting --sitting "Pilot 28 Oct" --provider ollama

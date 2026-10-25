@@ -7,15 +7,16 @@ flags the server computed: `backend/tests/integration/test_scripted_scenarios.py
 
 | ID | Action | Expected | Test |
 |---|---|---|---|
-| S1 | Tab out for 40 s to look something up, then answer correctly after a long hold, on 3 questions | `FOCUS_LOSS` x3 and `LONG_HOLD_CORRECT` x3 at weight 4 (3 + 1 for focus lost during it) | `test_tabbing_out_to_look_something_up_is_caught...` |
-| S2 | A very long hold, answered correctly, with no focus loss | `LONG_HOLD_CORRECT` at weight 3 | `test_a_long_hold_on_a_question_answered_correctly...` |
+| S1 | Tab out for 40 s to look something up, then answer correctly after a long hold, on 3 questions | `FOCUS_LOSS` x3 and `LONG_HOLD_CORRECT` x3 at weight 4, `detail.focus_lost_s` 40 | `test_tabbing_out_to_look_something_up_is_caught...` |
+| S2 | A very long hold, answered correctly, with focus on the page the whole time (or away for 2 s or less) | **No flag**: a long hold needs focus lost for more than 2 s | `test_a_long_hold_with_focus_on_the_page...`, `test_a_long_hold_needs_more_than_two_seconds_away` |
 | S3 | Copy the question text | `COPY_ATTEMPT` at weight 3, `detail.length` only; the wording never reaches the table | `test_copying_the_question_is_caught...` |
 | S4 | Cut text | `COPY_ATTEMPT` | `test_cutting_counts_as_copying` |
-| S5 | Go idle for 90 s, then answer 3 or more in a row correctly and fast | `CORRECT_RUN_AFTER_GAP` at weight 2 | `test_going_idle_then_answering_a_run...` |
+| S5 | Go idle for 90 s, then answer 3 or more in a row correctly and fast (under half their usual time each) | `CORRECT_RUN_AFTER_GAP` at weight 2, with `mean_s` and `own_median_s` | `test_going_idle_then_answering_a_run...` |
+| S5b | The same gap, then carry on correctly at their usual pace | **No flag** | `test_a_run_after_a_gap_at_the_candidates_usual_pace_is_not_flagged` |
 | S6 | Lose focus for 3 s (flag) and for 0.5 s (no flag) | `FOCUS_LOSS` for the 3 s only | `test_a_focus_loss_of_a_second_or_more_counts...` |
 | S7 | Heartbeats stop for 40 s or more with no drop and no reload | `LOGGING_PROBLEM` at weight 0, its own lane | `test_heartbeats_stopping_for_a_minute...` |
 | S8 | Events sent late after being offline | Keep the moment they happened, inside the right question | `test_events_that_arrive_late_keep_the_moment...` |
-| S9 | Several correct answers far quicker than the question's usual quick time | `FAST_CORRECT_VS_HISTORY`, only on questions with 30 or more past candidates, labelled `cytonn` or `synthetic` | `backend/tests/unit/test_flag_history.py` |
+| S9 | (removed 23 Oct 2026) answers far quicker than past candidates' | No rule compares a candidate with past candidates any more | n/a |
 | S10 | A pace or spread far from the rest of a closed sitting of 8 or more | `PACE_OUTLIER` / `SPREAD_OUTLIER` | `backend/tests/unit/test_flag_rules.py` |
 
 ## Must never raise a flag

@@ -57,12 +57,38 @@ cd frontend; npm run e2e    # a real browser, whole journey; needs a stack, E2E_
 
 ## Hard rules
 
-- No candidate names in packets: the candidate ID only.
+- No candidate names in packets: the candidate ID only. A candidate's name and email are stored for
+  the invitation and result emails and the admin's list, and nowhere else may they appear: not in
+  packets, model prompts, review screens, events, flags or audit text. `test_privacy_of_names.py`
+  guards it; keep it passing and extend it when a new screen or prompt is added.
 - Copy and cut events store the length only, never the text.
 - The AI never gives a verdict. It ranks and explains; it sets no threshold and sets no one aside.
 - Time always goes through the injected clock (`backend/app/clock.py`), never `datetime.now()`.
 
 The full list is in master plan section 1.
+
+## Candidate sign-in
+
+- A candidate with an email signs in with the code and email, then chooses a password at their first
+  sign-in (`services/login.py`); after that, email and password. Candidates made without an email use
+  the code alone. Passwords are bcrypt hashes (`core/passwords.py`), never logged, never in an error
+  body, audit text, event or email: `test_candidate_passwords.py` asserts it.
+- Every way of being wrong at sign-in returns the same `invalid_invitation` after the same bcrypt
+  work. Keep it that way; do not add a message that says which part was wrong.
+- A running test is not taken over from a second device unless its heartbeat has been silent for
+  `TAKEOVER_QUIET_S` (60 s).
+- Tests pin the mail settings to empty in `tests/conftest.py`, and a scratch API for browser tests must
+  be started with `SMTP_HOST=127.0.0.1 SMTP_PORT=1` (see README): never let automated runs send mail.
+
+## Test timing and flags
+
+- Every question gets 105 s (`QUESTION_SECONDS` in `backend/app/services/test_flow.py`); a sitting's
+  time is its question count times that, set by the server. Tests that move the fake clock past 105 s
+  inside one question will see it close.
+- `SCREENSHOT_KEY` (weight 2.0) comes from the `screenshot_attempt` event, which carries only a key
+  combination from a fixed list. Do not describe it as detecting a screenshot: the page sees keys.
+- Tests pin `precheck_gate`, `ai_provider` and `chunk_fail_rate` in `tests/conftest.py`, so a
+  developer's own `.env` does not change them.
 
 ## Optimisation
 
