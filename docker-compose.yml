@@ -10,7 +10,9 @@ x-backend: &backend
     VIDEO_ROOT: /data/video
     # Everything below is read from the .env at the repository root when set there.
     ENV: ${ENV:-development}
-    SESSION_SECRET: ${SESSION_SECRET:-change-me-dev-only}
+    # Empty: the API makes a random one on each start (fine for development; production uses
+    # docker-compose.prod.yml, which requires a real one).
+    SESSION_SECRET: ${SESSION_SECRET:-}
     PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
     PRECHECK_GATE: ${PRECHECK_GATE:-off}
     RETENTION_DAYS: ${RETENTION_DAYS:-30}

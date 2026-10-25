@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Dependencies first, so a code change does not reinstall them.
 COPY pyproject.toml ./
-RUN pip install .
+RUN pip install ".[claude]"
 
 COPY alembic.ini ./
 COPY migrations ./migrations

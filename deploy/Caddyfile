@@ -1,0 +1,16 @@
+# The HTTPS front door (the camera only works over HTTPS). SITE_ADDRESS is the host name candidates
+# open. Caddy gets and renews its certificate by itself when that name is public and ports 80 and
+# 443 reach this machine. For a certificate from Cytonn's own IT, mount it and replace the first
+# line inside the block with: tls /certs/site.pem /certs/site.key
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+
+	# One address in, the same single origin the page and the API already expect. The reviewer's
+	# video and the question writer can run for minutes, so nothing here cuts them short.
+	reverse_proxy web:80 {
+		transport http {
+			response_header_timeout 15m
+		}
+	}
+}
