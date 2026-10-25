@@ -1,6 +1,8 @@
 """A name and an email on every invitation: the pasted list, the invitation emails, the login that
 asks for the email as well as the code, the result emails, and the outbox that sends them."""
 
+from contextlib import contextmanager
+
 import pytest
 from sqlalchemy import func, select
 
@@ -469,3 +471,28 @@ def test_without_an_email_a_finished_candidate_is_counted_not_written_to(
     body = plan(client, admin_headers, sitting)
     assert (body["passed"], body["without_email"]) == (0, 1)
     assert results.result_email_exists(db, anonymous) is False
+
+
+class HoldingMailer(FakeMailer):
+    """A mailer that can keep one connection open, and counts how often it was asked to."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.opened = self.closed = 0
+
+    @contextmanager
+    def keep_open(self):
+        self.opened += 1
+        try:
+            yield self
+        finally:
+            self.closed += 1
+
+
+def test_a_whole_batch_goes_over_one_held_connection(client, db, clock, sitting, admin_headers):
+    text = "\n".join(f"Person {n}, p{n}@example.org" for n in range(1, 6))
+    paste(client, admin_headers, sitting, text)
+    holding = HoldingMailer()
+    report = mail.send_queued(db, clock, holding)
+    assert (report.sent, holding.opened, holding.closed) == (5, 1, 1)
+    assert len(holding.sent) == 5
