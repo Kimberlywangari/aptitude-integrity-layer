@@ -491,7 +491,9 @@ def _offset(moment: datetime | None, origin: datetime) -> float | None:
     return None if moment is None else round((moment - origin).total_seconds(), 1)
 
 
-def action_log(db: Session, candidate_id: str, sitting_id: int | None) -> dict[str, Any]:
+def action_log(
+    db: Session, candidate_id: str, sitting_id: int | None, cfg: FlagConfig = DEFAULTS
+) -> dict[str, Any]:
     """Everything the page reported for one candidate, in server time, and their paper question by
     question. It is the raw record the flags were worked out from, so a reviewer (or whoever is
     checking the rules) can see what a flag was based on. Copy and cut events hold a length, never
@@ -528,6 +530,15 @@ def action_log(db: Session, candidate_id: str, sitting_id: int | None) -> dict[s
         .join(Question, Question.id == SessionQuestion.question_id)
         .where(SessionQuestion.session_id == session.id)
         .order_by(SessionQuestion.position)
+    ).all()
+    sitting = db.get(Sitting, session.sitting_id)
+    minimum = cfg.cohort_min_candidates
+    others = evidence.others_times(
+        db,
+        session.sitting_id,
+        session.id,
+        [sq.question_id for sq, *_ in paper],
+        sorted({section for _, section, *_ in paper}),
     )
     for sq, section, difficulty, written_by in paper:
         if sq.skipped:
@@ -541,6 +552,9 @@ def action_log(db: Session, candidate_id: str, sitting_id: int | None) -> dict[s
             if sq.opened_at is not None and sq.answered_at is not None
             else None
         )
+        median, basis, based_on = evidence.compare_question(
+            others, sq.question_id, section, minimum
+        )
         questions.append(
             {
                 "position": sq.position,
@@ -551,6 +565,9 @@ def action_log(db: Session, candidate_id: str, sitting_id: int | None) -> dict[s
                 "time_s": taken,
                 "result": result,
                 "written_by": written_by,
+                "sitting_median_s": median,
+                "median_of": basis,
+                "median_n": based_on,
             }
         )
 
@@ -567,6 +584,17 @@ def action_log(db: Session, candidate_id: str, sitting_id: int | None) -> dict[s
         "heartbeats": heartbeats or 0,
         "events": events,
         "questions": questions,
+        "timing": {
+            "total_s": (
+                round((session.finished_at - session.started_at).total_seconds(), 1)
+                if session.started_at and session.finished_at
+                else None
+            ),
+            "sitting_median_total_s": evidence.median_of(others.totals, minimum),
+            "others": len(others.totals),
+            "min_others": minimum,
+            "same_questions": sitting is not None and sitting.question_mode != "ai",
+        },
     }
 
 

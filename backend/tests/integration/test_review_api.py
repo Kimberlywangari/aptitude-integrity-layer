@@ -300,8 +300,8 @@ def test_the_action_log_has_the_paper_question_by_question(client, sim, staff):
         assert q["section"] in {"numerical", "verbal", "logical"}
         assert set(q) == {
             "position", "section", "difficulty", "opened_s", "answered_s", "time_s", "result",
-            "written_by",
-        }  # no question text, no options
+            "written_by", "sitting_median_s", "median_of", "median_n",
+        }  # no question text, no options: the last three are numbers about the sitting
         assert q["written_by"] is None  # these came from the bank, not from an AI
         if q["time_s"] is not None:
             assert q["time_s"] == pytest.approx(q["answered_s"] - q["opened_s"], abs=0.2)

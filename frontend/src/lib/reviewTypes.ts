@@ -76,6 +76,21 @@ export interface LogQuestion {
   result: 'correct' | 'wrong' | 'skipped' | 'unanswered'
   /** Set when an AI wrote this question for this candidate, such as "ollama:qwen2.5:7b". */
   written_by?: string | null
+  /** How long the rest of the sitting took, as context. Null until enough others have finished. */
+  sitting_median_s?: number | null
+  /** What the median is of: this very question, or (when too few answered it) its section. */
+  median_of?: 'question' | 'section' | null
+  median_n?: number
+}
+
+/** The whole test's time against the sitting. Evidence for a person to weigh; it raises no flag. */
+export interface Timing {
+  total_s: number | null
+  sitting_median_total_s: number | null
+  others: number
+  min_others: number
+  /** False when every candidate has different questions, so each is compared with its section. */
+  same_questions: boolean
 }
 
 export interface ActionLog {
@@ -88,6 +103,7 @@ export interface ActionLog {
   heartbeats: number
   events: LogEvent[]
   questions: LogQuestion[]
+  timing: Timing
 }
 
 /** Where a moment sits in the saved video, or null when nothing was recorded at that moment. */

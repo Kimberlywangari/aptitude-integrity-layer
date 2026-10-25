@@ -217,6 +217,22 @@ class LogQuestion(BaseModel):
     result: Literal["correct", "wrong", "skipped", "unanswered"]
     # Set when an AI wrote this question for this candidate, such as "ollama:qwen2.5:7b"
     written_by: str | None = None
+    # How long everyone else took, as context for the time above and never a flag by itself. The
+    # same question when enough others answered it, else the same section, else empty.
+    sitting_median_s: float | None = None
+    median_of: Literal["question", "section"] | None = None
+    median_n: int = 0  # how many answers the median is made of
+
+
+class Timing(BaseModel):
+    """The whole test's time against the sitting. Evidence for a person to weigh, nothing more."""
+
+    total_s: float | None
+    sitting_median_total_s: float | None  # None while fewer than `min_others` others finished
+    others: int
+    min_others: int
+    # False in a sitting whose questions are written for each candidate: no two share a question
+    same_questions: bool
 
 
 class ActionLog(BaseModel):
@@ -229,6 +245,7 @@ class ActionLog(BaseModel):
     heartbeats: int
     events: list[LogEvent]
     questions: list[LogQuestion]
+    timing: Timing
 
 
 class DecisionRequest(BaseModel):

@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AudioSilence, Event, SessionQuestion, TestSession
+from app.models import AudioSilence, Event, Question, SessionQuestion, TestSession
 from app.services.flags import rules
 from app.services.flags.config import DEFAULTS, FlagConfig
 
@@ -102,6 +102,90 @@ def vs_sitting(
         own_pace,
         own_score,
     )
+
+
+# ------------------------------------------------------------------------- time against the sitting
+
+
+@dataclass
+class OthersTimes:
+    """How long everyone else in the sitting took, for the questions and sections of one paper."""
+
+    by_question: dict[str, list[float]] = field(default_factory=dict)
+    by_section: dict[str, list[float]] = field(default_factory=dict)
+    totals: list[float] = field(default_factory=list)  # whole-test time of each other finisher
+
+
+def others_times(
+    db: Session, sitting_id: int, session_id: str, question_ids: list[str], sections: list[str]
+) -> OthersTimes:
+    """The answer times of every other finished candidate in the sitting, and their whole-test
+    times. A skipped or timed-out question has no answer time and is left out, as everywhere else.
+    Two queries however big the sitting is."""
+    found = OthersTimes()
+    wanted = set(question_ids)
+    rows = db.execute(
+        select(
+            SessionQuestion.question_id,
+            Question.section,
+            SessionQuestion.opened_at,
+            SessionQuestion.answered_at,
+        )
+        .join(TestSession, TestSession.id == SessionQuestion.session_id)
+        .join(Question, Question.id == SessionQuestion.question_id)
+        .where(
+            TestSession.sitting_id == sitting_id,
+            TestSession.status == "finished",
+            TestSession.id != session_id,
+            SessionQuestion.skipped.is_(False),
+            SessionQuestion.opened_at.is_not(None),
+            SessionQuestion.answered_at.is_not(None),
+            Question.section.in_(sections),
+        )
+    )
+    for question_id, section, opened, answered in rows:
+        took = (answered - opened).total_seconds()
+        found.by_section.setdefault(section, []).append(took)
+        if question_id in wanted:
+            found.by_question.setdefault(question_id, []).append(took)
+    totals = db.execute(
+        select(TestSession.started_at, TestSession.finished_at).where(
+            TestSession.sitting_id == sitting_id,
+            TestSession.status == "finished",
+            TestSession.id != session_id,
+            TestSession.started_at.is_not(None),
+            TestSession.finished_at.is_not(None),
+        )
+    )
+    found.totals = [(end - start).total_seconds() for start, end in totals]
+    return found
+
+
+def median_of(values: list[float], minimum: int) -> float | None:
+    """The median, or None when too few people took part for it to mean anything."""
+    return round(statistics.median(values), 1) if len(values) >= minimum else None
+
+
+def compare_question(
+    others: OthersTimes, question_id: str, section: str, minimum: int
+) -> tuple[float | None, str | None, int]:
+    """(sitting median, what it is the median of, how many answers it is based on) for one
+    question. The same question when enough others answered it; otherwise the same section;
+    otherwise nothing. In a sitting whose questions are written for each candidate no two papers
+    share a question, so the section is all there is to compare with.
+
+    Nothing is compared until `minimum` other candidates have finished: a section holds several
+    answers from each person, so counting answers alone would let a handful of people look like a
+    crowd."""
+    if len(others.totals) < minimum:
+        return None, None, 0
+    same = others.by_question.get(question_id, [])
+    if (median := median_of(same, minimum)) is not None:
+        return median, "question", len(same)
+    near = others.by_section.get(section, [])
+    if (median := median_of(near, minimum)) is not None:
+        return median, "section", len(near)
+    return None, None, 0
 
 
 # ------------------------------------------------------------------------------------ signals
