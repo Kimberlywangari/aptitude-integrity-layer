@@ -30,6 +30,8 @@ class TestSession(Base):
         UniqueConstraint("candidate_id", "sitting_id"),
         CheckConstraint("status in ('created', 'in_progress', 'finished')", name="status"),
         CheckConstraint("paper_status in ('pending', 'ready', 'failed')", name="paper_status"),
+        CheckConstraint("result in ('pass', 'fail')", name="result"),
+        CheckConstraint("result_basis in ('score', 'review')", name="result_basis"),
         # the queue, the cohort checks and the sitting counts all look a sitting's sessions up
         Index("ix_sessions_sitting_id", "sitting_id"),
     )
@@ -60,6 +62,15 @@ class TestSession(Base):
     recording_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     self_report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     shortlisted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # What a person decided (or the pass-mark rule, for a low score): `pass` or `fail`, on what
+    # basis, the one plain sentence the candidate is told, who did it (None: the rule) and when.
+    # `appeal_at` is set by an admin when a candidate who failed writes to ask for a second look.
+    result: Mapped[str | None] = mapped_column(String(4))
+    result_basis: Mapped[str | None] = mapped_column(String(6))
+    result_reason: Mapped[str | None] = mapped_column(String(300))
+    result_by: Mapped[int | None] = mapped_column(ForeignKey("reviewers.id", ondelete="SET NULL"))
+    result_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    appeal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     video_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     access_token_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     # Issued by POST /api/session/resume after the test is over. It opens the upload routes

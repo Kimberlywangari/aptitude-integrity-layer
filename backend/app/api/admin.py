@@ -4,6 +4,8 @@ Every route needs an admin account. Each change is written to the audit log in t
 transaction as the change itself, so there is never an action without its record.
 """
 
+import csv
+import io
 from dataclasses import asdict
 from typing import Literal
 
@@ -19,8 +21,10 @@ from app.db import get_db
 from app.errors import ApiError
 from app.models import EmailOutbox, Reviewer, Sitting
 from app.schemas.admin import (
+    AdminOutcomesResponse,
     AiCategoryOut,
     AiStatusResponse,
+    AppealRequest,
     BankSummaryOut,
     CloseSittingRequest,
     CloseSittingResponse,
@@ -38,6 +42,9 @@ from app.schemas.admin import (
     InviteStatusOut,
     ListProblemOut,
     MailStatusResponse,
+    PassMarkPreviewResponse,
+    PassMarkRequest,
+    PassMarkResponse,
     PersonOut,
     PreviewListRequest,
     PreviewListResponse,
@@ -48,8 +55,6 @@ from app.schemas.admin import (
     RetryPapersResponse,
     SampleRequest,
     SampleResponse,
-    SendResultsRequest,
-    SendResultsResponse,
     SittingCandidateOut,
     SittingCountsOut,
     SittingDetailResponse,
@@ -58,7 +63,8 @@ from app.schemas.admin import (
     TestMailRequest,
 )
 from app.services import admin as admin_service
-from app.services import documents, mail, question_import, results
+from app.services import documents, mail, outcomes, question_import, results
+from app.services import review as review_service
 from app.services.qgen.categories import CATEGORIES, MAX_PER_CATEGORY, MAX_TOTAL
 from app.services.qgen.writers import check_available
 from app.services.staff_auth import record_action
@@ -79,6 +85,7 @@ def _sitting_out(view: admin_service.SittingView) -> SittingOut:
         blueprint=sitting.blueprint,
         question_mode=sitting.question_mode,  # type: ignore[arg-type]
         status=sitting.status,  # type: ignore[arg-type]
+        pass_mark=sitting.pass_mark,
         counts=SittingCountsOut(**asdict(view.counts)),
     )
 
@@ -203,12 +210,22 @@ def close_sitting(
     admin: Reviewer = Depends(require_admin),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
 ) -> CloseSittingResponse:
     force = bool(body and body.force)
     sitting, unfinished = admin_service.close_sitting(db, sitting_id, force=force, clock=clock)
     detail = admin_service.audit_detail_for_close(sitting, unfinished)
     record_action(db, clock, admin, "admin", detail)
+    # the pass-mark rule: finished candidates under the mark are told, once, when the sitting closes
+    turned_down = outcomes.apply_score_rule(db, clock, settings, sitting)
+    if sitting.pass_mark is not None:
+        record_action(
+            db, clock, admin, "admin",
+            f'pass mark {sitting.pass_mark} applied to "{sitting.name}": '
+            f"{turned_down} rejection emails queued",
+        )  # fmt: skip
     db.commit()
+    mail.launch_sending(clock)
     return CloseSittingResponse(status="closed", forced=unfinished > 0)
 
 
@@ -411,37 +428,123 @@ def results_plan(
     _: Reviewer = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> ResultsPlanResponse:
-    """Who would get which result email if the admin pressed send now, and the wording."""
+    """Where this sitting's result emails stand, and the wording of the three emails."""
     plan = results.plan(db, _sitting_or_404(db, sitting_id))
+    texts = outcomes.previews()
     return ResultsPlanResponse(
-        sitting_closed=plan.sitting_closed,
-        passed=len(plan.passed),
-        not_passed=len(plan.not_passed),
-        held_back=plan.held_back,
-        sent_passed=plan.sent_passed,
-        sent_not_passed=plan.sent_not_passed,
-        did_not_finish=plan.did_not_finish,
-        without_email=plan.without_email,
-        preview_passed=EmailTextOut(**results.preview("passed")),
-        preview_not_passed=EmailTextOut(**results.preview("not_passed")),
+        **asdict(plan),
+        preview_passed=EmailTextOut(**texts["passed"]),
+        preview_not_passed=EmailTextOut(**texts["not_passed_score"]),
+        preview_not_passed_review=EmailTextOut(**texts["not_passed_review"]),
     )
 
 
-@router.post("/sittings/{sitting_id}/results/send", response_model=SendResultsResponse)
-def send_results(
+@router.get("/sittings/{sitting_id}/pass-mark/preview", response_model=PassMarkPreviewResponse)
+def pass_mark_preview(
     sitting_id: int,
-    body: SendResultsRequest,
+    value: int | None = None,
+    _: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> PassMarkPreviewResponse:
+    """What changing the pass mark to `value` (empty: switching it off) would do. Writes nothing."""
+    sitting = _sitting_or_404(db, sitting_id)
+    return PassMarkPreviewResponse(**outcomes.preview_mark(db, sitting, value))
+
+
+@router.post("/sittings/{sitting_id}/pass-mark", response_model=PassMarkResponse)
+def set_pass_mark(
+    sitting_id: int,
+    body: PassMarkRequest,
     admin: Reviewer = Depends(require_admin),
     db: Session = Depends(get_db),
     clock: Clock = Depends(get_clock),
-) -> SendResultsResponse:
+    settings: Settings = Depends(get_settings),
+) -> PassMarkResponse:
     sitting = _sitting_or_404(db, sitting_id)
-    queued = results.send(db, clock, sitting, body.kind)
-    label = "pass" if body.kind == "passed" else "not-passed"
-    record_action(db, clock, admin, "admin", f'queued {queued} {label} emails for "{sitting.name}"')
+    done = outcomes.set_pass_mark(db, clock, settings, admin, sitting, body.pass_mark)
     db.commit()
     mail.launch_sending(clock)
-    return SendResultsResponse(queued=queued)
+    return PassMarkResponse(**done)
+
+
+@router.post("/candidates/{candidate_id}/appeal", status_code=204)
+def mark_appeal(
+    candidate_id: str,
+    body: AppealRequest,
+    sitting: int | None = None,
+    admin: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+) -> Response:
+    outcomes.set_appeal(db, clock, admin, candidate_id, sitting, body.under_appeal)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get("/outcomes", response_model=AdminOutcomesResponse)
+def admin_outcomes(
+    sitting: int | None = None,
+    status: str | None = None,
+    email: str | None = None,
+    q: str | None = None,
+    page: int = 1,
+    _: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AdminOutcomesResponse:
+    """The outcomes list with each candidate's name and a masked address. The reviewers' copy of
+    this list is /api/review/outcomes and has neither."""
+    data = outcomes.view(
+        db, sitting, with_names=True, status=status, email_state=email, search=q, page=page
+    )
+    return AdminOutcomesResponse.model_validate(data)
+
+
+def _spreadsheet_safe(text: str) -> str:
+    """Excel reads a cell that starts with = + - @ as a formula; a quote makes it plain text."""
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+@router.get("/outcomes.csv")
+def outcomes_csv(
+    sitting: int | None = None,
+    admin: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+) -> Response:
+    """Every candidate of the sitting with name, address, status and score, for the admin only."""
+    chosen = review_service.sittings_and_choice(db, sitting)[1]
+    target = db.get(Sitting, chosen) if chosen else None
+    if target is None:
+        raise ApiError(404, "sitting_not_found")
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(
+        ["candidate_id", "name", "email", "status", "score", "of", "flags", "email_state"]
+    )
+    for row, state in outcomes.export_rows(db, target):
+        finished = row.session_status == "finished"
+        writer.writerow(
+            [
+                row.candidate_id,
+                _spreadsheet_safe(row.name or ""),
+                _spreadsheet_safe(row.email or ""),
+                state,
+                row.score if finished else "",
+                row.total if finished else "",
+                row.flag_count,
+                row.email_state,
+            ]
+        )
+    record_action(db, clock, admin, "admin", f'exported the outcomes of "{target.name}"')
+    db.commit()
+    return Response(
+        out.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="outcomes-{target.id}.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------------- documents

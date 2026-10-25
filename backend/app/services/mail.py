@@ -6,7 +6,8 @@ candidates saved, a result sent). A sender then works through the queue: right a
 down loses nothing. Each (candidate, kind) is one row, so nobody is sent the same email twice.
 
 Nothing here reads a candidate's results. The wording lives in app/mail_templates/*.txt and never
-mentions flags, video, review or AI.
+mentions flags, video or the AI; the one email sent after a person reviewed a sitting says, in a
+sentence that person chose, what they weighed.
 """
 
 import logging
@@ -182,6 +183,13 @@ def queue(
     db.add(row)
     db.flush()
     return row
+
+
+def requeue_row(row: EmailOutbox, subject: str, body: str) -> None:
+    """Put an email that already has its one outbox row back in the queue with new text. The
+    unique (candidate, kind) key means a resend can never become a second row."""
+    row.subject, row.body = subject, body
+    row.status, row.attempts, row.error, row.sent_at = "queued", 0, None, None
 
 
 def requeue_failed(db: Session) -> int:

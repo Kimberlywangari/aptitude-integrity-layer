@@ -1,0 +1,16 @@
+Subject: Your Cytonn aptitude test result
+
+Dear {name},
+
+Thank you for taking the Cytonn aptitude test.
+
+After a member of our team looked at the record of your sitting, we have decided not to take your application any further at this time.
+
+The reason: {reason}
+
+This was decided by a person, not by software. The record on its own is not a finding that you did anything wrong; it is what the reviewer weighed.
+
+If you think we have got this wrong, or something was going on that we could not see, you can appeal. Write to {appeal_email}, quote your reference, {candidate_id}, and say what happened. A person will read it before the decision is final.
+
+Kind regards,
+Cytonn Recruitment

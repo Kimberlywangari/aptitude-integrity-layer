@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -14,7 +14,11 @@ class EmailOutbox(Base):
     sent email's body is set to null the moment it is sent."""
 
     __tablename__ = "email_outbox"
-    __table_args__ = (UniqueConstraint("candidate_id", "kind", name="uq_outbox_candidate_kind"),)
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "kind", name="uq_outbox_candidate_kind"),
+        # the outcomes list and the sender both look rows up by kind and state
+        Index("ix_email_outbox_kind_status", "kind", "status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     candidate_id: Mapped[str | None] = mapped_column(

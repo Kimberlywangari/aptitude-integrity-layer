@@ -305,6 +305,8 @@ def candidate_detail(
     video: VideoContext | None = None,
     retention_days: int = 30,
 ) -> dict[str, Any]:
+    from app.services import outcomes  # here, not at the top: outcomes builds on this module
+
     session = _find_session(db, candidate_id, sitting_id)
     flags = flags_by_session(db, [session.id])[session.id]
 
@@ -447,6 +449,7 @@ def candidate_detail(
         "segments": segment_items,
         "video_deleted_at": session.video_deleted_at,
         "video_purge_on": purge_on,
+        "result": outcomes.panel(db, session, flagged=entry is not None, decided=bool(decisions)),
     }
 
 

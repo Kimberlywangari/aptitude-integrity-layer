@@ -1,10 +1,14 @@
-Subject: Your Cytonn aptitude test result
+Subject: Your Cytonn aptitude test result: you have passed
 
 Dear {name},
 
-Thank you for taking the Cytonn aptitude test.
+Thank you for taking the Cytonn aptitude test. We are pleased to tell you that you have passed.
 
-We are pleased to let you know that you have passed and will move on to the next stage of the process. We will be in touch soon with the details.
+{result_line}
+
+What this means: you met the standard we set for this stage, and your application moves on to the next stage of the process.
+
+What happens next: we will write to you at this email address with the details of the next stage. You do not need to reply to this email. If something in your circumstances changes, or you have a question, reply to this email and a person will read it.
 
 Kind regards,
 Cytonn Recruitment

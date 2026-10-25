@@ -8,7 +8,7 @@ import json
 import pytest
 from sqlalchemy import select
 
-from app.models import Candidate, Sitting, TestSession
+from app.models import Candidate, EmailOutbox, Sitting, TestSession
 from app.services.packets import build_packet
 from app.services.ranking import prompts
 from app.services.staff_auth import create_reviewer
@@ -78,3 +78,43 @@ def test_no_reviewer_screen_carries_a_name_or_an_address(client, db, clock, name
         # the audit log shows which reviewer did what, so staff addresses may appear; no other @
         text = json.dumps(page).replace("rev-only@staff.test", "")
         assert mentions(text) == []
+
+
+def test_the_outcomes_list_and_a_recorded_result_never_leak_a_name_to_a_reviewer(
+    client, db, clock, named
+):
+    """The new screens: the outcomes list, the result panel on a candidate's page, passing someone
+    and the audit entry that leaves. The email itself does carry the name (that is its job)."""
+    create_reviewer(db, clock, email="rev-only@staff.test", password=PASSWORD)
+    db.flush()
+    token = client.post(
+        "/api/review/login", json={"email": "rev-only@staff.test", "password": PASSWORD}
+    ).json()["token"]
+    staff = {"Authorization": f"Bearer {token}"}
+    sitting = db.scalar(select(Sitting.id).where(Sitting.name == SITTING_NAME))
+    params = {"sitting": sitting}
+
+    listed = client.get("/api/review/outcomes", params=params, headers=staff)
+    assert listed.status_code == 200
+    target = next(i["candidate_id"] for i in listed.json()["items"] if i["can_mark_passed"])
+    passed = client.post(
+        f"/api/review/candidates/{target}/result",
+        params=params,
+        json={"result": "pass"},
+        headers=staff,
+    )
+    assert passed.status_code == 200, passed.text
+
+    pages = [
+        listed.json(),
+        passed.json(),
+        client.get("/api/review/outcomes", params=params, headers=staff).json(),
+        client.get(f"/api/review/candidates/{target}", params=params, headers=staff).json(),
+        client.get("/api/review/audit", headers=staff).json(),
+    ]
+    for page in pages:
+        text = json.dumps(page).replace("rev-only@staff.test", "")
+        assert mentions(text) == []
+
+    queued = db.scalar(select(EmailOutbox).where(EmailOutbox.candidate_id == target))
+    assert SURNAME in queued.body  # the one place a name belongs

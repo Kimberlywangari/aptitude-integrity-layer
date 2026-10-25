@@ -105,6 +105,7 @@ def settings(tmp_path) -> Settings:
         smtp_user="",
         smtp_password="",
         mail_from="",
+        appeal_email="",
     )
 
 
