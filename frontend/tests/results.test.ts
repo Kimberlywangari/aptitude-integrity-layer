@@ -302,3 +302,41 @@ describe('the result emails on a sitting page', () => {
     expect(text).toContain('A person looked at your sitting.')
   })
 })
+
+describe('time against the sitting, on the action log', () => {
+  beforeEach(asReviewer)
+
+  async function openLog() {
+    const w = await renderAt('/review/candidates/cand-007')
+    await untilText(w, 'Candidate cand-007')
+    await button(w, 'Show the action log')!.trigger('click')
+    await untilText(w, 'Question by question')
+    return w
+  }
+
+  it('shows each question’s time beside the sitting median, and what the median is of', async () => {
+    const w = await openLog()
+    const head = w.findAll('#action-log thead th').map((th) => th.text())
+    expect(head.indexOf('Sitting median')).toBe(head.indexOf('Time taken') + 1)
+
+    const cells = (row: number) => w.findAll('#action-log tbody tr')[row].findAll('td').map((td) => td.text())
+    const time = head.indexOf('Time taken')
+    expect(cells(0)[time]).toBe('30 s')
+    expect(cells(0)[time + 1]).toBe('22.5 s') // the same question
+    expect(cells(1)[time + 1]).toBe('41 s (section)') // too few answered that question
+    expect(cells(2)[time + 1]).toBe('-') // nothing to compare with
+  })
+
+  it('gives the whole test’s time against the sitting, and calls it context', async () => {
+    const w = await openLog()
+    expect(norm(w.text())).toContain('Whole test: 1800 s. The sitting median is 1500 s (13 other candidates).')
+    expect(norm(w.text())).toContain('raise no flag by themselves')
+    expect(norm(w.text())).not.toContain('compared with the same section instead')
+  })
+
+  it('says why a median is missing when it is', async () => {
+    const w = await openLog()
+    const cell = w.findAll('#action-log tbody tr')[2].findAll('td').find((td) => td.text() === '-' && td.attributes('title'))
+    expect(cell?.attributes('title')).toContain('Not enough other candidates')
+  })
+})

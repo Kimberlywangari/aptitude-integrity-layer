@@ -182,6 +182,14 @@ export const BLOCKED_BY: Record<string, string> = {
   review_first: 'This candidate is flagged. Record your decision above first, then send the result.',
 }
 
+/** The time columns. Context for a person; the rules that raise flags are separate. */
+export const TIMING_NOTE =
+  'Times are context only and raise no flag by themselves. The sitting median is what the other ' +
+  'candidates who finished took.'
+export const TIMING_SECTION_NOTE =
+  'Every candidate in this sitting has different questions, so each question is compared with the ' +
+  'same section instead.'
+
 export const RESULT_NOTE =
   'You decide, the system sends. A pass or a fail goes to the candidate as an email at once and ' +
   'cannot be taken back. A failed candidate is told the reason you pick and how to appeal.'

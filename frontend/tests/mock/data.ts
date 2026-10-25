@@ -596,11 +596,18 @@ export function buildActionLog(id: string, state: MockState): ActionLog | null {
       : [],
     questions: sat
       ? [
-          { position: 1, section: 'numerical', difficulty: 'easy', opened_s: 0, answered_s: 30, time_s: 30, result: 'correct' },
-          { position: 2, section: 'verbal', difficulty: 'hard', opened_s: 30, answered_s: 58.4, time_s: 28.4, result: 'wrong' },
-          { position: 3, section: 'logical', difficulty: 'medium', opened_s: 58.4, answered_s: null, time_s: null, result: 'unanswered', written_by: 'ollama:qwen2.5:7b' },
+          { position: 1, section: 'numerical', difficulty: 'easy', opened_s: 0, answered_s: 30, time_s: 30, result: 'correct', sitting_median_s: 22.5, median_of: 'question', median_n: 14 },
+          { position: 2, section: 'verbal', difficulty: 'hard', opened_s: 30, answered_s: 58.4, time_s: 28.4, result: 'wrong', sitting_median_s: 41, median_of: 'section', median_n: 40 },
+          { position: 3, section: 'logical', difficulty: 'medium', opened_s: 58.4, answered_s: null, time_s: null, result: 'unanswered', written_by: 'ollama:qwen2.5:7b', sitting_median_s: null, median_of: null, median_n: 0 },
         ]
       : [],
+    timing: {
+      total_s: status === 'finished' ? 1800 : null,
+      sitting_median_total_s: status === 'finished' ? 1500 : null,
+      others: 13,
+      min_others: 8,
+      same_questions: true,
+    },
   }
 }
 

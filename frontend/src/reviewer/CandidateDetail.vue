@@ -10,6 +10,8 @@ import type {
   ActionLog,
   CandidateDetail as Detail,
   InnocentSignal,
+  LogQuestion,
+  Timing,
   VideoSeek,
   VsSitting,
 } from '../lib/reviewTypes'
@@ -29,6 +31,8 @@ import {
   RETENTION_NOTE,
   RULES_LABEL,
   STATUS_LABELS,
+  TIMING_NOTE,
+  TIMING_SECTION_NOTE,
   VIDEO_CLOSED,
   orderBasis,
 } from './copy'
@@ -106,6 +110,28 @@ function detailText(
 
 const eventLabel = (type: string) => EVENT_LABELS[type] ?? humaniseKind(type)
 const seconds = (value: number | null) => (value === null ? '-' : `${value} s`)
+/** The sitting's median beside a question, saying what it is the median of when it is not the question. */
+const medianText = (q: LogQuestion) =>
+  q.sitting_median_s == null
+    ? '-'
+    : `${q.sitting_median_s} s${q.median_of === 'section' ? ' (section)' : ''}`
+const medianTitle = (q: LogQuestion) =>
+  q.sitting_median_s == null
+    ? 'Not enough other candidates have finished for a fair comparison.'
+    : `Median of ${q.median_n} ${q.median_of === 'section' ? 'answers in this section' : 'answers to this question'}.`
+function timingLine(t: Timing): string {
+  if (t.total_s === null) return 'The test has not finished, so there is no total time yet.'
+  if (t.sitting_median_total_s === null) {
+    return (
+      `Whole test: ${t.total_s} s. Not compared: ${t.others} of the ${t.min_others} other finished ` +
+      'candidates a fair comparison needs.'
+    )
+  }
+  return (
+    `Whole test: ${t.total_s} s. The sitting median is ${t.sitting_median_total_s} s ` +
+    `(${t.others} other candidates).`
+  )
+}
 /** Before the timer ran (the page loading, the devices being reported) there is no m:ss to show. */
 const eventTime = (at: number | null) =>
   at === null ? '-' : at < 0 ? 'Before start' : formatElapsed(at)
@@ -315,7 +341,14 @@ function jumpToMark(id: string) {
 
           <h3 class="context-title">Question by question</h3>
           <p v-if="log.questions.length === 0" class="muted">There is no paper yet.</p>
-          <div v-else class="table-wrap">
+          <template v-else>
+            <p class="timing-line">{{ timingLine(log.timing) }}</p>
+            <p class="muted">
+              {{ TIMING_NOTE }}
+              <template v-if="!log.timing.same_questions"> {{ TIMING_SECTION_NOTE }}</template>
+            </p>
+          </template>
+          <div v-if="log.questions.length > 0" class="table-wrap">
             <table class="table">
               <caption class="sr-only">The paper, question by question</caption>
               <thead>
@@ -325,6 +358,7 @@ function jumpToMark(id: string) {
                   <th scope="col">Level</th>
                   <th scope="col">Opened</th>
                   <th scope="col">Time taken</th>
+                  <th scope="col">Sitting median</th>
                   <th scope="col">Result</th>
                 </tr>
               </thead>
@@ -338,6 +372,7 @@ function jumpToMark(id: string) {
                   <td>{{ q.difficulty ?? '-' }}</td>
                   <td>{{ q.opened_s === null ? '-' : formatElapsed(q.opened_s) }}</td>
                   <td>{{ seconds(q.time_s) }}</td>
+                  <td :title="medianTitle(q)">{{ medianText(q) }}</td>
                   <td>{{ RESULT_LABELS[q.result] }}</td>
                 </tr>
               </tbody>
