@@ -43,6 +43,21 @@ function selectedLength(): number {
   return window.getSelection()?.toString().length ?? 0
 }
 
+type Keys = Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'shiftKey'>
+
+/**
+ * The screenshot shortcut these keys make, or null. A page cannot see a screenshot being taken,
+ * only the keys, so this is all that is ever logged (and Windows may keep Win+Shift+S for itself).
+ */
+export function screenshotCombo(e: Keys, mac: boolean): string | null {
+  if (e.code === 'PrintScreen' || e.key === 'PrintScreen') return 'PrintScreen'
+  if (!e.metaKey || !e.shiftKey) return null
+  if (!mac) return e.code === 'KeyS' ? 'Win+Shift+S' : null
+  return ({ Digit3: 'Cmd+Shift+3', Digit4: 'Cmd+Shift+4', Digit5: 'Cmd+Shift+5' } as Record<string, string>)[e.code] ?? null
+}
+
+const SAME_PRESS_MS = 500 // Windows sends PrintScreen on key-up only, other systems on both
+
 /** Starts logging. Returns the function that stops it. Starting twice does nothing the second time. */
 export function startActionLogger(): () => void {
   if (stopCurrent) return stopCurrent
@@ -72,6 +87,20 @@ export function startActionLogger(): () => void {
   on(document, 'cut', () => void logEvent('cut_attempt', { length: selectedLength() }))
   on(document, 'paste', () => void logEvent('paste_attempt'))
   on(document, 'contextmenu', () => void logEvent('contextmenu_attempt'))
+
+  // screenshot keys: only the key combination, once per press
+  const mac = /Mac/i.test(navigator.platform || navigator.userAgent)
+  let lastShot = { combo: '', at: -Infinity }
+  const onKeys = (event: Event) => {
+    const combo = screenshotCombo(event as KeyboardEvent, mac)
+    if (!combo) return
+    const now = performance.now()
+    if (combo === lastShot.combo && now - lastShot.at < SAME_PRESS_MS) return
+    lastShot = { combo, at: now }
+    void logEvent('screenshot_attempt', { combo })
+  }
+  on(window, 'keydown', onKeys, { capture: true })
+  on(window, 'keyup', onKeys, { capture: true })
 
   // the network
   on(window, 'offline', () => reportBrowserOffline())

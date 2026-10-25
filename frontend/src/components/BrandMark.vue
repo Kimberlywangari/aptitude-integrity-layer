@@ -1,41 +1,36 @@
 <script setup lang="ts">
-// The small mark at the top of the candidate screens. Plain SVG, no image to download.
+// The logo at the top of the screens, on a white backing so it reads in the dark theme too.
+import logo from '../assets/cytonn-logo.png'
+
+defineProps<{ compact?: boolean }>()
 </script>
 
 <template>
-  <div class="brand">
-    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="8" />
-      <path d="M9 16.5l4.6 4.6L23 11.5" />
-    </svg>
-    <span>Aptitude test</span>
+  <div class="brand" :class="{ compact }">
+    <img :src="logo" alt="Cytonn: delivering to promise" width="500" height="307" />
   </div>
 </template>
 
 <style scoped>
 .brand {
-  display: inline-flex;
-  gap: 0.6rem;
-  align-items: center;
+  display: inline-block;
   margin-bottom: 1.25rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  line-height: 0;
+  background: var(--logo-backing);
+  border-radius: 0.5rem;
 }
 
-.logo {
-  width: 1.75rem;
-  height: 1.75rem;
+.brand img {
+  width: auto;
+  height: 5rem;
+  mix-blend-mode: multiply; /* light theme: the white ground takes the page colour */
 }
 
-.logo rect {
-  fill: var(--accent);
+.brand.compact {
+  margin-bottom: 0;
 }
 
-.logo path {
-  fill: none;
-  stroke: var(--on-accent);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.brand.compact img {
+  height: 2.4rem;
 }
 </style>

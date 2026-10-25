@@ -119,9 +119,8 @@ const playhead = computed(() => percent((segment.value ? segment.value.start_s :
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="playedS = ($event.target as HTMLVideoElement).currentTime"
     />
-    <div v-else class="video-placeholder">
-      The video file is not available here (sample data). Jumps still show where the player would
-      land.
+    <div v-else class="no-video">
+      There is no recording for this candidate. Jumps still show where the player would land.
     </div>
 
     <div v-if="total > 0 && placed.length > 0" class="timeline" role="group" aria-label="Flags on the recording">

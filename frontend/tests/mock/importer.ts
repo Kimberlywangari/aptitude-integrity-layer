@@ -1,7 +1,7 @@
 // A small stand-in for scripts/import_question_summary.py (D9): same columns, same checks, same
 // report fields, so the admin screen can be exercised before the real importer exists.
 
-import type { ImportReport, RejectedRow } from '../adminTypes'
+import type { ImportReport, RejectedRow } from '../../src/lib/adminTypes'
 
 export const REQUIRED_COLUMNS = [
   'question_id',

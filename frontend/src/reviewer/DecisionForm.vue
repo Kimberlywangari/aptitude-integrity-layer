@@ -6,7 +6,7 @@ import BaseButton from '../components/BaseButton.vue'
 import { api, ApiError } from '../lib/api'
 import { MIN_REASON_CHARS } from '../lib/reviewTypes'
 import type { DecisionOutcome, DecisionRequest } from '../lib/reviewTypes'
-import { OUTCOME_LABELS, OUTCOMES_NOTE } from './copy'
+import { OUTCOME_LABELS } from './copy'
 
 const ERRORS: Record<string, string> = {
   reason_too_short: `The reason must be at least ${MIN_REASON_CHARS} characters.`,
@@ -36,6 +36,7 @@ const {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['candidate', props.candidateId] }),
       queryClient.invalidateQueries({ queryKey: ['queue'] }),
+      queryClient.invalidateQueries({ queryKey: ['candidates'] }),
       queryClient.invalidateQueries({ queryKey: ['overview'] }),
       queryClient.invalidateQueries({ queryKey: ['audit'] }),
     ])
@@ -73,7 +74,6 @@ function submit() {
           <span>{{ OUTCOME_LABELS[value] }}</span>
         </label>
       </div>
-      <p class="muted">{{ OUTCOMES_NOTE }}</p>
     </fieldset>
 
     <label class="field" for="reason">Reason (required, at least {{ MIN_REASON_CHARS }} characters)</label>

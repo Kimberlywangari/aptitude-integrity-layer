@@ -2,6 +2,7 @@
 import { VUE_QUERY_CLIENT } from '@tanstack/vue-query'
 import { onBeforeUnmount, onMounted, provide } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import logo from '../assets/cytonn-logo.png'
 import BaseButton from '../components/BaseButton.vue'
 import { homeFor, loginPathFor } from '../lib/routes'
 import { clearStaff, getStaff } from '../lib/staffSession'
@@ -44,9 +45,7 @@ function signOut() {
   <div class="console">
     <aside class="rail">
       <RouterLink :to="homeFor(staff.role)" class="staff-brand">
-        <span class="rail-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" /></svg>
-        </span>
+        <img class="rail-logo" :src="logo" alt="Cytonn: delivering to promise" width="500" height="307" />
         <span>
           <strong>Aptitude Integrity</strong>
           <small>Review console</small>

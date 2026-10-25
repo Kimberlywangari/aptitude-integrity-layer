@@ -3,11 +3,13 @@
 // only, never names.
 
 import type {
+  ActionLog,
   AiStatus,
   AuditEntry,
   Band,
   BreakdownLine,
   CandidateDetail,
+  CandidateRow,
   ComplaintItem,
   FlagItem,
   HealthCheck,
@@ -21,7 +23,7 @@ import type {
   VideoSegment,
   VideoSeek,
   VsSitting,
-} from '../reviewTypes'
+} from '../../src/lib/reviewTypes'
 
 export const SITTINGS: SittingRef[] = [
   { id: 1, name: 'Synthetic sitting 1' },
@@ -44,15 +46,14 @@ interface Template {
 const TEMPLATES: Record<string, Template> = {
   COPY_ATTEMPT: { weight: 3, question: 9, detail: { target: 'question_text', length: 212 } },
   LONG_HOLD_CORRECT: {
-    weight: 3,
+    weight: 4,
     question: 22,
-    detail: { time_s: 212, own_median_s: 38, focus_lost_during: true },
+    detail: { time_s: 212, own_median_s: 38, focus_lost_s: 44 },
   },
-  CORRECT_RUN_AFTER_GAP: { weight: 2, question: 23, detail: { gap_s: 74, run_length: 3 } },
-  FAST_CORRECT_VS_HISTORY: {
+  CORRECT_RUN_AFTER_GAP: {
     weight: 2,
-    question: 30,
-    detail: { questions: [30, 31], times_s: [7, 6], p25_s: [41, 38] },
+    question: 23,
+    detail: { gap_s: 74, run_length: 3, mean_s: 6.2, own_median_s: 38 },
   },
   FOCUS_LOSS: { weight: 0.5, question: 5, detail: { focus_lost_s: 44 } },
   PACE_OUTLIER: { weight: 1.5, question: null, detail: { direction: 'fast', robust_z: -3.2 } },
@@ -68,7 +69,6 @@ interface Seed {
   score: number
   pace: number
   vs: VsSitting
-  historySource?: 'cytonn' | 'synthetic'
   innocent?: InnocentSignal[]
   mic?: Omit<MicSilence, 'video_seek'>[]
   selfReport?: { had_technical_issues: boolean; note: string | null }
@@ -86,21 +86,20 @@ const COHORT = { pace_percentile: 8, spread_percentile: 3, score_percentile: 91 
 const SEEDS: Seed[] = [
   {
     id: 'cand-007',
-    kinds: ['COPY_ATTEMPT', 'LONG_HOLD_CORRECT', 'CORRECT_RUN_AFTER_GAP', 'FAST_CORRECT_VS_HISTORY'],
-    at: [310, 1125, 1410, 1852],
+    kinds: ['COPY_ATTEMPT', 'LONG_HOLD_CORRECT', 'CORRECT_RUN_AFTER_GAP'],
+    at: [310, 1125, 1410],
     ai: {
       status: 'ok',
       strength: 5,
       text:
-        'Four different kinds of flag appear within about 26 minutes. A copy attempt on question 9 ' +
+        'Three different kinds of flag appear within about 20 minutes. A copy attempt on question 9 ' +
         'copied 212 characters. On question 22 the candidate took 212 s against their own median of ' +
-        '38 s and answered correctly after losing focus. Three correct answers in a row followed a ' +
-        '74 s gap. The innocent signals do not explain any of these.',
+        '38 s and answered correctly after losing focus for 44 s. Three correct answers in a row, ' +
+        'averaging 6 s each, followed a 74 s gap. The innocent signals do not explain any of these.',
     },
     score: 34,
     pace: 21,
     vs: COHORT,
-    historySource: 'cytonn',
     mic: [
       { id: 'M1', start_s: 1180, end_s: 1255, duration_s: 75, layers: ['browser', 'server'] },
     ],
@@ -127,20 +126,19 @@ const SEEDS: Seed[] = [
   },
   {
     id: 'cand-003',
-    kinds: ['FAST_CORRECT_VS_HISTORY', 'CORRECT_RUN_AFTER_GAP', 'SPREAD_OUTLIER', 'PACE_OUTLIER'],
-    at: [1000, 1210, 1900, 1900],
+    kinds: ['CORRECT_RUN_AFTER_GAP', 'SPREAD_OUTLIER', 'PACE_OUTLIER'],
+    at: [1210, 1900, 1900],
     ai: {
       status: 'retried',
       strength: 4,
       text:
-        'Three hard questions were answered correctly in 4 to 6 s each, far under the 25th ' +
-        'percentile for those questions. The answer-time spread and the pace are both far from the ' +
-        'sitting. The two cohort flags describe the same pattern as the fast answers.',
+        'Three correct answers in a row, 4 to 6 s each against a median of 31 s, followed a gap. ' +
+        'The answer-time spread and the pace are both far from the sitting. The two cohort flags ' +
+        'describe the same pattern as the quick run.',
     },
     score: 31,
     pace: 14,
     vs: { pace_percentile: 2, spread_percentile: 1, score_percentile: 88 },
-    historySource: 'cytonn',
     segments: WHOLE_TEST,
   },
   {
@@ -321,9 +319,60 @@ export function initialState(): MockState {
   return { decisions, shortlisted, audit }
 }
 
+// People the queue leaves out: nothing to flag, or still sitting. They show in "Everyone".
+interface Quiet {
+  id: string
+  status: CandidateRow['status']
+  resolved: number
+  score: number
+  pace: number
+}
+
+const QUIET: Quiet[] = [
+  { id: 'cand-001', status: 'finished', resolved: 12, score: 18, pace: 36 },
+  { id: 'cand-020', status: 'in_progress', resolved: 7, score: 0, pace: 0 },
+  { id: 'cand-021', status: 'created', resolved: 0, score: 0, pace: 0 },
+]
+
+function quietDetail(id: string, state: MockState): CandidateDetail | null {
+  const quiet = QUIET.find((q) => q.id === id)
+  if (!quiet) return null
+  const shortlisted = state.shortlisted.has(id)
+  return {
+    session_id: `sess-${id}`,
+    candidate_id: id,
+    rank: 0,
+    strength: 1,
+    band: 'low',
+    rule_score: 0,
+    rule_breakdown: [],
+    score: quiet.score,
+    pace_s_per_q: quiet.pace,
+    flags: [],
+    vs_sitting: { cohort_skipped: 'too_small' },
+    innocent_signals: [],
+    mic_silence: [],
+    self_report: null,
+    explanation: {
+      source: 'rules',
+      status: 'not_run',
+      text: 'Rules only: no flags in the record.',
+      strength: null,
+      flags_support_each_other: null,
+    },
+    complaints: [],
+    decisions: state.decisions.get(id) ?? [],
+    shortlisted,
+    video_available: shortlisted,
+    segments: [],
+    video_deleted_at: null,
+    video_purge_on: null,
+  }
+}
+
 export function buildDetail(id: string, state: MockState): CandidateDetail | null {
   const index = SEEDS.findIndex((s) => s.id === id)
-  if (index < 0) return null
+  if (index < 0) return quietDetail(id, state)
   const seed = SEEDS[index]
   const segs = seed.segments ?? WHOLE_TEST
 
@@ -362,7 +411,6 @@ export function buildDetail(id: string, state: MockState): CandidateDetail | nul
     rule_breakdown: lines,
     score: seed.score,
     pace_s_per_q: seed.pace,
-    history_source: seed.historySource ?? 'synthetic',
     flags,
     vs_sitting: seed.vs,
     innocent_signals: seed.innocent ?? [],
@@ -378,6 +426,7 @@ export function buildDetail(id: string, state: MockState): CandidateDetail | nul
     complaints: seed.complaints ?? [],
     decisions,
     shortlisted: state.shortlisted.has(id),
+    video_available: true,
     segments: videoSegments,
     video_deleted_at: seed.videoDeletedAt ?? null,
     video_purge_on: purgeOn,
@@ -404,6 +453,82 @@ export function buildQueue(sittingId: number, state: MockState): QueueItem[] {
       logging_only: seed.kinds.every((k) => k === 'LOGGING_PROBLEM'),
     }
   })
+}
+
+/** Everyone in the sitting: the queue's candidates and the quiet ones, in invitation order. */
+export function buildCandidates(sittingId: number, state: MockState): CandidateRow[] {
+  if (sittingId !== 1) return []
+  const row = (id: string, partial: Partial<CandidateRow>): CandidateRow => {
+    const decisions = state.decisions.get(id) ?? []
+    return {
+      candidate_id: id,
+      status: 'finished',
+      resolved: 12,
+      total: 12,
+      flag_count: 0,
+      flag_kinds: [],
+      in_queue: false,
+      decision: decisions.length ? decisions[decisions.length - 1].outcome : null,
+      shortlisted: state.shortlisted.has(id),
+      ...partial,
+    }
+  }
+  const flagged = SEEDS.map((seed) =>
+    row(seed.id, {
+      flag_count: seed.kinds.length,
+      flag_kinds: [...new Set(seed.kinds)],
+      in_queue: true,
+    }),
+  )
+  const quiet = QUIET.map((q) => row(q.id, { status: q.status, resolved: q.resolved }))
+  return [...flagged, ...quiet].sort(
+    (a, b) =>
+      a.candidate_id.length - b.candidate_id.length ||
+      a.candidate_id.localeCompare(b.candidate_id),
+  )
+}
+
+/** A made-up record for any candidate the mock knows: the shape the server sends, a few lines long. */
+export function buildActionLog(id: string, state: MockState): ActionLog | null {
+  const detail = buildDetail(id, state)
+  if (!detail) return null
+  const quiet = QUIET.find((q) => q.id === id)
+  const status = quiet?.status ?? 'finished'
+  const sat = status !== 'created'
+  const event = (
+    type: string,
+    at_s: number,
+    question: number | null,
+    extra: Record<string, unknown> = {},
+  ) => ({ type, at_s, question, detail: extra })
+  return {
+    candidate_id: id,
+    status,
+    started_at: sat ? isoAt(0) : null,
+    finished_at: status === 'finished' ? isoAt(1800) : null,
+    total_events: sat ? 8 : 0,
+    truncated: false,
+    heartbeats: sat ? 24 : 0,
+    events: sat
+      ? [
+          event('page_load', -12, null),
+          event('device_info', -10, null, { camera_label: 'Integrated Webcam', mic_label: 'Microphone Array' }),
+          event('question_opened', 0, 1),
+          event('focus_lost', 14, 1),
+          event('focus_returned', 21, 1),
+          event('answered', 30, 1),
+          event('question_opened', 30, 2),
+          event('copy_attempt', 41, 2, { length: 212 }),
+        ]
+      : [],
+    questions: sat
+      ? [
+          { position: 1, section: 'numerical', difficulty: 'easy', opened_s: 0, answered_s: 30, time_s: 30, result: 'correct' },
+          { position: 2, section: 'verbal', difficulty: 'hard', opened_s: 30, answered_s: 58.4, time_s: 28.4, result: 'wrong' },
+          { position: 3, section: 'logical', difficulty: 'medium', opened_s: 58.4, answered_s: null, time_s: null, result: 'unanswered', written_by: 'ollama:qwen2.5:7b' },
+        ]
+      : [],
+  }
 }
 
 // ---- the overview page

@@ -1,5 +1,4 @@
-// Candidate-facing wording. ALL OF THIS IS PLACEHOLDER until Cytonn supplies the approved text
-// (master plan R11). Keeping it in one file means swapping it is a one-file change.
+// Candidate-facing wording, kept in one file so changing it is a one-file change.
 
 import type { DeviceErrorKind } from '../lib/devices'
 
@@ -12,19 +11,38 @@ export const MIC_NOTICE =
 export const MIC_CHECK_OFF_NOTE =
   'The microphone check is switched off for this test run, so your microphone is not tested.'
 
-/** Under every dead end, so nobody is left without a next step. Cytonn supplies the real contact. */
+/** Under every dead end, so nobody is left without a next step. */
 export const HELP_CONTACT = 'If this keeps happening, contact the person who sent your invitation.'
 
 // ---- code entry
 
+export const START_LEAD =
+  'Enter the invitation code and the email address it was sent to. If you have already chosen a ' +
+  'password, your email and password are enough.'
+export const START_LEAD_CREATING =
+  'That is right. Now choose a password. Next time, your email and password are enough.'
+export const FORGOT_PASSWORD =
+  'Forgot your password? Ask the person who invited you to send you a new link.'
+export const PASSWORDS_DIFFER = 'The two passwords are not the same. Type them again.'
+
 export const START_ERRORS: Record<string, string> = {
   invalid_invitation:
-    'That code is not valid. Check it against your invitation and type it again. Capital ' +
-    'letters and the dash do not matter.',
+    'That code, email or password does not match an invitation. Check them against the message ' +
+    'that invited you and type them again. Capital letters and the dash in the code do not matter.',
+  password_too_short: 'Your password needs at least 8 characters.',
+  password_too_long: 'That password is too long. Please use 72 characters or fewer.',
+  // A second device was opened while the test is running on the first.
+  test_open_elsewhere:
+    'Your test is open on another device. If that is not you, tell the person who invited you. ' +
+    'If your browser crashed, wait a minute and try again.',
+  // The sitting has closed, its time has passed, or there is none: not early, so no "come back".
   no_open_sitting:
-    'This test is not open right now. Check the date and time on your invitation and come ' +
-    'back then.',
+    'This test is not open right now. It may have closed. If you think it should still be ' +
+    'open, contact the person who sent your invitation.',
 }
+/** Early, not late: the code is right and the test has a date, so say it. */
+export const notOpenYet = (when: string) =>
+  `This test has not opened yet. It opens on ${when}. Please come back then with the same code.`
 export const START_FALLBACK_ERROR = 'Something went wrong. Please try again.'
 
 // ---- the pre-check: everything the exam asks for, one step at a time
@@ -139,9 +157,9 @@ export const MIC_BANNER =
 export const INTEGRITY_TITLE = 'Before you begin'
 export const INTEGRITY_POINTS: string[] = [
   'I will take this test on my own, without help from another person.',
-  'I will not look up answers, use other websites or applications, or copy or share questions.',
+  'I will not look up answers, use other websites or applications, take screenshots, or copy or share questions.',
   'My camera and microphone record for the whole test, and my actions in this window are ' +
-    'logged, including leaving full screen.',
+    'logged, including leaving full screen and pressing a screenshot key.',
   'A person reviews anything unusual. No computer decides the outcome for me.',
   MIC_NOTICE,
 ]
@@ -154,6 +172,21 @@ export const SELF_REPORT_NOTE_HINT = 'Please do not write your name or contact d
 // ---- starting the recording, and a camera lost during the test
 
 export const RECORDING_STARTING = 'Starting your recording...'
+
+// An AI sitting writes each candidate's questions while they read this page. Their time has not
+// started, and the page says so every time, so waiting never feels like losing time.
+export const PAPER_PREPARING = 'Preparing your questions'
+export const PAPER_PREPARING_NOTE =
+  'Your time has not started. The button below opens up as soon as your questions are ready.'
+export const PAPER_FAILED =
+  'We could not prepare your questions. Your time has not started. Try again, and if it keeps ' +
+  'failing, tell the person who invited you.'
+export const PAPER_RETRY = 'Try again'
+// After ten minutes of waiting the candidate may ask again. Their time still has not started.
+export const PAPER_SLOW =
+  'This is taking longer than usual. Your time has still not started. You can ask for your ' +
+  'questions again; whatever is already written is kept.'
+export const PAPER_SLOW_RETRY = 'Ask for my questions again'
 // Shown on the "start the test" page. None of them has started the clock: the test begins only
 // once the recording is safely with us.
 export const RECORDING_PROBLEMS = {
@@ -190,8 +223,8 @@ export const UPLOAD_DONE = 'Everything has been uploaded. You can finish now.'
 
 export const RESUME_TITLE = 'Finish sending your recording'
 export const RESUME_LEAD =
-  'Enter the invitation code you used for the test. Use the same computer and browser, so the ' +
-  'rest of your recording can be found and sent.'
+  'Sign in the way you did for the test: the invitation code and your email, or your email and ' +
+  'password. Use the same computer and browser, so the rest of your recording can be found and sent.'
 export const RESUME_ERRORS: Record<string, string> = {
   nothing_to_resume:
     'There is no finished test waiting for this code. If your test has not opened yet, come ' +

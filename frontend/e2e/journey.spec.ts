@@ -19,6 +19,7 @@ import {
 // It cannot stand in for a real Edge, a Mac, a physically muted microphone or a real bad network.
 
 const TOKEN = process.env.E2E_TOKEN
+const EMAIL = process.env.E2E_EMAIL // only if the invitation was made for an email
 const SKIPPED = 5 // the question the candidate skips
 const OFFLINE_FOR_MS = 20_000
 
@@ -81,7 +82,9 @@ test('a candidate takes the whole test, recorded and logged, and everything arri
   page.on('dialog', (dialog) => void dialog.accept()) // "leave this page?" when it is reloaded
 
   // ---- the invitation link, the pre-check, and the recording starting before the clock
-  await page.goto(`/?t=${TOKEN}`)
+  await page.goto(`/?t=${TOKEN}`) // the link fills in the code; the candidate presses Continue
+  if (EMAIL) await page.locator('#email').fill(EMAIL)
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page).toHaveURL(/\/precheck/)
   await passThePreCheck(page)
 

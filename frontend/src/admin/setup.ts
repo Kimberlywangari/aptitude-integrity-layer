@@ -23,6 +23,32 @@ export function setupSteps(bank: QuestionBankSummary, sittings: AdminSitting[]):
   const questions: SetupStep = (() => {
     const title = 'Questions'
     const link = '/admin/questions'
+    if (open?.question_mode === 'ai') {
+      // nothing is drawn from the bank, so the bank's state is not this sitting's business
+      return {
+        key: 'questions',
+        title,
+        state: 'done',
+        detail: 'Written by AI for each candidate, so no question bank is needed.',
+      }
+    }
+    if (open?.question_mode === 'cytonn') {
+      return bank.cytonn > 0
+        ? {
+            key: 'questions',
+            title,
+            state: 'done',
+            detail: `Cytonn's ${bank.cytonn} questions, in ${bank.by_section.filter((s) => s.cytonn > 0).length} sections.`,
+            link: { to: link, label: 'Open questions' },
+          }
+        : {
+            key: 'questions',
+            title,
+            state: 'todo',
+            detail: "This sitting uses Cytonn's questions, and none are loaded yet.",
+            link: { to: link, label: 'See how to load them' },
+          }
+    }
     if (bank.total === 0) {
       return {
         key: 'questions',
@@ -37,7 +63,7 @@ export function setupSteps(bank: QuestionBankSummary, sittings: AdminSitting[]):
         key: 'questions',
         title,
         state: 'todo',
-        detail: `Only placeholder questions so far (${bank.synthetic}).`,
+        detail: `Only practice questions so far (${bank.synthetic}).`,
         link: { to: link, label: 'Import the real questions' },
       }
     }
@@ -46,8 +72,8 @@ export function setupSteps(bank: QuestionBankSummary, sittings: AdminSitting[]):
         key: 'questions',
         title,
         state: 'todo',
-        detail: `${bank.cytonn} real questions, and ${bank.synthetic} placeholders still in the bank.`,
-        link: { to: link, label: 'Remove the placeholders' },
+        detail: `${bank.cytonn} real questions, and ${bank.synthetic} practice questions still in the bank.`,
+        link: { to: link, label: 'Remove the practice questions' },
       }
     }
     return {

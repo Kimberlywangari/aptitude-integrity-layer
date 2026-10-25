@@ -1,8 +1,7 @@
-// Reviewer-facing wording. Placeholder until Cytonn confirms the outcomes and the labels
-// (master plan R11). Nothing here may read as a verdict: the AI ranks and explains, a person
+// Reviewer-facing wording. Nothing here may read as a verdict: the AI ranks and explains, a person
 // decides.
 
-import type { AiStatus, Band, DecisionOutcome } from '../lib/reviewTypes'
+import type { AiStatus, Band, DecisionOutcome, LogQuestion, SessionStatus } from '../lib/reviewTypes'
 
 export const AI_LABEL =
   'AI-generated and advisory only. It ranks and explains; it is not a verdict and it decides nothing.'
@@ -27,8 +26,6 @@ export const OUTCOME_LABELS: Record<DecisionOutcome, string> = {
   refer_for_follow_up: 'Refer for follow-up',
 }
 
-export const OUTCOMES_NOTE = 'Outcome wording is a placeholder until Cytonn confirms it.'
-
 export const RETENTION_NOTE =
   'The newest decision counts. Video is deleted 30 days after it, and every decision and video ' +
   'view is written to the audit log.'
@@ -36,29 +33,97 @@ export const RETENTION_NOTE =
 export const FLAG_LABELS: Record<string, string> = {
   FOCUS_LOSS: 'Focus lost',
   COPY_ATTEMPT: 'Copy or cut attempt',
-  LONG_HOLD_CORRECT: 'Long hold, answered correctly',
-  CORRECT_RUN_AFTER_GAP: 'Run of correct answers after a gap',
+  SCREENSHOT_KEY: 'Screenshot key pressed',
+  LONG_HOLD_CORRECT: 'Long hold with focus lost, answered correctly',
+  CORRECT_RUN_AFTER_GAP: 'Quick run of correct answers after a gap',
   PACE_OUTLIER: 'Pace far from the sitting',
   SPREAD_OUTLIER: 'Answer-time spread far from the sitting',
-  FAST_CORRECT_VS_HISTORY: 'Correct far faster than past candidates',
   LOGGING_PROBLEM: 'Logging problem (heartbeat gap)',
 }
 
 export const DETAIL_LABELS: Record<string, string> = {
   target: 'where',
   length: 'length copied (characters)',
+  combo: 'keys pressed',
   time_s: 'time on the question (s)',
   own_median_s: "candidate's own median (s)",
-  focus_lost_during: 'focus lost during it',
   gap_s: 'gap before the run (s)',
   run_length: 'correct in a row',
-  questions: 'questions',
-  times_s: 'times (s)',
-  p25_s: 'past 25th percentile (s)',
+  mean_s: 'average time per question after the gap (s)',
   focus_lost_s: 'focus lost for (s)',
   robust_z: 'robust z',
   direction: 'direction',
   heartbeat_gap_s: 'no heartbeat for (s)',
+}
+
+export const QUEUE_EMPTY =
+  'No flagged candidates in this sitting yet. A candidate\'s flags are worked out as they finish, ' +
+  'and again for the whole sitting when it is closed. "Everyone" shows candidates who have no flags.'
+export const EVERYONE_NOTE =
+  'Everyone who opened the test in this sitting, flagged or not. The queue is the work list; this ' +
+  'is how to find anyone else. Video stays closed unless they are in the queue or shortlisted.'
+export const VIDEO_CLOSED =
+  'Video stays closed for candidates who are not in the review queue. Add them to the shortlist ' +
+  'if you need to open it; the shortlisting is written to the audit log.'
+
+export const STATUS_LABELS: Record<SessionStatus, string> = {
+  created: 'Opened, not started',
+  in_progress: 'Sitting now',
+  finished: 'Finished',
+}
+
+export const LOG_NOTE =
+  'Everything the candidate\'s page reported, in server time. Most lines are not flags: the rules ' +
+  'choose which of them count, and a person decides what they mean.'
+
+/** Plain names for what the page reports. They describe; none of them is an accusation. */
+export const EVENT_LABELS: Record<string, string> = {
+  page_load: 'Page loaded',
+  reload: 'Page reloaded',
+  question_opened: 'Question opened',
+  answered: 'Answered',
+  skipped: 'Skipped',
+  focus_lost: 'Left the test window',
+  focus_returned: 'Came back to the test window',
+  visibility_hidden: 'Tab hidden',
+  visibility_visible: 'Tab visible again',
+  copy_attempt: 'Copy attempt',
+  cut_attempt: 'Cut attempt',
+  paste_attempt: 'Paste attempt',
+  screenshot_attempt: 'Screenshot key pressed',
+  contextmenu_attempt: 'Right-click menu opened',
+  idle_start: 'Stopped interacting',
+  idle_end: 'Started interacting again',
+  connection_lost: 'Connection lost',
+  connection_restored: 'Connection restored',
+  device_info: 'Camera and microphone reported',
+  mic_muted: 'Microphone muted',
+  mic_unmuted: 'Microphone unmuted',
+  mic_silent_start: 'Microphone went quiet',
+  mic_silent_end: 'Microphone sound returned',
+  camera_dropped: 'Camera dropped',
+  track_ended: 'Camera or microphone stopped',
+  fullscreen_exited: 'Left full screen',
+  fullscreen_entered: 'Entered full screen',
+  recording_started: 'Recording started',
+  upload_incomplete: 'Upload incomplete',
+}
+
+export const LOG_DETAIL_LABELS: Record<string, string> = {
+  length: 'length (characters)',
+  duration_s: 'lasted (s)',
+  camera_label: 'camera',
+  mic_label: 'microphone',
+  segment: 'part',
+  missing: 'chunks missing',
+  kind: 'track',
+}
+
+export const RESULT_LABELS: Record<LogQuestion['result'], string> = {
+  correct: 'Correct',
+  wrong: 'Wrong',
+  skipped: 'Skipped',
+  unanswered: 'Not answered',
 }
 
 export const INNOCENT_LABELS: Record<string, string> = {

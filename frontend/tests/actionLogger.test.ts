@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IDLE_AFTER_MS, startActionLogger } from '../src/lib/actionLogger'
+import { IDLE_AFTER_MS, screenshotCombo, startActionLogger } from '../src/lib/actionLogger'
 import { resetConnection } from '../src/lib/connection'
 import { logEvent } from '../src/lib/eventLog'
 import { resetFullscreen, setFullscreen } from './helpers/fakeFullscreen'
@@ -80,6 +80,49 @@ describe('action logger', () => {
       setVisibility('hidden')
       setVisibility('visible')
       expect(logged().slice(1)).toEqual(['visibility_hidden', 'visibility_visible'])
+    })
+  })
+
+  describe('screenshot keys', () => {
+    const press = (type: 'keydown' | 'keyup', init: KeyboardEventInit) =>
+      window.dispatchEvent(new KeyboardEvent(type, { bubbles: true, ...init }))
+
+    it('records PrintScreen once even when both the key down and the key up arrive', () => {
+      press('keydown', { code: 'PrintScreen', key: 'PrintScreen' })
+      press('keyup', { code: 'PrintScreen', key: 'PrintScreen' })
+      expect(vi.mocked(logEvent).mock.calls.slice(1)).toEqual([['screenshot_attempt', { combo: 'PrintScreen' }]])
+    })
+
+    it('records a second press once the first is over', () => {
+      press('keyup', { code: 'PrintScreen' })
+      vi.advanceTimersByTime(1000)
+      press('keyup', { code: 'PrintScreen' })
+      expect(logged().filter((t) => t === 'screenshot_attempt')).toHaveLength(2)
+    })
+
+    it('records Win+Shift+S, and only the combination, never other keys', () => {
+      press('keydown', { code: 'KeyS', key: 'S', metaKey: true, shiftKey: true })
+      press('keydown', { code: 'KeyA', key: 'a' })
+      press('keydown', { code: 'KeyS', key: 's', shiftKey: true })
+      expect(vi.mocked(logEvent).mock.calls.slice(1)).toEqual([['screenshot_attempt', { combo: 'Win+Shift+S' }]])
+    })
+  })
+
+  describe('screenshotCombo', () => {
+    const keys = (code: string, metaKey = true, shiftKey = true) => ({ code, key: code, metaKey, shiftKey })
+
+    it('knows the Mac shortcuts by their digit, whatever the layout types for shift', () => {
+      expect(screenshotCombo(keys('Digit3'), true)).toBe('Cmd+Shift+3')
+      expect(screenshotCombo(keys('Digit4'), true)).toBe('Cmd+Shift+4')
+      expect(screenshotCombo(keys('Digit5'), true)).toBe('Cmd+Shift+5')
+      expect(screenshotCombo(keys('Digit6'), true)).toBeNull()
+      expect(screenshotCombo(keys('KeyS'), true)).toBeNull() // Cmd+Shift+S is not a screenshot on a Mac
+    })
+
+    it('knows Win+Shift+S on Windows and not the Mac digits', () => {
+      expect(screenshotCombo(keys('KeyS'), false)).toBe('Win+Shift+S')
+      expect(screenshotCombo(keys('Digit3'), false)).toBeNull()
+      expect(screenshotCombo(keys('KeyS', false, true), false)).toBeNull()
     })
   })
 

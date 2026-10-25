@@ -2,8 +2,7 @@ import { CANDIDATE_PATH } from './routes'
 import { getAccessToken } from './session'
 import { getStaff } from './staffSession'
 
-// Every screen talks to the real server. The in-memory fixtures in ./mock are for the screen
-// tests only (see tests/helpers/mockedApi.ts); nothing in the app imports them.
+// Every screen talks to the real server.
 
 /** Reviewer and admin calls carry the staff token; everything else carries the candidate's. */
 function isStaffPath(path: string): boolean {
@@ -74,6 +73,20 @@ export interface StartResponse {
   status: SessionStatus
 }
 
+/** How far the candidate's questions have got. `ready` for a paper that is already built, and
+ *  `pending` while an AI sitting's questions are being written for them. */
+export interface PaperResponse {
+  status: 'pending' | 'ready' | 'failed'
+  written: number
+  total: number
+  /** Seconds waited so far, while pending. */
+  waited_s?: number | null
+  /** The candidate may ask again: the writing failed, or has taken longer than the limit. */
+  can_retry?: boolean
+  /** The candidate's own name, so the page can say whose test this is. Null if none was given. */
+  candidate_name?: string | null
+}
+
 export interface BeginResponse {
   status: SessionStatus
   remaining_s: number
@@ -86,6 +99,10 @@ export interface QuestionResponse {
   text: string
   options: { id: number; text: string }[]
   remaining_s: number
+  /** What is left of this question's own time; at 0 the server moves on to the next question. */
+  question_remaining_s: number
+  /** Addresses of the pictures the text's [[image N]] markers stand for (N counts from 1). */
+  images: string[]
 }
 
 export interface ResolveResponse {

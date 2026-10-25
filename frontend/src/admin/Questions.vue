@@ -129,7 +129,7 @@ function submit() {
   <p v-if="bankPending" role="status">Loading the question bank...</p>
   <section v-if="bank" class="panel">
     <h2>What is in the bank</h2>
-    <p>{{ bank.total }} questions: {{ bank.cytonn }} from Cytonn, {{ bank.synthetic }} placeholders.</p>
+    <p>{{ bank.total }} questions: {{ bank.cytonn }} from Cytonn, {{ bank.synthetic }} practice.</p>
     <div class="table-wrap">
       <table class="table">
         <thead>
@@ -137,7 +137,7 @@ function submit() {
             <th>Section</th>
             <th>Questions</th>
             <th>From Cytonn</th>
-            <th>Placeholders</th>
+            <th>Practice</th>
           </tr>
         </thead>
         <tbody>
@@ -153,18 +153,18 @@ function submit() {
 
     <template v-if="bank.synthetic > 0">
       <Banner tone="warn" role="status">
-        <p>Placeholder questions are drawn into papers like any other. Remove them before a real sitting.</p>
+        <p>Practice questions are only used by practice sittings. Remove them before a real sitting.</p>
       </Banner>
       <div v-if="confirmRetire" class="actions">
-        <BaseButton :busy="retiring" @click="retire()">Yes, remove {{ bank.synthetic }} placeholders</BaseButton>
+        <BaseButton :busy="retiring" @click="retire()">Yes, remove {{ bank.synthetic }} practice questions</BaseButton>
         <BaseButton variant="secondary" @click="confirmRetire = false">Cancel</BaseButton>
       </div>
       <BaseButton v-else variant="secondary" @click="confirmRetire = true">
-        Remove placeholder questions
+        Remove practice questions
       </BaseButton>
     </template>
     <p v-if="retired" role="status">
-      Removed {{ retired.removed }} placeholders<template v-if="retired.kept > 0">; {{ retired.kept }} stay because an earlier test uses them</template>.
+      Removed {{ retired.removed }} practice questions<template v-if="retired.kept > 0">; {{ retired.kept }} stay because an earlier test uses them</template>.
     </p>
     <Banner v-if="retireFailed" tone="bad" role="alert"><p>{{ importMessage(retireError) }}</p></Banner>
   </section>
@@ -214,7 +214,7 @@ function submit() {
               </td>
               <td class="preview" :title="q.preview">{{ q.preview }}</td>
               <td>
-                <span class="pill plain" :class="{ ai: q.source === 'cytonn' }">{{ q.source === 'cytonn' ? 'Cytonn' : 'Placeholder' }}</span>
+                <span class="pill plain" :class="{ ai: q.source === 'cytonn' }">{{ q.source === 'cytonn' ? 'Cytonn' : 'Practice' }}</span>
               </td>
               <td>
                 <template v-if="q.pct_correct !== null">{{ Math.round(q.pct_correct) }}%<span class="muted"> of {{ q.n }}</span></template>

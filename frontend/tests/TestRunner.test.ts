@@ -38,6 +38,7 @@ const wait = (ms = 0) => settle(advance, ms)
 
 let current = 1
 let remaining = 600
+let shown: Partial<QuestionResponse> = {}
 
 const question = (position: number): QuestionResponse => ({
   position,
@@ -46,6 +47,9 @@ const question = (position: number): QuestionResponse => ({
   text: `Question text ${position}`,
   options: [1, 2, 3, 4].map((n) => ({ id: position * 10 + n, text: `Option ${position}.${n}` })),
   remaining_s: remaining,
+  question_remaining_s: 105,
+  images: [],
+  ...shown,
 })
 
 function serve() {
@@ -80,6 +84,7 @@ describe('TestRunner', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance', 'Date'] })
     current = 1
+    shown = {}
     remaining = 600
     resetFullscreen()
     setFullscreen(true) // the candidate arrives in full screen
@@ -103,6 +108,54 @@ describe('TestRunner', () => {
     expect(w.findAll('label.option')).toHaveLength(4)
     expect(timer(w).text()).toBe('10:00')
     expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBe('0')
+  })
+
+  describe('a question that depends on a picture', () => {
+    const PICTURES = ['/api/session/s1/image/7?t=aaa', '/api/session/s1/image/8?t=bbb']
+
+    afterEach(() => {
+      shown = {}
+    })
+
+    it('puts each picture where the text says, between its paragraphs', async () => {
+      shown = {
+        text: 'Study the chart.\n\n[[image 1]]\n\nWhich bar is tallest?\n\n[[image 2]]',
+        images: PICTURES,
+      }
+      const { w } = await renderPage()
+      const inside = w.get('#question-text')
+      const kinds = inside.findAll('p, img').map((e) => e.element.tagName.toLowerCase())
+      expect(kinds).toEqual(['p', 'img', 'p', 'img'])
+      const pictures = inside.findAll('img')
+      expect(pictures.map((i) => i.attributes('src'))).toEqual(PICTURES)
+      expect(pictures[0].attributes('alt')).toBe('Picture 1 for this question')
+      expect(inside.findAll('p').map((p) => p.text())).toEqual([
+        'Study the chart.',
+        'Which bar is tallest?',
+      ])
+      expect(inside.text()).not.toContain('[[image')
+    })
+
+    it('shows a question with no picture as plain text and no image element', async () => {
+      const { w } = await renderPage()
+      expect(w.find('#question-text img').exists()).toBe(false)
+      expect(w.get('#question-text').text()).toBe('Question text 1')
+    })
+
+    it('drops a marker that has no picture behind it rather than show stray brackets', async () => {
+      shown = { text: 'Look.\n\n[[image 3]]\n\nThen answer.', images: [PICTURES[0]] }
+      const { w } = await renderPage()
+      expect(w.find('#question-text img').exists()).toBe(false)
+      expect(w.get('#question-text').text()).not.toContain('[[')
+      expect(w.get('#question-text').text()).toContain('Then answer.')
+    })
+
+    it('keeps the question selectable as one block, which is what copy detection watches', async () => {
+      shown = { text: 'A.\n\n[[image 1]]\n\nB.', images: [PICTURES[0]] }
+      const { w } = await renderPage()
+      expect(w.findAll('#question-text')).toHaveLength(1)
+      expect(w.get('#question-text').classes()).toContain('question-text')
+    })
   })
 
   it('does not offer an answer to the whole paper: only the current question is asked for', async () => {
@@ -149,6 +202,18 @@ describe('TestRunner', () => {
     expect(w.text()).toContain('done page')
   })
 
+  it('shows the question\'s own time and asks for the next question when it runs out', async () => {
+    shown = { question_remaining_s: 3 }
+    const { w } = await renderPage()
+    expect(w.text()).toContain('This question 00:03')
+
+    shown = {} // the next question comes with its full 1 min 45 s
+    current = 2 // the server closed question 1 at 0 and moved on
+    await wait(3500)
+    expect(w.text()).toContain('Question 2 of 3')
+    expect(w.text()).toContain('This question 01:45')
+  })
+
   it('goes to the start page when there is no session', async () => {
     clearSession()
     const { w } = await renderPage()
@@ -182,6 +247,7 @@ describe('TestRunner', () => {
 
   it('turns the timer amber below five minutes and red below one', async () => {
     remaining = 250
+    shown = { question_remaining_s: 1e6 } // this test is about the whole-test timer only
     const { w } = await renderPage()
     expect(timer(w).classes()).toContain('warn')
     expect(timer(w).classes()).not.toContain('danger')
