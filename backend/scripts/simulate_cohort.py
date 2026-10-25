@@ -162,6 +162,7 @@ def _write_session(
     questions: list[Question],
     options: dict[str, list[Option]],
     prefix: str,
+    with_emails: bool = False,
 ) -> None:
     candidate_id = f"{prefix}-{number:03d}"
     db.add(
@@ -169,6 +170,13 @@ def _write_session(
             id=candidate_id,
             # an unusable hash: nobody has the code, so nobody can start this session
             invite_token_hash=hash_token(f"simulated-{candidate_id}-{rng.getrandbits(96):x}"),
+            # belongs to its own sitting, like any invitation, so it is never counted as invited
+            # to whichever sitting happens to be the newest open one
+            sitting_id=sitting.id,
+            # only when asked for, so the result emails can be tried on the made-up cohort. The
+            # domain is reserved (RFC 2606) and can never receive anything.
+            full_name=f"Simulated Person {number:02d}" if with_emails else None,
+            email=f"{candidate_id}@example.invalid" if with_emails else None,
         )
     )
 
@@ -347,8 +355,11 @@ def simulate(
     name: str = SITTING_NAME,
     start: datetime = DEFAULT_START,
     prefix: str = SIM_PREFIX,
+    with_emails: bool = False,
 ) -> SimSummary:
-    """Write the cohort and compute its flags. Does nothing if the sitting already exists."""
+    """Write the cohort and compute its flags. Does nothing if the sitting already exists.
+    With `with_emails` each candidate also gets a made-up name and an address that cannot receive
+    mail, so the result emails and the outcomes list can be tried."""
     existing = db.scalar(select(Sitting).where(Sitting.name == name))
     if existing is not None:
         return SimSummary(created=False, sitting_id=existing.id)
@@ -383,7 +394,8 @@ def simulate(
             number += 1
             paper = _pick_questions(rng, by_section)
             _write_session(
-                db, rng, number, archetype, ordinal, sitting, start, paper, options, prefix
+                db, rng, number, archetype, ordinal, sitting, start, paper, options, prefix,
+                with_emails,
             )
             summary.by_archetype[f"{prefix}-{number:03d}"] = archetype
     summary.candidates = number
@@ -398,6 +410,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--name", default=SITTING_NAME)
     parser.add_argument("--purge", action="store_true", help="remove the simulated sitting")
+    parser.add_argument(
+        "--with-emails",
+        action="store_true",
+        help="give each candidate a made-up name and an address that cannot receive mail",
+    )
     args = parser.parse_args(argv)
 
     with SessionLocal() as db:
@@ -407,7 +424,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"removed {removed} simulated sessions and everything attached to them")
             return
         try:
-            result = simulate(db, seed=args.seed, name=args.name)
+            result = simulate(db, seed=args.seed, name=args.name, with_emails=args.with_emails)
         except ValueError as problem:
             db.rollback()
             raise SystemExit(f"not simulated: {problem}") from problem
