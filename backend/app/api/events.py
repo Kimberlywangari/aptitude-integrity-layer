@@ -21,7 +21,10 @@ def post_events(
 ) -> EventsResponse:
     result = event_service.ingest(db, clock, session, body.events)
     return EventsResponse(
-        accepted=result.accepted, duplicates=result.duplicates, rejected=result.rejected
+        accepted=result.accepted,
+        duplicates=result.duplicates,
+        rejected=result.rejected,
+        warn=result.warn,
     )
 
 

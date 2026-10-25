@@ -8,6 +8,7 @@ import {
   startEventLog,
   stopEventLog,
 } from '../src/lib/eventLog'
+import { clearNotice, noticeVisible } from '../src/lib/flagNotice'
 import { clearSession, saveSession } from '../src/lib/session'
 import { createMemoryStore, setStore } from '../src/lib/store'
 import type { DeviceStore } from '../src/lib/store'
@@ -38,6 +39,7 @@ describe('event log', () => {
     setStore(store)
     resetConnection()
     resetEventLog()
+    clearNotice()
     saveSession('s1', 'tok')
   })
 
@@ -87,6 +89,26 @@ describe('event log', () => {
     ])
     expect(first.age_ms - second.age_ms).toBe(500) // the older one is older by what really passed
     expect(first.age_ms).toBeGreaterThan(1_000)
+  })
+
+  it('shows the notice when the server says something just stored can raise a flag', async () => {
+    await logEvent('copy_attempt', { length: 12 })
+    fetchMock.mockImplementationOnce(() =>
+      reply(200, { accepted: 1, duplicates: 0, rejected: 0, warn: true }),
+    )
+    await flushEvents()
+    expect(noticeVisible.value).toBe(true)
+  })
+
+  it('shows nothing for an ordinary batch, or when the server does not say', async () => {
+    await logEvent('question_opened', { position: 1 })
+    fetchMock.mockImplementationOnce(() =>
+      reply(200, { accepted: 1, duplicates: 0, rejected: 0, warn: false }),
+    )
+    await flushEvents()
+    await logEvent('answered', { position: 1 })
+    await flushEvents() // an older server's reply has no `warn` at all
+    expect(noticeVisible.value).toBe(false)
   })
 
   it('sends a payload only when there is one', async () => {

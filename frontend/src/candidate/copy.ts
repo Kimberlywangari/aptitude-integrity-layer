@@ -251,3 +251,9 @@ export const COMPLAINT_CATEGORIES: { value: 'camera' | 'upload' | 'other'; label
   { value: 'upload', label: 'My recording would not upload' },
   { value: 'other', label: 'Something else' },
 ]
+
+// Shown for a few seconds when the page has just recorded something a reviewer may look at (leaving
+// the page, copying, a screenshot key). Calm on purpose: it names no rule and no number, and does
+// not call anything cheating. A person decides; nothing has been.
+export const FLAG_NOTICE =
+  'This has been recorded and a reviewer will see it. Nothing has been decided.'

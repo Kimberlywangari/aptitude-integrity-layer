@@ -137,6 +137,8 @@ export interface EventsResponse {
   accepted: number
   duplicates: number
   rejected: number
+  /** Something just stored is of a kind that can raise a flag: the page tells the candidate. */
+  warn?: boolean
 }
 
 export interface HeartbeatResponse {

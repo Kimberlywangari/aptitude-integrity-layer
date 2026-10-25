@@ -35,6 +35,9 @@ class EventsResponse(BaseModel):
     accepted: int
     duplicates: int  # sent before: a retry after a lost reply is not an error
     rejected: int  # a type the server does not know; sending it again will not help
+    # True when a just-stored event is of a kind that can raise a flag. The test screen then tells
+    # the candidate it was recorded. Never says which rule, and carries no number.
+    warn: bool = False
 
 
 class HeartbeatResponse(BaseModel):

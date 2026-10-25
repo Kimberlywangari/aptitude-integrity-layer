@@ -8,6 +8,7 @@ import {
   FINISHED_LEAVE,
   FINISHED_LEAVE_BUTTON,
   FINISHED_TITLE,
+  FLAG_NOTICE,
   NOTIFICATIONS_CHECKBOX,
   UPLOAD_DONE,
 } from '../src/candidate/copy'
@@ -113,6 +114,9 @@ test('a candidate takes the whole test, recorded and logged, and everything arri
       await page.locator('#question-text').selectText()
       await page.evaluate(() => document.dispatchEvent(new Event('copy')))
       await page.locator('#question-text').click({ button: 'right' })
+      // the server saw a copy and a loss of focus, so the page says they were recorded: a calm line
+      // that appears over the question and goes by itself
+      await expect(page.getByText(FLAG_NOTICE)).toBeVisible({ timeout: 10_000 })
       await page.waitForTimeout(22_000) // long enough for two heartbeats and a chunk or two
     }
 
@@ -154,6 +158,7 @@ test('a candidate takes the whole test, recorded and logged, and everything arri
   await expect(page.getByText(FINISHED_TITLE)).toBeVisible()
 
   // ---- the recording is safe, so the candidate is told how to leave full screen, and can
+  await expect(page.getByText(FLAG_NOTICE)).toBeHidden() // it was only for the test
   expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(true)
   await expect(page.getByText(FINISHED_LEAVE)).toBeVisible()
   await page.getByRole('button', { name: FINISHED_LEAVE_BUTTON }).click()

@@ -405,3 +405,20 @@ def test_a_gap_in_the_record_scores_nothing_and_adds_no_extras():
     assert is_logging_only(["LOGGING_PROBLEM"]) is True
     assert is_logging_only(["LOGGING_PROBLEM", "COPY_ATTEMPT"]) is False
     assert is_logging_only([]) is False
+
+
+def test_every_event_the_candidate_is_warned_about_is_one_a_rule_reads():
+    """The test screen's notice is driven by WARN_EVENT_TYPES. If a rule stopped reading one of them
+    (or a name were changed in only one place) the candidate would be told about something that no
+    longer raises a flag, so each type has to produce a flag on its own."""
+    paper_ = paper(20, 20)
+    for kind in sorted(rules.WARN_EVENT_TYPES):
+        events = [rules.Ev(kind, at(5), {"combo": "PrintScreen"})]
+        if kind == rules.FOCUS_EVENT:  # a loss counts once it has lasted long enough
+            events.append(rules.Ev(rules.FOCUS_RETURN_EVENT, at(5 + CFG.focus_loss_min_s + 5)))
+        drafts = (
+            rules.focus_loss_flags(rules.focus_losses(events, at(40)), paper_, CFG)
+            + rules.copy_attempt_flags(events, paper_, CFG)
+            + rules.screenshot_key_flags(events, paper_, CFG)
+        )
+        assert drafts, f"no rule reads {kind}"

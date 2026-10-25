@@ -15,6 +15,7 @@ import { fullscreenRequired } from '../lib/features'
 import { CANDIDATE_PATH } from '../lib/routes'
 import { startTestRuntime } from '../lib/runtime'
 import { getSessionId } from '../lib/session'
+import FlagNotice from './FlagNotice.vue'
 import FullscreenGate from './FullscreenGate.vue'
 import MicBanner from './MicBanner.vue'
 import RecordingBanner from './RecordingBanner.vue'
@@ -270,6 +271,7 @@ async function resolve(kind: 'answer' | 'skip') {
     <Transition name="cover">
       <FullscreenGate v-if="coverOn" :time-left="timeText" />
     </Transition>
+    <FlagNotice />
   </main>
 </template>
 
