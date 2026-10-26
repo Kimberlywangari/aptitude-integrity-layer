@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import Decision, Flag, Sitting, TestSession, VideoChunk
-from app.services import review
+from app.services import disk, review
 from app.services.flags.config import DEFAULTS, FlagConfig
 from app.services.flags.rules import LOGGING_PROBLEM
 from app.services.video import ffmpeg
@@ -50,6 +50,15 @@ def _ai_check(settings: Settings, ollama_probe: Callable[[str], bool]) -> dict[s
         text = "No Anthropic key is set; the order falls back to the rules."
         return _check("ai", "AI ranking", "warn", text)
     return _check("ai", "AI ranking", "off", "Rules only: the order comes from the rule score.")
+
+
+def _disk_check(settings: Settings) -> dict[str, str]:
+    free, total = disk.free_and_total(settings.video_root_path)
+    low = free < disk.LOW_FREE_BYTES
+    text = f"{free / 1024**3:.0f} GB free of {total / 1024**3:.0f} GB where recordings are kept."
+    if low:
+        text += " That is low: free some space or move the recordings before the next sitting."
+    return _check("disk", "Recordings disk", "warn" if low else "ok", text)
 
 
 GATE_TEXT = {
@@ -89,6 +98,7 @@ def checks(
             if has_ffmpeg
             else "ffmpeg was not found, so a recording cannot be played back.",
         ),
+        _disk_check(settings),
         _check(
             "heartbeat",
             "Heartbeat gaps",

@@ -11,7 +11,7 @@ from app.core.security import hash_token, normalise_invite_code
 from app.core.staff_token import issue_staff_token
 from app.errors import ApiError
 from app.models import AuditLog, Candidate, Question, QuestionStats, Sitting, TestSession
-from app.services import admin, overview
+from app.services import admin, disk, overview
 from app.services.staff_auth import create_reviewer
 from app.services.test_flow import select_questions
 
@@ -129,6 +129,20 @@ def test_the_checks_say_what_is_set_up():
 
     gaps = {c["key"]: c for c in overview.checks(configured(), 2)}["heartbeat"]
     assert (gaps["state"], gaps["detail"]) == ("note", "2 to look at.")
+
+
+def test_the_overview_warns_when_the_recordings_disk_is_nearly_full(monkeypatch):
+    settings = Settings(ai_provider="rules", anthropic_api_key="", precheck_gate="off")
+
+    def with_free(gigabytes: int):
+        free = gigabytes * 1024**3
+        monkeypatch.setattr(disk, "free_and_total", lambda path: (free, 500 * 1024**3))
+        return {c["key"]: c for c in overview.checks(settings, 0)}["disk"]
+
+    roomy, tight = with_free(200), with_free(4)
+    assert (roomy["state"], tight["state"]) == ("ok", "warn")
+    assert "200 GB free of 500 GB" in roomy["detail"]
+    assert "low" in tight["detail"]
 
 
 # --------------------------------------------------------------------------------- invitations
