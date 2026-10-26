@@ -19,6 +19,7 @@ import type {
   InviteStatus,
   MailStatus,
   PassMarkPreview,
+  ProcessStatus,
   PreviewList,
   QuestionBankSummary,
   QuestionListResponse,
@@ -111,6 +112,9 @@ let resultsState: Omit<
 >
 let complaintCount: number
 let manifestCalls: Map<string, number>
+// "Process sitting": the latest run of each sitting, and how many status reads it still takes
+let processRuns: Map<number, ProcessStatus>
+let processReadsLeft: Map<number, number>
 
 function reset(): void {
   state = initialState()
@@ -169,6 +173,8 @@ function reset(): void {
   }
   complaintCount = 0
   manifestCalls = new Map()
+  processRuns = new Map()
+  processReadsLeft = new Map()
 }
 reset()
 
@@ -886,6 +892,51 @@ function dispatch(route: string, url: URL, body: unknown, token: string | null):
         body: "Dear [candidate's name],\n\nA person looked at your sitting.\n",
       },
     } satisfies ResultsPlan
+  }
+
+  if ((m = route.match(/^(GET|POST) \/api\/admin\/sittings\/(\d+)\/process$/))) {
+    const t = requireAdmin(token)
+    const sitting = sittings.find((s) => s.id === Number(m![2]))
+    if (!sitting) fail(404, 'sitting_not_found')
+    const id = sitting!.id
+    const idle: ProcessStatus = {
+      state: 'idle',
+      provider: 'rules',
+      model: null,
+      steps: [],
+      error: null,
+      started_at: null,
+      finished_at: null,
+      last_ranked_at: null,
+    }
+    if (m[1] === 'POST') {
+      if (sitting!.status !== 'closed') fail(409, 'sitting_not_closed')
+      if (processRuns.get(id)?.state !== 'running') {
+        processRuns.set(id, { ...idle, state: 'running', started_at: '2026-10-26T10:00:00Z' })
+        processReadsLeft.set(id, 1) // the next read of the status finds it finished
+        audit(emailOf(t), 'admin', null, `started processing "${sitting!.name}" for review (rules)`)
+      }
+    } else if (processRuns.get(id)?.state === 'running') {
+      const left = (processReadsLeft.get(id) ?? 0) - 1
+      processReadsLeft.set(id, left)
+      if (left <= 0) {
+        processRuns.set(id, {
+          ...idle,
+          state: 'done',
+          started_at: '2026-10-26T10:00:00Z',
+          finished_at: '2026-10-26T10:00:09Z',
+          last_ranked_at: '2026-10-26T10:00:09Z',
+          steps: [
+            { label: 'compute flags', seconds: 0.4, note: '23 flags on 6/16 sessions, cohort applied' },
+            { label: 'assemble video', seconds: 0, note: 'skipped (no ffmpeg, or video turned off)' },
+            { label: 'scan audio', seconds: 0, note: 'skipped (no ffmpeg, or video turned off)' },
+            { label: 'build packets', seconds: 0.3, note: '6 packets' },
+            { label: 'rank', seconds: 0.1, note: '6 ranked by rules only (not_run 6)' },
+          ],
+        })
+      }
+    }
+    return processRuns.get(id) ?? idle
   }
 
   if ((m = route.match(/^GET \/api\/admin\/sittings\/(\d+)\/pass-mark\/preview$/))) {

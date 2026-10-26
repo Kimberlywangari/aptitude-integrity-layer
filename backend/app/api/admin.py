@@ -19,7 +19,7 @@ from app.clock import Clock
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.errors import ApiError
-from app.models import EmailOutbox, Reviewer, Sitting
+from app.models import EmailOutbox, Ranking, Reviewer, Sitting
 from app.schemas.admin import (
     AdminOutcomesResponse,
     AiCategoryOut,
@@ -48,6 +48,8 @@ from app.schemas.admin import (
     PersonOut,
     PreviewListRequest,
     PreviewListResponse,
+    ProcessStatusResponse,
+    ProcessStepOut,
     QuestionListResponse,
     QuestionRowOut,
     ResultsPlanResponse,
@@ -63,7 +65,7 @@ from app.schemas.admin import (
     TestMailRequest,
 )
 from app.services import admin as admin_service
-from app.services import documents, mail, outcomes, question_import, results
+from app.services import documents, mail, outcomes, processing, question_import, results
 from app.services import review as review_service
 from app.services.qgen.categories import CATEGORIES, MAX_PER_CATEGORY, MAX_TOTAL
 from app.services.qgen.writers import check_available
@@ -227,6 +229,59 @@ def close_sitting(
     db.commit()
     mail.launch_sending(clock)
     return CloseSittingResponse(status="closed", forced=unfinished > 0)
+
+
+def _process_status(db: Session, sitting_id: int, settings: Settings) -> ProcessStatusResponse:
+    run = processing.run_of(sitting_id)
+    model = {"ollama": settings.ollama_model, "claude": settings.claude_model}.get(
+        settings.ai_provider
+    )
+    return ProcessStatusResponse(
+        state=run.state if run else "idle",
+        provider=settings.ai_provider,
+        model=model,
+        steps=[ProcessStepOut(**asdict(step)) for step in run.steps] if run else [],
+        error=run.error if run else None,
+        started_at=run.started_at if run else None,
+        finished_at=run.finished_at if run else None,
+        last_ranked_at=db.scalar(
+            select(func.max(Ranking.ranked_at)).where(Ranking.sitting_id == sitting_id)
+        ),
+    )
+
+
+@router.get("/sittings/{sitting_id}/process", response_model=ProcessStatusResponse)
+def process_status(
+    sitting_id: int,
+    _: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ProcessStatusResponse:
+    """Where the run that prepares a closed sitting for review stands, for the page to poll."""
+    _sitting_or_404(db, sitting_id)
+    return _process_status(db, sitting_id, settings)
+
+
+@router.post("/sittings/{sitting_id}/process", response_model=ProcessStatusResponse)
+def start_processing(
+    sitting_id: int,
+    admin: Reviewer = Depends(require_admin),
+    db: Session = Depends(get_db),
+    clock: Clock = Depends(get_clock),
+    settings: Settings = Depends(get_settings),
+) -> ProcessStatusResponse:
+    """Prepare a closed sitting for review: flags, video, audio, packets, then the ranking by the
+    configured provider. It runs in the background; asking again while it runs changes nothing."""
+    sitting = _sitting_or_404(db, sitting_id)
+    if sitting.status != "closed":
+        raise ApiError(409, "sitting_not_closed")  # the cohort checks need the closed sitting
+    if processing.launch(sitting_id, clock):
+        record_action(
+            db, clock, admin, "admin",
+            f'started processing "{sitting.name}" for review ({settings.ai_provider})',
+        )  # fmt: skip
+        db.commit()
+    return _process_status(db, sitting_id, settings)
 
 
 # ---------------------------------------------------------------------------------- AI questions

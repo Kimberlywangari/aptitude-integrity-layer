@@ -118,3 +118,36 @@ def test_the_outcomes_list_and_a_recorded_result_never_leak_a_name_to_a_reviewer
 
     queued = db.scalar(select(EmailOutbox).where(EmailOutbox.candidate_id == target))
     assert SURNAME in queued.body  # the one place a name belongs
+
+
+def test_processing_a_sitting_reports_and_logs_no_name(
+    client, db, clock, settings, named, monkeypatch
+):
+    """The Process sitting button: what it reports on the admin's page and the audit line it
+    leaves, which reviewers can read, carry counts only."""
+    from app.core.staff_token import issue_staff_token
+    from app.services import processing
+
+    account, _ = create_reviewer(
+        db, clock, email="boss@staff.test", password=PASSWORD, role="admin"
+    )
+    db.flush()
+    admin = {
+        "Authorization": "Bearer "
+        + issue_staff_token(settings.session_secret, clock, account.id, account.password_hash)
+    }
+    sitting = db.scalar(select(Sitting.id).where(Sitting.name == SITTING_NAME))
+    steps = processing.process_sitting(db, sitting, settings, clock, None, use_video=False)
+    assert len(steps) == 5
+
+    monkeypatch.setattr(processing, "launch", lambda sitting_id, clock=None: True)
+    url = f"/api/admin/sittings/{sitting}/process"
+    started = client.post(url, headers=admin)
+    status = client.get(url, headers=admin)
+    audit = client.get("/api/review/audit", headers=admin)
+    assert started.status_code == status.status_code == audit.status_code == 200
+
+    for page in (started.json(), status.json(), audit.json()):
+        text = json.dumps(page).replace("boss@staff.test", "")
+        assert mentions(text) == []
+    assert status.json()["last_ranked_at"] is not None  # the rankings really were written
