@@ -92,18 +92,19 @@ describe('UploadStatus', () => {
     expect(startUploader).toHaveBeenCalledWith('s1')
   })
 
-  it('says how many parts are still on this computer, and why they have not gone', async () => {
+  it('says some of the recording is still on this computer, and why, without counting parts', async () => {
     const w = await renderPage()
     await wait(0)
     expect(w.text()).not.toContain('still on this computer')
 
     setLocal({ pending: 3 })
     await wait(0)
-    expect(w.text()).toContain('3 parts are still on this computer')
+    expect(w.text()).toContain('Some of your recording is still on this computer')
+    expect(w.text()).not.toMatch(/\bparts?\b/)
+    expect(w.text()).not.toContain('waiting for the connection')
 
     setLocal({ pending: 1, retrying: true })
     await wait(0)
-    expect(w.text()).toContain('1 part is still on this computer')
     expect(w.text()).toContain('waiting for the connection')
   })
 
@@ -143,7 +144,8 @@ describe('UploadStatus', () => {
   it('shows progress, then offers Finish once everything is uploaded', async () => {
     const w = await renderPage()
     await wait(0)
-    expect(w.text()).toMatch(/Uploaded 9 of 42 parts/)
+    expect(w.text()).toContain('21%') // 9 of 42, shown as a percentage only
+    expect(w.text()).not.toMatch(/\bparts?\b|of 42/)
     expect(hasButton(w, 'Finish')).toBe(false)
 
     await wait(3000 * 4) // four more polls take the mock manifest to 42 of 42
@@ -156,7 +158,8 @@ describe('UploadStatus', () => {
     vi.mocked(api).mockResolvedValue({ expected: 15, received: 20, missing: 0, bytes: 0, complete: true })
     const w = await renderPage()
     await wait(0)
-    expect(w.text()).toContain('Uploaded 15 of 15 parts (100%)')
+    expect(w.text()).toContain('100%')
+    expect(w.text()).not.toMatch(/\bparts?\b|of 15/)
     expect(w.text()).not.toContain('133')
     expect(w.get('[role=progressbar]').attributes('aria-valuenow')).toBe('15')
   })
