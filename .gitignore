@@ -17,6 +17,7 @@ playwright-report/
 # Local config and data (never commit)
 .env
 data/
+backups/
 docs/
 .claude/
 .agents/
