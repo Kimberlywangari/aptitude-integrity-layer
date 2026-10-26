@@ -162,18 +162,15 @@ const percent = computed(() =>
             :max="manifest.expected"
             :tone="complete ? 'ok' : 'accent'"
           />
-          <p class="muted detail">
-            Uploaded {{ uploaded }} of {{ manifest.expected }} parts
-            <template v-if="percent !== null">({{ percent }}%)</template>.
-          </p>
+          <p v-if="percent !== null" class="muted detail">{{ percent }}%</p>
         </template>
         <p v-if="!manifest && failures === 0" role="status">Checking your upload...</p>
         <p v-if="failures > 0 && !complete" role="status" class="muted">
           Could not reach the server. Trying again.
         </p>
         <p v-if="local.pending > 0 && !complete" class="muted detail">
-          {{ local.pending }} {{ local.pending === 1 ? 'part is' : 'parts are' }} still on this
-          computer<template v-if="local.retrying">, waiting for the connection to the server</template>.
+          Some of your recording is still on this computer<template v-if="local.retrying">, waiting
+          for the connection to the server</template>.
         </p>
         <p v-if="!complete" class="muted detail">{{ UPLOAD_RESUME_HINT }}</p>
 
