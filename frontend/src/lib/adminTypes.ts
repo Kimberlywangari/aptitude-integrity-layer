@@ -148,6 +148,24 @@ export interface PassMarkPreview {
   emails_now: number
 }
 
+export interface ProcessStep {
+  label: string
+  seconds: number
+  note: string
+}
+
+/** Where "Process sitting" stands. `provider` and `model` are what a run started now would use. */
+export interface ProcessStatus {
+  state: 'idle' | 'running' | 'done' | 'failed'
+  provider: 'rules' | 'ollama' | 'claude'
+  model: string | null
+  steps: ProcessStep[]
+  error: string | null
+  started_at: string | null
+  finished_at: string | null
+  last_ranked_at: string | null
+}
+
 export interface InvitesResponse {
   invites: Invite[]
   /** The sitting these codes open: every one of them starts that sitting's paper. */

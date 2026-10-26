@@ -82,6 +82,13 @@ def no_background_mail(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.services.mail.launch_sending", lambda clock=None: None)
 
 
+@pytest.fixture(autouse=True)
+def no_background_processing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Process sitting button runs in a thread with its own database session; a test that
+    starts it would leave the test's transaction. Tests call `processing._work` inline instead."""
+    monkeypatch.setattr("app.services.processing.launch", lambda sitting_id, clock=None: False)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()

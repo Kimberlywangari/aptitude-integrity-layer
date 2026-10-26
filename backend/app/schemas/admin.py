@@ -301,6 +301,26 @@ class PassMarkResponse(BaseModel):
     queued: int  # rejection emails queued by the change (a closed sitting only)
 
 
+class ProcessStepOut(BaseModel):
+    label: str
+    seconds: float
+    note: str  # counts only
+
+
+class ProcessStatusResponse(BaseModel):
+    """Where "Process sitting" stands for one sitting. `provider` and `model` are what a run
+    started now would rank with."""
+
+    state: Literal["idle", "running", "done", "failed"]
+    provider: Literal["rules", "ollama", "claude"]
+    model: str | None
+    steps: list[ProcessStepOut]
+    error: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    last_ranked_at: datetime | None  # from the stored rankings, so it survives a restart
+
+
 class AppealRequest(BaseModel):
     under_appeal: bool
 
