@@ -11,9 +11,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Dependencies first, so a code change does not reinstall them.
-COPY pyproject.toml ./
-RUN pip install ".[claude]"
+# Dependencies first, so a code change does not reinstall them. constraints.txt holds the exact
+# versions the tests ran against, so a rebuild next month installs the same ones.
+COPY pyproject.toml constraints.txt ./
+RUN pip install -c constraints.txt ".[claude]"
 
 COPY alembic.ini ./
 COPY migrations ./migrations
