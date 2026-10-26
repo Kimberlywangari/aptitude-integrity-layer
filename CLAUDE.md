@@ -23,7 +23,7 @@ docker compose up -d db                     # Postgres on host port 5433
 
 cd backend
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,claude]" -c constraints.txt
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m scripts.jobs seed_synthetic --seed 42   # writes ..\data\invites.csv
 .\.venv\Scripts\python.exe -m scripts.jobs create_reviewer --email you@cytonn.com --role admin   # asks for a password
@@ -83,6 +83,21 @@ The full list is in master plan section 1.
 - Uploads (invite list, question import) go through `POST /api/admin/extract-text`, which decides the file
   kind from its bytes. Only `pypdf` is a dependency of it; everything else is the standard library. Legacy
   `.doc`/`.xls`/`.ppt` and scanned PDFs are refused with a reason, never guessed at.
+
+## After a sitting closes, and running it for real
+
+- Closing works out flags and the pass-mark rule. Video joining, the audio scan, packets and the AI
+  ranking are one run, `services/processing.py`, started by the admin's "Prepare for review" panel or
+  `scripts.jobs process_sitting`. It is deliberately not triggered by closing: recordings keep arriving
+  for up to 48 h (`RESUME_WINDOW_S`), and a run before that ranks partial video. Its progress is in
+  memory (a restart forgets a run under way; repeating it is safe), and tests stub `processing.launch`
+  in `conftest.py` and call `_work` inline.
+- `/api/health` stays a 200 when the recordings disk is low (`status: "low_disk"`), because Docker's own
+  health check reads the code. `services/disk.py` is the one threshold the health route and the staff
+  overview share.
+- `backend/constraints.txt` pins every Python package; the Docker image and CI install with it. Change it
+  only on purpose, by the steps in the README ("Pinned versions").
+- `deploy/backup.sh` and `deploy/restore.sh` are a pair, rehearsed together. `backups/` is git-ignored.
 
 ## Candidate sign-in
 

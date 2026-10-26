@@ -16,7 +16,7 @@ docker compose up -d db                     # Postgres on host port 5433
 
 cd backend
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,claude]" -c constraints.txt
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m scripts.jobs seed_synthetic --seed 42   # writes ..\data\invites.csv
 .\.venv\Scripts\python.exe -m scripts.jobs create_reviewer --email you@cytonn.com --role admin   # asks for a password
@@ -72,9 +72,41 @@ Linux host the real addresses come through.
 `docker-compose.prod.yml` adds a Caddy proxy that gets the HTTPS certificate, closes every port but
 80 and 443, and sets `ENV=production` (the API then refuses to start with a weak secret, an `http://`
 address or the camera gate off). Fill in `.env` from `.env.example`, then
-`docker compose -f docker-compose.prod.yml up -d --build`. `deploy/backup.sh` takes the backups. The
-full steps are in `docs/plan/hosting-cytonn-server.md`, and moving the AI from a local model to
-Claude is in `docs/plan/ai-provider-switch.md` (both local; `docs/` is not committed).
+`docker compose -f docker-compose.prod.yml up -d --build`. The full steps are in
+`docs/plan/hosting-cytonn-server.md`, and moving the AI from a local model to Claude is in
+`docs/plan/ai-provider-switch.md` (both local; `docs/` is not committed).
+
+#### Backups, restoring, and knowing when it is down
+
+- **Back up** with `sh deploy/backup.sh` (cron: `0 2 * * * cd /srv/aptitude && sh deploy/backup.sh`). It
+  writes a dated database dump and a recordings archive into `./backups` (git-ignored: the dump holds
+  candidate names and addresses), checks both, keeps the last 14, and stops with an error rather than
+  leave an empty file. Copy `./backups` off the machine as well; that part is not automated, because
+  where the copies go is Cytonn's choice.
+- **Restore** with `sh deploy/restore.sh backups/db-<stamp>.sql.gz backups/video-<stamp>.tar.gz` into a
+  database that is empty (a new server: `up -d db` first, the rest after). It refuses a database that
+  already has tables; the top of the script says how to replace a live one. Rehearsed on 26 Oct 2026
+  against a throwaway copy of the production stack: back up, delete every container and volume,
+  restore, start the API. All 23 tables had the same row counts, and a recording came back byte for byte.
+- **Watch it.** Point a free uptime monitor (for example UptimeRobot) at `https://<host>/api/health` and
+  have it look for the text `"status":"ok"`. A stopped API or database fails the request. Under 10 GB
+  free where recordings are kept, the reply changes to `"status":"low_disk"` (still a 200, so Docker does
+  not restart the API), and the staff Overview page shows a warning under "System checks".
+
+#### After a sitting closes
+
+Closing works out the flags and the pass-mark emails. The reviewers' queue then has the rule order only
+until someone presses **Prepare for review** on the sitting's page (admin), which joins the recordings,
+scans the audio, builds the evidence packets and ranks the flagged candidates with the provider in
+`AI_PROVIDER`. It is not automatic on purpose: recordings go on arriving for up to 48 hours after the
+test, and the run should come after they have. It is safe to run again. The same run from a terminal:
+`python -m scripts.jobs process_sitting --sitting <id or name>`.
+
+#### Checks on every push
+
+`.github/workflows/checks.yml` runs ruff, the backend tests (Postgres, ffmpeg and the pinned packages,
+nothing skipped) and the frontend lint, tests, type-check and build, on every push to `main` and every
+pull request. The browser journeys (Playwright) need a running stack and stay manual.
 
 ### Invitations and emails
 
@@ -129,6 +161,20 @@ runs). `API_URL=http://localhost:8001 npm run dev` points the proxy at another A
 cd backend;  .\.venv\Scripts\python.exe -m pytest -q     # uses the integrity_test database
 cd frontend; npm test; npm run lint; npm run build   # Vitest, oxlint, type-check and build
 ```
+
+Without `claude` in the install, the 7 tests for the Claude client are skipped; without ffmpeg (set
+`FFMPEG_BIN` in `.env`, or put it on PATH) the 9 video tests are skipped. A run that skips them is not
+a full run.
+
+### Pinned versions
+
+`backend/constraints.txt` holds the exact version of every Python package the tests were run against, and
+the Docker image installs with it, so a rebuild cannot pick up a newer release. The frontend does the same
+through `package-lock.json`. To upgrade on purpose: make a fresh Python 3.13 venv, run
+`pip install -e ".[dev,claude]"` (no `-c`), run the whole suite, then regenerate the file with
+`pip freeze --exclude-editable`, keeping its header and adding `uvloop` (a Linux-only extra of
+`uvicorn[standard]`; check the Linux set with `pip install -c constraints.txt ".[dev,claude]"` in a
+`python:3.13-slim` container).
 
 One whole candidate journey in a real browser (Chromium with a fake camera and a generated tone), against a
 running stack: invitation, permissions, the recording, a reload, a spell offline, the finish and the
