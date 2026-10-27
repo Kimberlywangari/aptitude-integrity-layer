@@ -65,7 +65,7 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -123,7 +123,7 @@ jobs:
           api create_reviewer --email "$E2E_ADMIN_EMAIL" --password "$E2E_ADMIN_PASSWORD" --role admin
           api create_invites --sitting 1 --count 2 --out /tmp/codes.csv
           echo "E2E_TOKEN=$(docker compose exec -T api sed -n 2p /tmp/codes.csv | cut -d, -f2)" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
