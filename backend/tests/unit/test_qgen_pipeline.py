@@ -117,7 +117,52 @@ def test_the_servers_shuffle_not_the_writers_decides_where_the_key_sits():
     assert len(positions) >= 3  # the writer always put it at index 1; the paper does not
 
 
+@pytest.mark.parametrize("category", list(CATEGORIES), ids=str)
+def test_every_category_goes_through_the_pipeline_and_comes_out_labelled(category):
+    written, report = run(Stub([raw_from(0)]), count=1, category=category, solves=2)
+
+    assert [item.category for item in written] == [category]
+    assert report.accepted == 1 and report.rejected == []
+
+
 # ------------------------------------------------------------------------ checked twice
+
+
+def test_one_unusable_check_is_asked_again_and_the_round_is_kept():
+    """Live, an answer cut off part-way threw away every question written in that round."""
+    calls = []
+
+    def flaky(stub, items):
+        calls.append(len(items))
+        if len(calls) == 1:
+            raise WriterError("the answer broke the schema (1 problems)")
+        return stub.right_answers(items)
+
+    stub = Stub([raw_from(0), raw_from(1)], solver=flaky)
+    written, report = run(stub, solves=1, category="logical")
+
+    assert len(written) == 2 and calls == [2, 2]
+    assert report.rejected == [] and report.rounds == 1
+
+
+def test_a_check_that_fails_twice_throws_the_round_away_and_says_so():
+    def broken(stub, items):
+        raise WriterError("the answer broke the schema (1 problems)")
+
+    stub = Stub(*[[raw_from(0), raw_from(1)] for _ in range(4)], solver=broken)
+    with pytest.raises(pipeline.PaperFailed, match="could not be checked"):
+        run(stub, solves=1, category="logical")
+    assert stub.solved == 8  # every round asked twice before giving up on it
+
+
+def test_a_model_that_cannot_be_reached_is_not_asked_again():
+    def gone(stub, items):
+        raise WriterUnavailable("ollama is not running")
+
+    stub = Stub([raw_from(0)], solver=gone)
+    with pytest.raises(WriterUnavailable):
+        run(stub, solves=1, category="logical")
+    assert stub.solved == 1
 
 
 def positional(stub, items):
@@ -274,12 +319,12 @@ def test_a_writer_error_costs_a_round_and_it_tries_again():
     assert report.rejected == ["ollama took too long to answer"]
 
 
-def test_a_solver_error_distrusts_the_whole_round():
+def test_a_solver_that_fails_twice_distrusts_the_whole_round():
     calls = []
 
     def flaky(stub, items):
         calls.append(len(items))
-        if len(calls) == 1:
+        if len(calls) <= 2:  # the first try and the one retry
             raise WriterError("could not answer")
         return stub.right_answers(items)
 

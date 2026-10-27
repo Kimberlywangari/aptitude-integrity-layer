@@ -14,6 +14,9 @@ class Category:
     label: str
     brief: str
     numeric: bool = False  # the options are numbers, so the working can be checked by arithmetic
+    # How to build this kind of question so that exactly one option is right; told to the writer
+    # after the brief. Empty when the brief is enough.
+    rule: str = ""
 
 
 CATEGORIES: dict[str, Category] = {
@@ -57,6 +60,16 @@ CATEGORIES: dict[str, Category] = {
             "step, in which exactly one error is hidden (a spelling or grammar slip, a figure that "
             "does not match its total, a date out of order, a wrong step). The question asks where "
             "the error is or which corrected version is right.",
+            # Live on 27 Oct 2026 the solver often disagreed with the key here, because a hidden
+            # error that spreads into later lines leaves more than one defensible answer.
+            rule="Build it backwards: first write the correct text, list or working in "
+            "`explanation`, then change exactly one thing in it. Number the lines or steps "
+            "(Line 1, Step 2) so the options can name them. Every other line must be right on its "
+            "own terms, and in a calculation each later step must follow correctly from the line "
+            "above it, even if that line is the wrong one, so that checking the lines in order "
+            "finds one first error and no other. When a figure is the error, show the sum or total "
+            "it should match in the text. The error must be provable by arithmetic, spelling or a "
+            "date in the text, never a matter of opinion or style.",
         ),
         Category(
             "ai competence",

@@ -42,7 +42,10 @@ own count per section and its own time:
 - **Written by AI for each candidate**: uses Claude, so `ANTHROPIC_API_KEY` must be set in `.env` (it
   is read when the API starts, so restart it after adding the key). Set `QUESTION_PROVIDER=ollama`
   for a local model instead, which writes about a question a minute. "Try the writer" shows one and
-  what it cost. Ranking uses the same key (`AI_PROVIDER=claude`).
+  what it cost. Ranking uses the same key (`AI_PROVIDER=claude`). `AI_RUN_BUDGET_USD` limits what one
+  ranking run may spend (0 is no limit): once it is reached, the rest of the flagged candidates keep
+  the rule order and nobody is dropped. It is checked before each candidate, so a run can pass it by
+  about 2 cents, and the spend is counted from the tokens each call reports.
 - **Practice questions**: the made-up bank, for trying things out.
 
 Every invitation code is made *for one sitting* and opens that sitting's paper, whichever other
@@ -136,9 +139,12 @@ test, and the run should come after they have. It is safe to run again. The same
 
 #### Checks on every push
 
-`.github/workflows/checks.yml` runs ruff, the backend tests (Postgres, ffmpeg and the pinned packages,
-nothing skipped) and the frontend lint, tests, type-check and build, on every push to `main` and every
-pull request. The browser journeys (Playwright) need a running stack and stay manual.
+`.github/workflows/checks.yml` runs ruff, the backend tests (Postgres, ffmpeg and the pinned packages;
+only the two switched-off live tests skip) and the frontend lint, tests, type-check and build, on every
+push to `main` and every pull request. Its `images` job builds both images and parses both compose
+files. Its `stack` job starts the whole Compose stack with the camera gate on, sets up practice
+questions, an admin and a made-up cohort, and runs the Playwright journeys against it (all but the
+Cytonn one, whose questions are not in the repository). No mail is configured there, so nothing is sent.
 
 ### Invitations and emails
 
@@ -193,6 +199,11 @@ runs). `API_URL=http://localhost:8001 npm run dev` points the proxy at another A
 cd backend;  .\.venv\Scripts\python.exe -m pytest -q     # uses the integrity_test database
 cd frontend; npm test; npm run lint; npm run build   # Vitest, oxlint, type-check and build
 ```
+
+`tests/live/` makes real Claude calls (one numerical question written and confirmed, one packet
+assessed; about 3 cents) and is skipped unless you ask: `$env:RUN_LIVE_CLAUDE = "1"` then
+`.\.venv\Scripts\python.exe -m pytest tests/live -q`. It is the only test that notices the live service
+changing. The repository has no spend limit for tests, so run it under a guard if a hard cap matters.
 
 Without `claude` in the install, the 7 tests for the Claude client are skipped; without ffmpeg (set
 `FFMPEG_BIN` in `.env`, or put it on PATH) the 9 video tests are skipped. A run that skips them is not

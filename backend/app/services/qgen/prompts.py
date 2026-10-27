@@ -54,7 +54,9 @@ letter is more likely than another.
 
 Reply with JSON only, in this shape:
 {{"answers": [{{"n": 1, "working": "one or two sentences", "letter": "B"}}]}}
-Give one entry for every question, using the question's number."""
+Give one entry for every question, using the question's number. Keep every `working` under 40 \
+words, in plain text without double quotes, and always finish the JSON: an answer that stops \
+part-way is thrown away."""
 
 
 def write_messages(
@@ -64,8 +66,10 @@ def write_messages(
     lines = [
         f'Write {count} question{"" if count == 1 else "s"} for the category "{category.label}".',
         f"What this category is: {category.brief}",
-        "Difficulty of each question, in order: " + ", ".join(difficulties) + ".",
     ]
+    if category.rule:
+        lines.append(f"How to build this kind of question: {category.rule}")
+    lines.append("Difficulty of each question, in order: " + ", ".join(difficulties) + ".")
     if avoid:
         lines.append(
             "Questions already on this paper. Do not repeat or closely resemble any of them:"

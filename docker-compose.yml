@@ -26,6 +26,7 @@ x-backend: &backend
     AI_TIMEOUT_S: ${AI_TIMEOUT_S:-90}
     CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    AI_RUN_BUDGET_USD: ${AI_RUN_BUDGET_USD:-0}
     # AI-written questions: without these the container ignores QUESTION_PROVIDER in .env.
     QUESTION_PROVIDER: ${QUESTION_PROVIDER:-claude}
     QUESTION_OLLAMA_MODEL: ${QUESTION_OLLAMA_MODEL:-qwen3:8b}
@@ -87,6 +88,10 @@ services:
   worker:
     <<: *backend
     command: ["python", "-m", "scripts.jobs", "loop"]
+    # The image's health check asks port 8000, which only the API serves: inherited, it would show
+    # the worker as unhealthy for ever. Its own sign of life is the line it prints every round.
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy

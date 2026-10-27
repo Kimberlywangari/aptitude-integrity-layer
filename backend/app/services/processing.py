@@ -98,11 +98,18 @@ def process_sitting(
         return f"{built} packets"
 
     def ranking() -> str:
-        run = rank_sitting(db, sitting_id, ranker, clock)
+        run = rank_sitting(
+            db, sitting_id, ranker, clock, budget_usd=settings.ai_run_budget_usd or None
+        )
         db.commit()
         counts = ", ".join(f"{k} {v}" for k, v in sorted(run.statuses.items()))
         who = f"{ranker.name} {ranker.model}" if ranker else "rules only"
-        return f"{run.flagged} ranked by {who} ({counts})"
+        note = f"{run.flagged} ranked by {who} ({counts})"
+        if run.spent_usd:
+            note += f", about ${run.spent_usd:.2f} spent"
+        if run.over_budget:
+            note += f"; budget reached, {run.over_budget} left to the rule order"
+        return note
 
     timed("compute flags", flags)
     if use_video:

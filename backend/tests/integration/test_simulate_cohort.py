@@ -64,6 +64,40 @@ def test_the_same_seed_gives_the_same_cohort(db, seeded):
     assert flags_first  # and it is not vacuous
 
 
+def test_a_loaded_cytonn_bank_does_not_stretch_the_papers(db, seeded):
+    """With Cytonn's seven sections loaded the cohort once drew 4 from every section: 28-question
+    papers in a sitting that says 12, so nobody could fall under the pass mark the e2e test sets."""
+    from app.models import Option, Question
+    from scripts.simulate_cohort import QUESTION_COUNT
+
+    for section in ("error checking", "critical thinking", "office assistant"):
+        for n in range(5):
+            question = Question(
+                id=f"C{section[:3]}{n:012d}", section=section, difficulty="easy",
+                correct_option="A", text=f"a Cytonn {section} question {n}", source="cytonn",
+            )
+            question.options = [Option(label=label, text=f"option {label}") for label in "ABCD"]
+            db.add(question)
+    db.flush()
+
+    result = simulate(db, seed=1)
+
+    sizes = db.execute(
+        select(func.count(SessionQuestion.question_id))
+        .join(TestSession, TestSession.id == SessionQuestion.session_id)
+        .where(TestSession.sitting_id == result.sitting_id)
+        .group_by(SessionQuestion.session_id)
+    ).scalars().all()
+    assert len(sizes) == 16 and set(sizes) == {QUESTION_COUNT}
+    used = db.scalars(
+        select(Question.source)
+        .join(SessionQuestion, SessionQuestion.question_id == Question.id)
+        .join(TestSession, TestSession.id == SessionQuestion.session_id)
+        .where(TestSession.sitting_id == result.sitting_id)
+    ).all()
+    assert set(used) == {"synthetic"}
+
+
 def test_it_needs_no_past_candidate_statistics_and_ignores_written_questions(db, seeded):
     from app.models import Question, QuestionStats
 

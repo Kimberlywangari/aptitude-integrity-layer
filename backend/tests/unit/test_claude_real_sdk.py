@@ -121,6 +121,45 @@ def test_the_schema_sent_carries_no_range_so_the_assessment_itself_must_enforce_
     assert '"maximum"' not in sent and '"minimum"' not in sent
 
 
+NO_KEY = TypeError(
+    "Could not resolve authentication method. Expected one of api_key, auth_token, or credentials "
+    "to be set. Or for the `Authorization` header to be explicitly omitted"
+)
+
+
+def refuses_before_sending(error: Exception):
+    """A client whose call fails the way the SDK does when it cannot build the request."""
+
+    def parse(**kwargs):
+        raise error
+
+    return type("Client", (), {"messages": type("Messages", (), {"parse": staticmethod(parse)})})()
+
+
+def test_no_key_anywhere_falls_back_instead_of_crashing_the_ranking_run(ranker):
+    """The adapter is the real one, so it catches only what the real SDK is known to raise: this
+    TypeError came out of the first run with Claude chosen and no key, and ended the whole run."""
+    ranker._client = refuses_before_sending(NO_KEY)
+    with pytest.raises(RankerError, match="no Anthropic key"):
+        ranker.assess(sample_packet())
+
+
+def test_any_other_type_error_is_a_bug_and_still_shows(ranker):
+    ranker._client = refuses_before_sending(TypeError("unsupported operand type(s)"))
+    with pytest.raises(TypeError, match="unsupported operand"):
+        ranker.assess(sample_packet())
+
+
+def test_the_question_writer_treats_no_key_as_unavailable_so_it_is_not_retried(server):
+    from app.services.qgen.categories import CATEGORIES
+    from app.services.qgen.writers import ClaudeWriter, WriterUnavailable
+
+    writer = ClaudeWriter("claude-sonnet-5-5", api_key="sk-ant-test-not-real")
+    writer._client = refuses_before_sending(NO_KEY)
+    with pytest.raises(WriterUnavailable, match="no Anthropic key"):
+        writer.write(CATEGORIES["verbal"], 1, ["easy"], [])
+
+
 def api_error(kind: str) -> dict:
     return {"type": "error", "error": {"type": kind, "message": "refused"}}
 

@@ -72,7 +72,14 @@ def confirm(
             break
         flipped = attempt % 2 == 1
         shown = [(w.text, list(reversed(w.options)) if flipped else list(w.options)) for w in kept]
-        letters = writer.solve(shown)
+        try:
+            letters = writer.solve(shown)
+        except WriterUnavailable:
+            raise
+        except WriterError:
+            # Live, an answer cut off part-way was often a one-off, and giving up on it discarded
+            # the whole round of up to five written questions. Ask once more before doing that.
+            letters = writer.solve(shown)
         passed: list[Written] = []
         for written, letter in zip(kept, letters, strict=True):
             picked = LABELS.index(letter) if letter in LABELS[: len(written.options)] else None

@@ -39,7 +39,9 @@ def main(argv: list[str] | None = None) -> None:
 
     with SessionLocal() as db:
         sitting = resolve_sitting(db, args.sitting)
-        run = rank_sitting(db, sitting.id, ranker, SystemClock())
+        run = rank_sitting(
+            db, sitting.id, ranker, SystemClock(), budget_usd=settings.ai_run_budget_usd or None
+        )
         db.commit()
         rows = [
             (r.final_rank, r.session_id, r.rule_score, r.ai_status, r.ai_seconds, r.ai_json)
@@ -67,6 +69,10 @@ def main(argv: list[str] | None = None) -> None:
             f"max {max(run.seconds):.1f} s (target: under 120 s)"
         )
     print("statuses: " + ", ".join(f"{k} {v}" for k, v in sorted(run.statuses.items())))
+    if run.spent_usd:
+        print(f"spent about ${run.spent_usd:.4f} at the published price")
+    if run.over_budget:
+        print(f"budget reached: {run.over_budget} candidates left to the rule order")
 
 
 if __name__ == "__main__":

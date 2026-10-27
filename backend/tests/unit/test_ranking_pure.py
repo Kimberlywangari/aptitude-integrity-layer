@@ -165,6 +165,15 @@ def test_the_prompt_forbids_verdicts_and_guessing_and_the_packet_goes_in_whole()
     assert '"strength"' in user  # the schema is there
 
 
+def test_the_prompt_rules_out_the_two_mistakes_that_failed_the_fact_check_live():
+    """Live on 27 Oct 2026, 4 of 8 first answers passed. The others cited a mic-silence id (M1) as a
+    flag, or wrote a number they had worked out ("1180 s apart", "about 500 s apart")."""
+    system = prompts.build_messages(sample_packet())[0]["content"]
+    assert "Never work out a new number" in system
+    assert "Put flag IDs (F1, F2, ...) in cited.flag_ids and nothing else there" in system
+    assert "go only in innocent_explanation.evidence_ids" in system
+
+
 def test_the_prompt_carries_nothing_that_names_a_person():
     text = json.dumps(prompts.build_messages(sample_packet()))
     for forbidden in ("token", "email", "password", "invite"):
