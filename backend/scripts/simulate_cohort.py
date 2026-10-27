@@ -47,6 +47,7 @@ from app.models import (
 )
 from app.services.flags.config import DEFAULTS
 from app.services.flags.engine import FlagRun, compute_sitting_flags
+from app.services.question_modes import stored_questions
 
 SITTING_NAME = "Simulated cohort 1 (made up)"
 SIM_PREFIX = "sim"  # candidates are `sim-001` ...; another prefix keeps a second cohort apart
@@ -364,8 +365,9 @@ def simulate(
     if existing is not None:
         return SimSummary(created=False, sitting_id=existing.id)
 
-    # the bank only: a question an AI wrote for one candidate is never part of a made-up paper
-    questions = list(db.scalars(select(Question).where(Question.source != "ai")))
+    # The practice bank only: it has three sections, so a paper is PER_SECTION x 3 = QUESTION_COUNT.
+    # Cytonn's seven sections would make 28, and a question an AI wrote is never in a made-up paper.
+    questions = list(db.scalars(select(Question).where(stored_questions("practice"))))
     by_section: dict[str, list[Question]] = {}
     for question in questions:
         by_section.setdefault(question.section, []).append(question)

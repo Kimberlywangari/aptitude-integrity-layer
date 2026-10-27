@@ -175,6 +175,11 @@ class ClaudeWriter:
             )
         except self._api_errors as problem:
             raise WriterError(f"the Claude API call failed: {problem}") from problem
+        except TypeError as problem:
+            # no key anywhere: the SDK says so before sending; retrying will not help
+            if "authentication method" not in str(problem):
+                raise
+            raise WriterUnavailable("no Anthropic key: set ANTHROPIC_API_KEY in .env") from problem
         except ValidationError as problem:
             raise WriterError(_schema_problem(problem)) from problem
         if response.stop_reason == "refusal":

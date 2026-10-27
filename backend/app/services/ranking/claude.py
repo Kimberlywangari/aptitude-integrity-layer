@@ -74,6 +74,14 @@ class ClaudeRanker:
             )
         except self._api_errors as problem:
             raise RankerError(f"the Claude API call failed: {problem}") from problem
+        except TypeError as problem:
+            # With no key anywhere (settings empty, no ANTHROPIC_API_KEY, no login) the SDK raises
+            # this before it sends anything. That is a setup problem: fall back like any failure,
+            # as the docs promise, instead of crashing the whole ranking run. Any other TypeError
+            # is a bug and still shows.
+            if "authentication method" not in str(problem):
+                raise
+            raise RankerError("no Anthropic key: set ANTHROPIC_API_KEY in .env") from problem
         except ValidationError as problem:
             raise RankerError(
                 f"the answer broke the schema: {problem.error_count()} problems"
