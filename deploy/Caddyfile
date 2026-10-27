@@ -6,6 +6,20 @@
 	encode zstd gzip
 	header Strict-Transport-Security "max-age=31536000"
 
+	# The staff console and everything it reads (names, addresses, recordings) answers only to the
+	# addresses in STAFF_ALLOWED_IPS: space-separated addresses or ranges, such as
+	# "203.0.113.0/24 198.51.100.7". docker-compose.prod.yml makes the default "0.0.0.0/0 ::/0",
+	# which is everybody, so nothing is closed until the ranges are known. Candidates never use these
+	# paths. A wrong list locks the staff out (not the candidates): fix it in .env and run
+	# `docker compose -f docker-compose.prod.yml up -d proxy`.
+	# This sees the address that reached Caddy. Behind another proxy or load balancer that would be
+	# the proxy's address, and the matcher needs `client_ip` with `trusted_proxies` instead.
+	@staff_outside {
+		path /api/review* /api/admin* /review* /admin* /overview* /outcomes* /login/*
+		not remote_ip {$STAFF_ALLOWED_IPS}
+	}
+	respond @staff_outside "Not available from this network." 403
+
 	# One address in, the same single origin the page and the API already expect. The reviewer's
 	# video and the question writer can run for minutes, so nothing here cuts them short.
 	reverse_proxy web:80 {
