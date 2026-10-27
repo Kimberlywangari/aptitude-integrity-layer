@@ -112,8 +112,10 @@ jobs:
       - uses: actions/checkout@v6
       - run: |
           set -o pipefail
-          docker compose up -d --build --wait 2>&1 | tee /tmp/up.log
-      - run: curl -fsS http://localhost:8080/api/health
+          docker compose up -d --build 2>&1 | tee /tmp/up.log
+      # not `up --wait`: older Compose, as on the runner, refuses it because the worker has no health
+      # check (it has none on purpose). The health request retries until the stack answers instead.
+      - run: curl -fsS --retry 40 --retry-delay 3 --retry-all-errors http://localhost:8080/api/health
       - name: Practice questions, a sitting with codes, a made-up cohort and an admin
         run: |
           api() { docker compose exec -T api python -m scripts.jobs "$@"; }
