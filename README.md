@@ -39,8 +39,10 @@ own count per section and its own time:
   which are copied into our database, so the test never depends on Cytonn's website):
   `python -m scripts.jobs fetch_cytonn_bank` (needs `X-API-KEY` in `.env`), or from a saved copy
   `... fetch_cytonn_bank --file ..\data\aptitude-sections-raw.json`.
-- **Written by AI for each candidate**: needs Ollama running (or Claude; see `.env.example`). Try a
-  small paper first, the local model writes about a question a minute. "Try the writer" shows one.
+- **Written by AI for each candidate**: uses Claude, so `ANTHROPIC_API_KEY` must be set in `.env` (it
+  is read when the API starts, so restart it after adding the key). Set `QUESTION_PROVIDER=ollama`
+  for a local model instead, which writes about a question a minute. "Try the writer" shows one and
+  what it cost. Ranking uses the same key (`AI_PROVIDER=claude`).
 - **Practice questions**: the made-up bank, for trying things out.
 
 Every invitation code is made *for one sitting* and opens that sitting's paper, whichever other
@@ -73,7 +75,7 @@ Linux host the real addresses come through.
 80 and 443, and sets `ENV=production` (the API then refuses to start with a weak secret, an `http://`
 address or the camera gate off). Fill in `.env` from `.env.example`, then
 `docker compose -f docker-compose.prod.yml up -d --build`. The full steps are in
-`docs/plan/hosting-cytonn-server.md`, and moving the AI from a local model to Claude is in
+`docs/plan/hosting-cytonn-server.md`, and the Claude settings and going back to a local model are in
 `docs/plan/ai-provider-switch.md` (both local; `docs/` is not committed).
 
 #### Backups, restoring, and knowing when it is down
@@ -241,8 +243,12 @@ through `package-lock.json`. To upgrade on purpose: make a fresh Python 3.13 ven
 The Docker base images (`python`, `node`, `nginx`, `postgres`, `caddy`) are pinned by digest in the
 Dockerfiles and compose files, so a rebuild uses the image that was tested. `.github/dependabot.yml`
 opens one pull request a month for newer npm packages, GitHub Actions and Docker images. Each runs the
-checks, and is merged only when they pass (for a new base image, also build the stack and run the
-backup drill once). Python packages are the one thing Dependabot does not touch.
+checks, which include a job that builds both images and parses both compose files, and is merged only
+when they pass. A green build proves an image installs, not that it runs, so for a new base image also
+bring the stack up and run the backup drill once. Dependabot is told to skip a new major of TypeScript
+(it broke `vue-tsc`), `@types/node` and Postgres (a new major cannot open the old data), and any newer
+Python or Node base image than the ones CI tests on; those are moved by hand, together with the
+workflow. Python packages are the one thing it does not touch.
 
 ## Layout
 
