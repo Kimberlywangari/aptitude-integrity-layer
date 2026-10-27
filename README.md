@@ -4,8 +4,9 @@ A layer around Cytonn's aptitude test: the test runs in a normal browser (Chrome
 screen, after the candidate has been asked for camera, microphone and full-screen permission and
 told to turn off notifications. Camera and microphone are recorded, actions are logged, rules raise
 flags and a person reviews them. It gives reviewers evidence and
-never decides anything about a candidate. See [docs/proposal.md](docs/proposal.md) and the
-[master plan](docs/plan/00-master-plan.md).
+never decides anything about a candidate. See [docs/handover.md](docs/handover.md) for how it fits
+together and what was decided, and [docs/plan/engineer-note.md](docs/plan/engineer-note.md) for where
+things are and what must not be broken.
 
 ## Run it locally (Windows, PowerShell)
 
@@ -78,8 +79,8 @@ Linux host the real addresses come through.
 80 and 443, and sets `ENV=production` (the API then refuses to start with a weak secret, an `http://`
 address or the camera gate off). Fill in `.env` from `.env.example`, then
 `docker compose -f docker-compose.prod.yml up -d --build`. The full steps are in
-`docs/plan/hosting-cytonn-server.md`, and the Claude settings and going back to a local model are in
-`docs/plan/ai-provider-switch.md` (both local; `docs/` is not committed).
+`docs/plan/hosting.md`, and the Claude settings and going back to a local model are in
+`docs/plan/ai-provider-switch.md`.
 
 #### Backups, restoring, and knowing when it is down
 
@@ -264,5 +265,5 @@ workflow. Python packages are the one thing it does not touch.
 ## Layout
 
 `backend/` FastAPI app, migrations, seed and jobs · `frontend/` Vue 3 app and the D2 browser
-capture spike page (`public/spike/`, open `/spike/index.html` in dev) · `docs/` proposal, plan,
-spike findings.
+capture spike page (`public/spike/`, open `/spike/index.html` in dev) · `docs/` handover, API
+reference, setup guides, spike findings.

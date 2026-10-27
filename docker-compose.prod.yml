@@ -4,7 +4,7 @@
 #
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
-# Steps, backups and updates: docs/plan/hosting-cytonn-server.md.
+# Steps, backups and updates: docs/plan/hosting.md.
 
 # Docker keeps everything a container prints, forever, unless told otherwise, and on this machine
 # that competes with the recordings for the disk. At most 5 files of 10 MB per container.

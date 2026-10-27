@@ -18,10 +18,30 @@ playwright-report/
 .env
 data/
 backups/
-docs/
 .claude/
 .agents/
 skills-lock.json
+
+# docs/: only the documentation meant for readers is published. The proposal, the plans and
+# schedules, the demo and readiness notes and other working papers stay on the author's machine.
+# To publish another file, add a "!" line for it. A folder is listed with "/*" (not "/") so that
+# git still looks inside it, which is the only way a "!" line can re-include a file in it.
+docs/*
+!docs/handover.md
+!docs/api-reference.md
+!docs/candidate-notice.md
+!docs/plan/
+docs/plan/*
+!docs/plan/engineer-note.md
+!docs/plan/email-setup.md
+!docs/plan/ai-provider-switch.md
+!docs/plan/hosting.md
+!docs/plan/claude-api-cost-estimate.md
+!docs/spikes/
+docs/spikes/*
+!docs/spikes/ollama-benchmark.md
+!docs/spikes/browser-findings.md
+!docs/spikes/video-anchor.md
 
 # Editors and OS
 .vscode/
