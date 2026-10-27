@@ -37,7 +37,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -64,7 +64,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: docker build ./backend
       - run: docker build ./frontend
       # both compose files must still parse (the secrets here are placeholders for the check only)
@@ -109,7 +109,7 @@ jobs:
       E2E_ADMIN_EMAIL: ci-admin@example.com
       E2E_ADMIN_PASSWORD: ci-only-password-1
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: |
           set -o pipefail
           docker compose up -d --build 2>&1 | tee /tmp/up.log
