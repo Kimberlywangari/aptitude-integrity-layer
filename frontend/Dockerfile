@@ -14,7 +14,7 @@ COPY . .
 # .env.development files, which a production build does not read.
 RUN npm run build
 
-FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+FROM nginx:1.31-alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Empty unless production mounts something over it (see nginx.conf).
 RUN touch /etc/nginx/real-ip.conf
