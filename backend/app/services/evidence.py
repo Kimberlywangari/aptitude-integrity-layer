@@ -329,6 +329,21 @@ _DESCRIBE = {
         f"averaging {d.get('mean_s')} s each against the candidate's own median of "
         f"{d.get('own_median_s')} s"
     ),
+    "FAST_RUN": lambda d, q, on: (
+        f"{d.get('answers_in_a_row')} answers in a row{on}, "
+        f"averaging {d.get('answers_mean_s')} s each"
+    ),
+    "HARD_FAST_CORRECT": lambda d, q, on: (
+        f"a hard question answered correctly in {d.get('time_s')} s{on}"
+    ),
+    "FLAT_PACE": lambda d, q, on: (
+        f"a median of {d.get('hard_median_s')} s on hard questions against "
+        f"{d.get('easy_median_s')} s on easy ones, barely slower"
+    ),
+    "LONG_FAST_CORRECT": lambda d, q, on: (
+        f"a {d.get('question_chars')}-character question answered correctly in "
+        f"{d.get('time_s')} s{on}"
+    ),
     "PACE_OUTLIER": lambda d, q, on: (
         f"a mean time per question far {'faster' if d.get('direction') == 'fast' else 'slower'} "
         "than the rest of the sitting"

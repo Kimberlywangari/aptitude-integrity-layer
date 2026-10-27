@@ -15,7 +15,7 @@ def at(seconds: float) -> datetime:
     return T0 + timedelta(seconds=seconds)
 
 
-def answer(position, opened, took, correct=True, difficulty=None, skipped=False):
+def answer(position, opened, took, correct=True, difficulty=None, skipped=False, length=None):
     return rules.Answer(
         position=position,
         question_id=f"Q{position:03d}",
@@ -24,6 +24,7 @@ def answer(position, opened, took, correct=True, difficulty=None, skipped=False)
         answered_at=at(opened + took),
         correct=correct,
         skipped=skipped,
+        length=length,
     )
 
 
@@ -273,6 +274,126 @@ def test_idle_gaps_count_from_sixty_seconds():
 def test_idle_end_carries_its_own_length():
     spans = rules.idle_spans([ev("idle_start", 100), ev("idle_end", 190, duration_s=90)])
     assert [(s.start, s.end) for s in spans] == [(at(100), at(190))]
+
+
+# ----------------------------------------------------------------------------- fast run
+
+
+def test_three_answers_in_a_row_under_twenty_seconds_are_one_flag():
+    drafts = rules.fast_run_flags(paper(50, 19, 10, 19.9, 50), CFG)
+    assert [d.kind for d in drafts] == ["FAST_RUN"]
+    assert drafts[0].weight == 1
+    assert drafts[0].position == 2
+    assert drafts[0].ts == at(51)  # when question 2 opened
+    assert drafts[0].detail == {"answers_in_a_row": 3, "answers_mean_s": 16.3}
+
+
+def test_twenty_seconds_exactly_or_two_in_a_row_is_not_enough():
+    assert rules.fast_run_flags(paper(19, 19, 20, 19), CFG) == []
+    assert rules.fast_run_flags(paper(19, 19), CFG) == []
+
+
+def test_a_long_run_is_one_flag_and_a_break_starts_a_new_one():
+    drafts = rules.fast_run_flags(paper(5, 5, 5, 5, 5, 40, 5, 5, 5), CFG)
+    assert [(d.position, d.detail["answers_in_a_row"]) for d in drafts] == [(1, 5), (7, 3)]
+
+
+def test_right_or_wrong_makes_no_difference_to_a_fast_run():
+    assert len(rules.fast_run_flags(paper(5, 5, 5, correct=False), CFG)) == 1
+
+
+def test_a_skipped_or_unanswered_question_ends_a_run():
+    items = paper(5, 5, 5, 5)
+    skipped = [*items[:2], answer(3, 12, 5, skipped=True), *items[3:]]
+    assert rules.fast_run_flags(skipped, CFG) == []
+    open_ = rules.Answer(3, "Q003", None, at(12), None, None)
+    assert rules.fast_run_flags([*items[:2], open_, *items[3:]], CFG) == []
+
+
+# ------------------------------------------------------------------- hard, fast and correct
+
+
+def test_a_hard_question_answered_correctly_in_under_fifteen_seconds_is_a_flag():
+    answers = [answer(1, 0, 14.9, difficulty="hard"), answer(2, 20, 30, difficulty="hard")]
+    (draft,) = rules.hard_fast_correct_flags(answers, CFG)
+    assert draft.kind == "HARD_FAST_CORRECT" and draft.weight == 0.5 and draft.position == 1
+    assert draft.ts == at(0) and draft.detail == {"time_s": 14.9}
+
+
+def test_a_hard_answer_that_is_slow_wrong_skipped_or_not_hard_is_not_flagged():
+    answers = [
+        answer(1, 0, 15, difficulty="hard"),  # exactly 15 s
+        answer(2, 20, 5, correct=False, difficulty="hard"),
+        answer(3, 30, 5, difficulty="hard", skipped=True),
+        answer(4, 40, 5, difficulty="medium"),
+        answer(5, 50, 5),  # no difficulty at all, as on the Cytonn bank
+    ]
+    assert rules.hard_fast_correct_flags(answers, CFG) == []
+
+
+# ------------------------------------------------------------------------------- flat pace
+
+
+def levelled(easy, hard):
+    """Easy answers of the given times, then hard ones, 1 s apart."""
+    items, cursor = [], 0.0
+    for position, (level, took) in enumerate(
+        [("easy", t) for t in easy] + [("hard", t) for t in hard], start=1
+    ):
+        items.append(answer(position, cursor, took, difficulty=level))
+        cursor += took + 1
+    return items
+
+
+def test_hard_questions_barely_slower_than_easy_ones_are_flagged_once():
+    # easy median 20 s, hard median 23 s: under 1.2 x 20 = 24
+    (draft,) = rules.flat_pace_flags(levelled([20, 20, 20], [22, 23, 25]), CFG)
+    assert draft.kind == "FLAT_PACE" and draft.weight == 0.5 and draft.position is None
+    assert draft.detail == {"easy_median_s": 20, "hard_median_s": 23}
+    assert draft.ts == at(20 * 3 + 3 + 22 + 23 + 25 + 2)  # the end of the last hard answer
+    # hard faster than easy is flat too
+    assert len(rules.flat_pace_flags(levelled([20, 20, 20], [10, 10, 10]), CFG)) == 1
+
+
+def test_a_normal_slowing_down_on_hard_questions_is_not_flagged():
+    assert rules.flat_pace_flags(levelled([20, 20, 20], [24, 24, 24]), CFG) == []  # exactly 1.2 x
+    assert rules.flat_pace_flags(levelled([20, 20, 20], [50, 50, 50]), CFG) == []
+
+
+def test_flat_pace_needs_three_of_each_and_ignores_someone_slow_on_everything():
+    assert rules.flat_pace_flags(levelled([20, 20, 20], [22, 22]), CFG) == []
+    assert rules.flat_pace_flags(levelled([20, 20], [22, 22, 22]), CFG) == []
+    assert rules.flat_pace_flags(levelled([40, 40, 40], [40, 40, 40]), CFG) == []  # not fast
+    assert len(rules.flat_pace_flags(levelled([25, 25, 25], [29, 29, 29]), CFG)) == 1  # under 30 s
+    assert rules.flat_pace_flags(paper(10, 10, 10, 10, 10, 10), CFG) == []  # no difficulty at all
+
+
+def test_a_skipped_question_does_not_count_towards_flat_pace():
+    items = levelled([20, 20, 20], [22, 22, 22])
+    items[-1] = answer(6, 100, 22, difficulty="hard", skipped=True)
+    assert rules.flat_pace_flags(items, CFG) == []  # only two hard answers left
+
+
+# ------------------------------------------------------------------------ long, fast, correct
+
+
+def test_a_long_question_answered_correctly_in_under_twenty_seconds_is_a_flag():
+    answers = [answer(1, 0, 19.9, length=600), answer(2, 30, 19.9, length=2000)]
+    drafts = rules.long_fast_correct_flags(answers, CFG)
+    assert [d.kind for d in drafts] == ["LONG_FAST_CORRECT"] * 2
+    assert drafts[0].weight == 0.5 and drafts[0].position == 1
+    assert drafts[0].detail == {"time_s": 19.9, "question_chars": 600}
+
+
+def test_a_short_slow_wrong_or_skipped_long_question_is_not_flagged():
+    answers = [
+        answer(1, 0, 10, length=599),  # one character short
+        answer(2, 20, 20, length=900),  # exactly 20 s
+        answer(3, 50, 5, correct=False, length=900),  # a guess
+        answer(4, 60, 5, skipped=True, length=900),
+        answer(5, 70, 5),  # length unknown
+    ]
+    assert rules.long_fast_correct_flags(answers, CFG) == []
 
 
 # --------------------------------------------------------------------- heartbeats and the log
