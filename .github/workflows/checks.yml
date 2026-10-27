@@ -47,11 +47,15 @@ jobs:
       # The package mirror sometimes stalls for many minutes (2 of 9 runs on 27 Oct 2026 sat here until
       # the job limit), so apt gets short timeouts and retries, and the step a limit of its own.
       - run: |
-          echo 'Acquire::Retries "3"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99ci
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          echo 'Acquire::Retries "3"; Acquire::ForceIPv4 "true"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99ci
+          # a stalled mirror is killed and tried again, instead of eating the whole step's time
+          for attempt in 1 2 3; do
+            if sudo timeout -k 5 90 apt-get update && sudo timeout -k 5 150 apt-get install -y --no-install-recommends ffmpeg; then exit 0; fi
+            echo "apt attempt $attempt failed, trying again"
+          done
+          exit 1
         working-directory: .
-        timeout-minutes: 5
+        timeout-minutes: 10
       # both extras: without `claude` the 7 Claude-client tests are skipped as well
       - run: pip install -e ".[dev,claude]" -c constraints.txt
       - run: ruff check app scripts tests
@@ -136,7 +140,7 @@ jobs:
         working-directory: frontend
       # apt on the runner sometimes stalls (see the backend job), so short timeouts and retries
       - run: |
-          echo 'Acquire::Retries "3"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99ci
+          echo 'Acquire::Retries "3"; Acquire::ForceIPv4 "true"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99ci
           npx playwright install --with-deps chromium
         working-directory: frontend
         timeout-minutes: 8
