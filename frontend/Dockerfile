@@ -2,7 +2,7 @@
 # so the browser sees one origin (no CORS, one HTTPS address for the camera: master plan A6).
 # Base images are pinned by digest so a rebuild uses the image that was tested; Dependabot proposes
 # newer ones (.github/dependabot.yml) and CI runs on each proposal.
-FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
+FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS build
 WORKDIR /app
 
 # Dependencies first, so a code change does not reinstall them.
