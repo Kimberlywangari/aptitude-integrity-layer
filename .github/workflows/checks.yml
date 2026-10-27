@@ -110,7 +110,9 @@ jobs:
       E2E_ADMIN_PASSWORD: ci-only-password-1
     steps:
       - uses: actions/checkout@v6
-      - run: docker compose up -d --build --wait
+      - run: |
+          set -o pipefail
+          docker compose up -d --build --wait 2>&1 | tee /tmp/up.log
       - run: curl -fsS http://localhost:8080/api/health
       - name: Practice questions, a sitting with codes, a made-up cohort and an admin
         run: |
@@ -138,5 +140,14 @@ jobs:
         timeout-minutes: 8
       - run: npx playwright test --grep-invert cytonn
         working-directory: frontend
-      - if: failure()
-        run: docker compose logs --no-color --tail 200
+      # The job log needs a GitHub sign-in to read; an annotation does not, so the reason goes there too.
+      - name: Say why it failed
+        if: failure()
+        run: |
+          { echo "--- start-up output"; tail -n 25 /tmp/up.log
+            echo "--- ports in use"; ss -ltn | head -15
+            echo "--- containers"; docker compose ps -a
+            echo "--- logs"; docker compose logs --no-color --tail 30
+          } > /tmp/why.txt 2>&1 || true
+          cat /tmp/why.txt
+          python3 -c 't=open("/tmp/why.txt", errors="replace").read()[-3500:]; print("::error title=stack failed::" + t.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
