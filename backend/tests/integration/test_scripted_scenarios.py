@@ -7,7 +7,7 @@ row of eval/scripted_actions.md. The honest runs matter as much: an action a pag
 """
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.models import Event, Flag, Option, Question, SessionQuestion
 from app.services.flags.engine import compute_session_flags
@@ -244,6 +244,36 @@ def test_going_idle_then_answering_a_run_correctly_and_fast_is_caught(script):  
     (flag,) = found["CORRECT_RUN_AFTER_GAP"]
     assert flag.weight == 2 and flag.detail["run_length"] >= 3 and flag.detail["gap_s"] == 90
     assert flag.detail["mean_s"] < 0.5 * flag.detail["own_median_s"]
+
+
+def test_answering_three_in_a_row_in_under_twenty_seconds_is_caught_without_leaving_the_page(
+    script,
+):  # S5c: the phone
+    def quick(s, position):
+        s.wait(5)
+
+    script.paper({4: quick, 5: quick, 6: quick})
+    found = script.flags()
+
+    (flag,) = found["FAST_RUN"]
+    assert flag.position == 4 and flag.weight == 1
+    assert flag.detail == {"answers_in_a_row": 3, "answers_mean_s": 5.0}
+    assert "FOCUS_LOSS" not in found and "CORRECT_RUN_AFTER_GAP" not in found
+
+
+def test_long_questions_answered_correctly_in_under_twenty_seconds_are_caught(script):  # S5d
+    script.db.execute(update(Question).values(text="x" * 700))  # every question is now long
+
+    def quick(s, position):
+        s.wait(10)
+
+    script.paper({2: quick, 4: quick})
+    found = script.flags()
+
+    flags = found["LONG_FAST_CORRECT"]
+    assert [f.position for f in flags] == [2, 4]
+    assert all(f.weight == 0.5 and f.detail["question_chars"] == 700 for f in flags)
+    assert "FAST_RUN" not in found  # two apart, not three in a row
 
 
 def test_a_run_after_a_gap_at_the_candidates_usual_pace_is_not_flagged(script):

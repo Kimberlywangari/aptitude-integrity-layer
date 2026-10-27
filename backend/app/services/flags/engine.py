@@ -9,7 +9,7 @@ import statistics
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.clock import Clock, SystemClock
@@ -47,7 +47,7 @@ class FlagRun:
 
 def load_record(db: Session, session: TestSession) -> SessionRecord:
     rows = db.execute(
-        select(SessionQuestion, Question.difficulty)
+        select(SessionQuestion, Question.difficulty, func.length(Question.text))
         .join(Question, Question.id == SessionQuestion.question_id)
         .where(SessionQuestion.session_id == session.id)
         .order_by(SessionQuestion.position)
@@ -61,8 +61,9 @@ def load_record(db: Session, session: TestSession) -> SessionRecord:
             answered_at=sq.answered_at,
             correct=sq.correct,
             skipped=sq.skipped,
+            length=length,
         )
-        for sq, difficulty in rows
+        for sq, difficulty, length in rows
     ]
     events = [
         rules.Ev(e.type, e.server_ts, e.payload or {})
@@ -103,6 +104,10 @@ def session_drafts(record: SessionRecord, cfg: FlagConfig = DEFAULTS) -> list[ru
     drafts += rules.correct_run_after_gap_flags(
         record.answers, rules.run_gaps(losses, idles, cfg), cfg
     )
+    drafts += rules.fast_run_flags(record.answers, cfg)
+    drafts += rules.hard_fast_correct_flags(record.answers, cfg)
+    drafts += rules.flat_pace_flags(record.answers, cfg)
+    drafts += rules.long_fast_correct_flags(record.answers, cfg)
     drafts += rules.logging_problem_flags(gaps, drops, record.events, cfg)
     return sorted(drafts, key=lambda d: d.ts)
 

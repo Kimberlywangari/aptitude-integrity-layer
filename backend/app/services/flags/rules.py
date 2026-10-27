@@ -17,6 +17,10 @@ COPY_ATTEMPT = "COPY_ATTEMPT"
 SCREENSHOT_KEY = "SCREENSHOT_KEY"
 LONG_HOLD_CORRECT = "LONG_HOLD_CORRECT"
 CORRECT_RUN_AFTER_GAP = "CORRECT_RUN_AFTER_GAP"
+FAST_RUN = "FAST_RUN"
+HARD_FAST_CORRECT = "HARD_FAST_CORRECT"
+FLAT_PACE = "FLAT_PACE"
+LONG_FAST_CORRECT = "LONG_FAST_CORRECT"
 PACE_OUTLIER = "PACE_OUTLIER"
 SPREAD_OUTLIER = "SPREAD_OUTLIER"
 LOGGING_PROBLEM = "LOGGING_PROBLEM"
@@ -45,6 +49,7 @@ class Answer:
     answered_at: datetime | None
     correct: bool | None
     skipped: bool = False
+    length: int | None = None  # characters in the question's text, passage included
 
     @property
     def time_s(self) -> float | None:
@@ -318,6 +323,106 @@ def correct_run_after_gap_flags(
             )
         )
     return drafts
+
+
+def fast_run_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> list[FlagDraft]:
+    """One flag for each unbroken run of `fast_run_length` or more answers, every one under
+    `fast_run_max_s`. Right or wrong, with focus on the page or not: the rule reads only the time.
+    A skipped or unanswered question ends a run."""
+    drafts = []
+    run: list[Answer] = []
+
+    def close() -> None:
+        if len(run) >= cfg.fast_run_length:
+            drafts.append(
+                FlagDraft(
+                    FAST_RUN,
+                    cfg.fast_run_weight,
+                    run[0].opened_at,
+                    run[0].position,
+                    {
+                        "answers_in_a_row": len(run),
+                        "answers_mean_s": round(
+                            statistics.fmean(a.time_s for a in run),
+                            1,
+                        ),
+                    },
+                )
+            )
+        run.clear()
+
+    for answer in sorted(answers, key=lambda a: a.position):
+        took = answer.time_s
+        if answer.skipped or took is None or took >= cfg.fast_run_max_s:
+            close()
+        else:
+            run.append(answer)
+    close()
+    return drafts
+
+
+def hard_fast_correct_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> list[FlagDraft]:
+    """One flag for each hard question answered correctly in under `hard_fast_max_s`."""
+    return [
+        FlagDraft(
+            HARD_FAST_CORRECT,
+            cfg.hard_fast_weight,
+            a.opened_at,
+            a.position,
+            {"time_s": round(a.time_s, 1)},
+        )
+        for a in sorted(answers, key=lambda a: a.position)
+        if a.difficulty == "hard"
+        and a.correct is True
+        and not a.skipped
+        and a.time_s is not None
+        and a.time_s < cfg.hard_fast_max_s
+    ]
+
+
+def flat_pace_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> list[FlagDraft]:
+    """One flag when the candidate's median time on hard questions is barely above their median on
+    easy ones (under `flat_ratio` x it), and is itself under `flat_max_hard_s`. Skipped questions
+    are left out. Placed at the end of the last hard answer, on no question in particular."""
+    timed = [a for a in answers if a.time_s is not None and not a.skipped]
+    easy = [a.time_s for a in timed if a.difficulty == "easy"]
+    hard = [a for a in timed if a.difficulty == "hard"]
+    if min(len(easy), len(hard)) < cfg.flat_min_each:
+        return []
+    easy_median = statistics.median(easy)
+    hard_median = statistics.median(a.time_s for a in hard)
+    if hard_median >= cfg.flat_ratio * easy_median or hard_median >= cfg.flat_max_hard_s:
+        return []
+    return [
+        FlagDraft(
+            FLAT_PACE,
+            cfg.flat_weight,
+            max(a.answered_at for a in hard),
+            None,
+            {"easy_median_s": round(easy_median), "hard_median_s": round(hard_median)},
+        )
+    ]
+
+
+def long_fast_correct_flags(answers: list[Answer], cfg: FlagConfig = DEFAULTS) -> list[FlagDraft]:
+    """One flag for each question of `long_fast_chars` characters or more answered correctly in
+    under `long_fast_max_s`. A wrong answer is not flagged: that is a guess, not a sign of help."""
+    return [
+        FlagDraft(
+            LONG_FAST_CORRECT,
+            cfg.long_fast_weight,
+            a.opened_at,
+            a.position,
+            {"time_s": round(a.time_s, 1), "question_chars": a.length},
+        )
+        for a in sorted(answers, key=lambda a: a.position)
+        if a.correct is True
+        and not a.skipped
+        and a.length is not None
+        and a.length >= cfg.long_fast_chars
+        and a.time_s is not None
+        and a.time_s < cfg.long_fast_max_s
+    ]
 
 
 def heartbeat_gaps(

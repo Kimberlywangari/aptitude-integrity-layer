@@ -68,10 +68,10 @@ Expected: `SPREAD_OUTLIER` (needs 8 or more finished candidates).
 Answer **at least 8 questions in 6 to 10 seconds each**, trying to get them right. No marked
 actions.
 
-Expected: possibly `PACE_OUTLIER` (and `SPREAD_OUTLIER`), judged against the rest of the sitting.
-Nothing is judged against past candidates any more, so a fast stretch on its own raises no
-per-person flag: `CORRECT_RUN_AFTER_GAP` needs a gap (a tab-out of 5 s or more, or an idle stretch
-of a minute) straight before the quick run.
+Expected: `FAST_RUN` (3 or more answers in a row, each under 20 s, whatever the page showed), and
+possibly `PACE_OUTLIER` (and `SPREAD_OUTLIER`), judged against the rest of the sitting. Nothing is
+judged against past candidates any more. `CORRECT_RUN_AFTER_GAP` still needs a gap (a tab-out of
+5 s or more, or an idle stretch of a minute) straight before the quick run.
 
 ### C6: a bit of everything
 

@@ -47,6 +47,36 @@ class FlagConfig:
     run_min_other_answers: int = 5
     run_weight: float = 2.0
 
+    # FAST_RUN: this many answers in a row, each in under `fast_run_max_s`. No gap, no comparison
+    # with the candidate's own pace: it catches answers read from somewhere else, such as a second
+    # device, that no event on the page can see. One flag per unbroken run, however long.
+    fast_run_length: int = 3
+    fast_run_max_s: float = 20.0
+    fast_run_weight: float = 1.0
+
+    # The three rules below are weak on their own, so each is worth half a point: two of the same
+    # kind, or one beside another kind of flag, reach the queue; one alone does not.
+    # HARD_FAST_CORRECT: a question tagged hard, answered correctly in under this long. Needs a
+    # difficulty on the question; the Cytonn bank has none, so in practice this and FLAT_PACE fire
+    # on AI-written papers only (30% easy, 40% medium, 30% hard in each category).
+    hard_fast_max_s: float = 15.0
+    hard_fast_weight: float = 0.5
+
+    # FLAT_PACE: an honest person slows down on hard questions. Flagged when the candidate's median
+    # on hard ones is under `flat_ratio` x their median on easy ones (so barely slower, or faster)
+    # and under `flat_max_hard_s` (someone slow on everything is just slow). Needs at least
+    # `flat_min_each` answers of each kind, and a difficulty on the questions.
+    flat_min_each: int = 3
+    flat_ratio: float = 1.2
+    flat_max_hard_s: float = 30.0
+    flat_weight: float = 0.5
+
+    # LONG_FAST_CORRECT: a question of at least `long_fast_chars` characters (its text, passage
+    # included), answered correctly in under `long_fast_max_s`. Reading it alone takes longer.
+    long_fast_chars: int = 600
+    long_fast_max_s: float = 20.0
+    long_fast_weight: float = 0.5
+
     # LOGGING_PROBLEM: no heartbeat for longer than this, unexplained.
     heartbeat_gap_s: float = 35.0
 
