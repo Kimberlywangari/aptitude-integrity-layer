@@ -96,8 +96,18 @@ The full list is in master plan section 1.
   health check reads the code. `services/disk.py` is the one threshold the health route and the staff
   overview share.
 - `backend/constraints.txt` pins every Python package; the Docker image and CI install with it. Change it
-  only on purpose, by the steps in the README ("Pinned versions").
-- `deploy/backup.sh` and `deploy/restore.sh` are a pair, rehearsed together. `backups/` is git-ignored.
+  only on purpose, by the steps in the README ("Pinned versions and updates"). Base images are pinned by
+  digest, and Dependabot proposes monthly updates that CI must pass; a new base image also needs the
+  stack built and the backup drill run once.
+- `deploy/backup.sh` and `deploy/restore.sh` are a pair, rehearsed together on the whole stack
+  unencrypted. `backups/` is git-ignored. With `BACKUP_GPG_RECIPIENT` set the archives are `*.gpg`; only
+  the public key belongs on the server, and a lost private key means unreadable backups. The encrypted
+  path has not been rehearsed on a whole stack: only its seal and decrypt steps, by `deploy/check.sh`.
+- The staff console (`/admin`, `/review`, `/overview`, `/outcomes`, the staff sign-in and the staff API)
+  answers only to `STAFF_ALLOWED_IPS` in `deploy/Caddyfile`; unset means everybody. Candidates' paths
+  must never be in that rule; a wrong list locks staff out, not candidates. A new staff route needs its
+  prefix added to the matcher. `sh deploy/check.sh` runs the pinned Caddy and probes both kinds of path,
+  and drills the encrypt and decrypt steps against a throwaway key. Run it after touching `deploy/`.
 
 ## Candidate sign-in
 

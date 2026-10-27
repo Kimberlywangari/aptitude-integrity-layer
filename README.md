@@ -83,11 +83,41 @@ address or the camera gate off). Fill in `.env` from `.env.example`, then
   candidate names and addresses), checks both, keeps the last 14, and stops with an error rather than
   leave an empty file. Copy `./backups` off the machine as well; that part is not automated, because
   where the copies go is Cytonn's choice.
-- **Restore** with `sh deploy/restore.sh backups/db-<stamp>.sql.gz backups/video-<stamp>.tar.gz` into a
+- **Encrypt them** by setting `BACKUP_GPG_RECIPIENT` (in `.env`, or in the cron line). Every archive is
+  then stored as `*.gpg`, readable only with your private key; a copy that leaves the machine, or a lost
+  disk, shows nothing. Make the key on your own computer, not the server:
+  `gpg --quick-generate-key "Aptitude backups <you@example.com>" default default never`, then
+  `gpg --export --armor you@example.com > backup-public.asc`, copy that file to the server and run
+  `gpg --import backup-public.asc` there. Keep the private key (`gpg --export-secret-keys --armor`) and a
+  copy somewhere safe: **without it the backups cannot be opened**. If the key is named but missing, the
+  backup fails and writes nothing rather than save plain files. Backups made before encryption was
+  switched on stay unencrypted until they are among the oldest and rotate out; delete them by hand if
+  they must not remain. The encrypted path was checked by `sh deploy/check.sh` (below) but has not been
+  rehearsed on a whole stack.
+- **Restore** with `sh deploy/restore.sh backups/db-<stamp>.sql.gz backups/video-<stamp>.tar.gz` (with
+  `.gpg` on the end if encrypted; the private key must be in that machine's gpg keyring) into a
   database that is empty (a new server: `up -d db` first, the rest after). It refuses a database that
-  already has tables; the top of the script says how to replace a live one. Rehearsed on 26 Oct 2026
-  against a throwaway copy of the production stack: back up, delete every container and volume,
-  restore, start the API. All 23 tables had the same row counts, and a recording came back byte for byte.
+  already has tables; the top of the script says how to replace a live one. An encrypted file is
+  decrypted twice, once to check it and once to restore it, so a large recordings archive takes about
+  twice as long. Rehearsed on 26 Oct 2026 against a throwaway copy of the production stack, unencrypted:
+  back up, delete every container and volume, restore, start the API. All 23 tables had the same row
+  counts, and a recording came back byte for byte.
+- **Lock the staff console to a network.** Set `STAFF_ALLOWED_IPS` in `.env` to the addresses or ranges
+  staff work from, for example `STAFF_ALLOWED_IPS="203.0.113.0/24 198.51.100.7"`, then
+  `docker compose -f docker-compose.prod.yml up -d proxy`. From anywhere else, `/admin`, `/review`,
+  `/overview`, `/outcomes`, the staff sign-in and the staff API (which carries names, addresses and the
+  recordings) answer "Not available from this network."; candidates are never affected. Empty (the
+  starting point) means everybody. A wrong list locks the staff out, so test it from a staff computer
+  straight away; fixing `.env` and running the same command undoes it. Caddy checks the address that
+  reached it, so behind another proxy or load balancer the Caddyfile needs `client_ip` and
+  `trusted_proxies` instead (the comment in `deploy/Caddyfile` says so). A new staff route needs its
+  prefix added to the matcher there.
+- **Check both** with `sh deploy/check.sh` (needs Docker, curl and gpg). It starts the
+  pinned Caddy image and confirms that every staff path answers 403 from outside the list, that
+  candidate paths do not, and that the default list closes nothing; then it runs the encrypt and
+  decrypt steps of the two backup scripts against a throwaway key. Run it after changing anything in
+  `deploy/`.
+- **Logs** are capped at 5 files of 10 MB per container, so they cannot fill the disk the recordings need.
 - **Watch it.** Point a free uptime monitor (for example UptimeRobot) at `https://<host>/api/health` and
   have it look for the text `"status":"ok"`. A stopped API or database fails the request. Under 10 GB
   free where recordings are kept, the reply changes to `"status":"low_disk"` (still a 200, so Docker does
@@ -166,16 +196,6 @@ Without `claude` in the install, the 7 tests for the Claude client are skipped; 
 `FFMPEG_BIN` in `.env`, or put it on PATH) the 9 video tests are skipped. A run that skips them is not
 a full run.
 
-### Pinned versions
-
-`backend/constraints.txt` holds the exact version of every Python package the tests were run against, and
-the Docker image installs with it, so a rebuild cannot pick up a newer release. The frontend does the same
-through `package-lock.json`. To upgrade on purpose: make a fresh Python 3.13 venv, run
-`pip install -e ".[dev,claude]"` (no `-c`), run the whole suite, then regenerate the file with
-`pip freeze --exclude-editable`, keeping its header and adding `uvloop` (a Linux-only extra of
-`uvicorn[standard]`; check the Linux set with `pip install -c constraints.txt ".[dev,claude]"` in a
-`python:3.13-slim` container).
-
 One whole candidate journey in a real browser (Chromium with a fake camera and a generated tone), against a
 running stack: invitation, permissions, the recording, a reload, a spell offline, the finish and the
 upload to the last chunk. It uses up the invitation and leaves a recording behind, so point it at a
@@ -207,6 +227,22 @@ several people at once, failing one after a review, the pass mark on a closed si
 uploading a list as a PDF, RTF or HTML file. It needs the made-up cohort with addresses that cannot receive
 mail (`python -m scripts.jobs simulate_cohort --with-emails`), the same two admin settings, and works once per
 cohort. Start the API with `SMTP_HOST=127.0.0.1 SMTP_PORT=1 ...` as above so nothing can be sent.
+
+### Pinned versions and updates
+
+`backend/constraints.txt` holds the exact version of every Python package the tests were run against, and
+the Docker image installs with it, so a rebuild cannot pick up a newer release. The frontend does the same
+through `package-lock.json`. To upgrade on purpose: make a fresh Python 3.13 venv, run
+`pip install -e ".[dev,claude]"` (no `-c`), run the whole suite, then regenerate the file with
+`pip freeze --exclude-editable`, keeping its header and adding `uvloop` (a Linux-only extra of
+`uvicorn[standard]`; check the Linux set with `pip install -c constraints.txt ".[dev,claude]"` in a
+`python:3.13-slim` container).
+
+The Docker base images (`python`, `node`, `nginx`, `postgres`, `caddy`) are pinned by digest in the
+Dockerfiles and compose files, so a rebuild uses the image that was tested. `.github/dependabot.yml`
+opens one pull request a month for newer npm packages, GitHub Actions and Docker images. Each runs the
+checks, and is merged only when they pass (for a new base image, also build the stack and run the
+backup drill once). Python packages are the one thing Dependabot does not touch.
 
 ## Layout
 
