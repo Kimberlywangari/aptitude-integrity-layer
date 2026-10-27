@@ -11,6 +11,13 @@ updates:
       frontend-dependencies:
         patterns: ["*"]
     open-pull-requests-limit: 3
+    # a major TypeScript breaks vue-tsc (7.x no longer exports lib/tsc: the first proposal failed the
+    # build), and the node types must stay on the Node version the app runs on (24). Move these by hand.
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -22,9 +29,21 @@ updates:
     directories: [/backend, /frontend]
     schedule:
       interval: monthly
+    # CI tests on Python 3.13 (3.14 is avoided here) and Node 24, so a base image on another version
+    # would ship something the checks never ran. Move those by hand, together with the workflow.
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
 
   # the database and proxy images in the compose files
   - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: monthly
+    # a new Postgres major cannot open the old one's data: the volumes would need a dump and restore
+    # first, so that is done by hand, never by merging a pull request.
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
