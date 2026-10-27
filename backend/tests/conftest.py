@@ -106,6 +106,19 @@ def settings(tmp_path) -> Settings:
         precheck_gate="off",
         ai_provider="rules",
         chunk_fail_rate=0.0,
+        # the question writer and the model settings are pinned to the defaults the tests were
+        # written against; above all no test sees a developer's real Anthropic key, so none can
+        # spend money
+        question_provider="ollama",
+        question_ollama_model="qwen3:8b",
+        question_timeout_s=300.0,
+        question_workers=2,
+        question_wait_limit_s=600,
+        question_solves=2,
+        ollama_model="gemma4:e2b",
+        ai_timeout_s=150.0,
+        claude_model="claude-sonnet-5-5",
+        anthropic_api_key="",
         # whatever mail account a developer has put in .env, a test never has one: nothing a test
         # does can send a real email
         smtp_host="",
