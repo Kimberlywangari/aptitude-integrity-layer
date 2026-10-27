@@ -1,7 +1,9 @@
 # The API and the worker run from this one image (the worker just starts a different command).
 # ffmpeg is here for the two things the server does with video: joining chunks into a file that
 # seeks, and scanning the audio for muted stretches.
-FROM python:3.13-slim
+# Base images are pinned by digest so a rebuild uses the image that was tested; Dependabot proposes
+# newer ones (.github/dependabot.yml) and CI runs on each proposal.
+FROM python:3.13-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 

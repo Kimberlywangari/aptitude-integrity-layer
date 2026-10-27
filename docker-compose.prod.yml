@@ -6,9 +6,18 @@
 #
 # Steps, backups and updates: docs/plan/hosting-cytonn-server.md.
 
+# Docker keeps everything a container prints, forever, unless told otherwise, and on this machine
+# that competes with the recordings for the disk. At most 5 files of 10 MB per container.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 x-backend: &backend
   build: ./backend
   restart: unless-stopped
+  logging: *logging
   depends_on:
     db:
       condition: service_healthy
@@ -55,8 +64,9 @@ x-backend: &backend
 
 services:
   db:
-    image: postgres:16
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: integrity
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -88,6 +98,7 @@ services:
   web:
     build: ./frontend
     restart: unless-stopped
+    logging: *logging
     volumes:
       - ./deploy/real-ip.conf:/etc/nginx/real-ip.conf:ro
     depends_on:
@@ -95,8 +106,9 @@ services:
         condition: service_healthy
 
   proxy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     restart: unless-stopped
+    logging: *logging
     ports:
       # Leave HTTP_PORT and HTTPS_PORT unset on a real server. They exist for a machine whose 80 or
       # 443 is already taken.
@@ -104,6 +116,8 @@ services:
       - "${HTTPS_PORT:-443}:443"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (the host name candidates open)}
+      # Who may reach the staff console and its API. The default is everybody; see deploy/Caddyfile.
+      STAFF_ALLOWED_IPS: ${STAFF_ALLOWED_IPS:-0.0.0.0/0 ::/0}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data

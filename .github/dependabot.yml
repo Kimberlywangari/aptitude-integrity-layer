@@ -1,0 +1,30 @@
+# Proposes updates as pull requests, monthly, so a pinned version does not stay old for ever. Every
+# proposal runs the checks in workflows/checks.yml; merge only when they pass. Python packages are not
+# listed: backend/constraints.txt is refreshed by hand (README, "Pinned versions and updates").
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    groups:
+      frontend-dependencies:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  # the base images in both Dockerfiles
+  - package-ecosystem: docker
+    directories: [/backend, /frontend]
+    schedule:
+      interval: monthly
+
+  # the database and proxy images in the compose files
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly
