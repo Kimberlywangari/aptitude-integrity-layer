@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     ai_timeout_s: float = 150.0  # one packet through Ollama; the plan's limit is under 2 minutes
     claude_model: str = "claude-sonnet-5-5"
     anthropic_api_key: str = ""
+    # The most one ranking run may spend on Claude, in US dollars, at the published price. Once
+    # it is reached the remaining candidates keep the rule order (nobody is dropped). 0 means no
+    # limit. It is checked before each candidate, so a run can pass it by about 2 cents.
+    ai_run_budget_usd: float = Field(0.0, ge=0)
 
     # Who writes the questions of an AI sitting (one paper per candidate). Ollama uses its own model
     # setting below, falling back to OLLAMA_MODEL; Claude uses CLAUDE_MODEL and ANTHROPIC_API_KEY.

@@ -1,6 +1,6 @@
 # Runs the same checks a person runs by hand (README, "Tests"), on every push to main and on every
-# pull request, so a broken change shows up before anyone builds on it. The browser (Playwright)
-# journeys need a running stack and stay manual.
+# pull request, so a broken change shows up before anyone builds on it. The `stack` job runs the
+# browser (Playwright) journeys against the whole Compose stack.
 name: checks
 
 on:
@@ -91,3 +91,52 @@ jobs:
         env:
           POSTGRES_PASSWORD: placeholder
           SITE_ADDRESS: localhost
+          SESSION_SECRET: placeholder-placeholder-placeholder-1234
+          PUBLIC_BASE_URL: https://localhost
+
+  # Each job above passes on its own; this one runs everything together. It builds both images,
+  # starts the whole stack as the README says, sets up a sitting, an admin and a made-up cohort, and
+  # drives it with a real browser: a candidate's whole journey (Chromium fakes the camera and the
+  # microphone), an admin making sittings, a sitting's page and the results screens. The camera gate
+  # is on, as it is in production. No mail server is set up, so nothing is sent. Cytonn's questions
+  # are not in the repository, so the one browser test that needs them is left out.
+  stack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PRECHECK_GATE: recording
+      E2E_BASE_URL: http://localhost:8080
+      E2E_ADMIN_EMAIL: ci-admin@example.com
+      E2E_ADMIN_PASSWORD: ci-only-password-1
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker compose up -d --build --wait
+      - run: curl -fsS http://localhost:8080/api/health
+      - name: Practice questions, a sitting with codes, a made-up cohort and an admin
+        run: |
+          api() { docker compose exec -T api python -m scripts.jobs "$@"; }
+          api seed_synthetic --invites /tmp/seed.csv
+          # the seeded codes belong to no sitting, so they would all show under the newest one
+          docker compose exec -T db psql -U integrity -d integrity -c "update candidates set sitting_id = 1 where sitting_id is null"
+          api load_question_bank
+          api simulate_cohort --with-emails
+          api create_reviewer --email "$E2E_ADMIN_EMAIL" --password "$E2E_ADMIN_PASSWORD" --role admin
+          api create_invites --sitting 1 --count 2 --out /tmp/codes.csv
+          echo "E2E_TOKEN=$(docker compose exec -T api sed -n 2p /tmp/codes.csv | cut -d, -f2)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      # apt on the runner sometimes stalls (see the backend job), so short timeouts and retries
+      - run: |
+          echo 'Acquire::Retries "3"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99ci
+          npx playwright install --with-deps chromium
+        working-directory: frontend
+        timeout-minutes: 8
+      - run: npx playwright test --grep-invert cytonn
+        working-directory: frontend
+      - if: failure()
+        run: docker compose logs --no-color --tail 200

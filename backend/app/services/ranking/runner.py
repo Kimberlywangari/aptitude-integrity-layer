@@ -24,9 +24,11 @@ from app.services.flags.config import DEFAULTS, FlagConfig
 from app.services.packets import build_sitting_packets
 from app.services.ranking.base import Ranker, RankerError, RankerResult
 from app.services.ranking.factcheck import fact_check
+from app.services.ranking.pricing import cost_usd, price_of
 from app.services.ranking.rules import Ranked, rule_order, strength_bucket
 
 MAX_ATTEMPTS = 2  # the first try and one retry
+BUDGET_REACHED = "the AI budget for this run was reached, so this candidate keeps the rule order"
 
 
 @dataclass
@@ -35,6 +37,21 @@ class RankRun:
     rankings: list[Ranking] = field(default_factory=list)
     statuses: Counter = field(default_factory=Counter)
     seconds: list[float] = field(default_factory=list)  # per candidate, where the AI ran
+    spent_usd: float = 0.0  # at the published price, from the tokens each call reported
+    over_budget: int = 0  # candidates left to the rule order because the budget was reached
+
+
+def _spent(ranker: Ranker, attempts: list[dict[str, Any]]) -> float:
+    """Dollars these attempts cost. A local model is free, and an attempt that reported no tokens
+    adds nothing (a failed call's usage can be lost with it, so the budget is a close guide, not a
+    guarantee)."""
+    if ranker.name != "claude":
+        return 0.0
+    return sum(
+        cost_usd(ranker.model, a["usage"]["input_tokens"], a["usage"]["output_tokens"])
+        for a in attempts
+        if a.get("usage")
+    )
 
 
 def _flag_dicts(item: Ranked) -> list[dict[str, Any]]:
@@ -90,9 +107,15 @@ def rank_sitting(
     ranker: Ranker | None,
     clock: Clock,
     cfg: FlagConfig = DEFAULTS,
+    budget_usd: float | None = None,
 ) -> RankRun:
     """Write one ranking per flagged candidate in the sitting, replacing any earlier run.
-    `ranker=None` is the rules-only run: nobody is sent to an AI and the rule order stands."""
+    `ranker=None` is the rules-only run: nobody is sent to an AI and the rule order stands.
+    `budget_usd` stops sending candidates to a Claude model once this run has spent that much; the
+    rest keep the rule order, so nobody is dropped. It is checked before each candidate, so a run
+    can pass it by the cost of one candidate. A model with no recorded price is refused up front."""
+    if budget_usd is not None and ranker is not None and ranker.name == "claude":
+        price_of(ranker.model)  # raises UnknownModel rather than spend with no way to count it
     ordered = rule_order(db, sitting_id, cfg)
     build_sitting_packets(db, clock, sitting_id, cfg)  # fresh from the flags as they stand now
     packets = {
@@ -110,9 +133,18 @@ def rank_sitting(
         status = "not_run"
         strength = strength_bucket(item.score, item.logging_only)
         if ranker is not None:
-            accepted, attempts, spent = _assess(ranker, packet, clock)
-            seconds = round(spent, 2)
-            run.seconds.append(seconds)
+            if budget_usd is not None and run.spent_usd >= budget_usd:
+                accepted = None
+                attempts = [
+                    {"attempt": 0, "raw": None, "violations": [], "error": BUDGET_REACHED,
+                     "usage": None, "seconds": 0.0}
+                ]
+                run.over_budget += 1
+            else:
+                accepted, attempts, spent = _assess(ranker, packet, clock)
+                run.spent_usd += _spent(ranker, attempts)
+                seconds = round(spent, 2)
+                run.seconds.append(seconds)
             if accepted is None:
                 status = "fallback"
             else:
