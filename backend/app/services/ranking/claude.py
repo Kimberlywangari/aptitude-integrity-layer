@@ -1,8 +1,9 @@
 """The Claude API behind the same Ranker interface as the local model.
 
-Same prompt, same Assessment schema, same fact check and same runner: only the call differs. Not
-run live yet (the API is not paid for), so it is covered by tests with a stand-in client; mark it
-"untested live" in the handover until a real key has been through it.
+Same prompt, same Assessment schema, same fact check and same runner: only the call differs. Run
+live on 27 Oct 2026 on three of the made-up benchmark packets: every first answer failed the fact
+check (an id or a number not in the packet) and every retry passed, about 1.7 cents a packet. The
+tests use a stand-in client, so they never spend money.
 
 The SDK is an optional extra (`pip install -e ".[claude]"`) and is imported only here, when this
 provider is chosen. Every failure comes out as one RankerError, so a refusal, a rate limit or a

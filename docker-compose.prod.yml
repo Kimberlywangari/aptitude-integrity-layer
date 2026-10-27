@@ -33,18 +33,20 @@ x-backend: &backend
     RETENTION_DAYS: ${RETENTION_DAYS:-30}
     RESUME_WINDOW_S: ${RESUME_WINDOW_S:-172800}
     UNDECIDED_REPORT_DAYS: ${UNDECIDED_REPORT_DAYS:-60}
-    # AI. Without a key and without a model on this server, ranking falls back to the rule order.
-    AI_PROVIDER: ${AI_PROVIDER:-rules}
+    # AI. The server has no GPU, so Claude is the default. Without ANTHROPIC_API_KEY, ranking falls
+    # back to the rule order and an AI sitting cannot be created. The Ollama lines only matter if
+    # AI_PROVIDER or QUESTION_PROVIDER is set to ollama.
+    AI_PROVIDER: ${AI_PROVIDER:-claude}
     OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_IN_DOCKER:-http://host.docker.internal:11434}
     OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
-    AI_TIMEOUT_S: ${AI_TIMEOUT_S:-150}
-    QUESTION_PROVIDER: ${QUESTION_PROVIDER:-ollama}
+    AI_TIMEOUT_S: ${AI_TIMEOUT_S:-90}
+    QUESTION_PROVIDER: ${QUESTION_PROVIDER:-claude}
     QUESTION_OLLAMA_MODEL: ${QUESTION_OLLAMA_MODEL:-qwen3:8b}
-    QUESTION_TIMEOUT_S: ${QUESTION_TIMEOUT_S:-300}
-    QUESTION_WORKERS: ${QUESTION_WORKERS:-2}
-    QUESTION_WAIT_LIMIT_S: ${QUESTION_WAIT_LIMIT_S:-600}
+    QUESTION_TIMEOUT_S: ${QUESTION_TIMEOUT_S:-120}
+    QUESTION_WORKERS: ${QUESTION_WORKERS:-4}
+    QUESTION_WAIT_LIMIT_S: ${QUESTION_WAIT_LIMIT_S:-120}
     QUESTION_PAPER_TIMEOUT_S: ${QUESTION_PAPER_TIMEOUT_S:-1800}
-    QUESTION_SOLVES: ${QUESTION_SOLVES:-2}
+    QUESTION_SOLVES: ${QUESTION_SOLVES:-3}
     CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     # Email (invitations and results). Empty SMTP_HOST means mail waits in the queue.

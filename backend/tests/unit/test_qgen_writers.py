@@ -176,12 +176,25 @@ def test_letters_outside_the_options_are_not_answers():
     assert letters_from(batch, 3) == [None, "D", None]
 
 
+def plain_settings(**given) -> Settings:
+    """Settings from the code's defaults and what a test names. Neither a developer's .env nor their
+    environment variables (a real Anthropic key, Claude chosen) can change what these tests see."""
+    pinned = {
+        "question_provider": "ollama",
+        "question_ollama_model": "qwen3:8b",
+        "ollama_model": "gemma4:e2b",
+        "anthropic_api_key": "",
+    }
+    return Settings(_env_file=None, **{**pinned, **given})
+
+
 def test_the_provider_chosen_in_settings_is_the_one_built():
-    assert isinstance(writers.get_writer(Settings(question_provider="ollama")), OllamaWriter)
-    chosen = writers.get_writer(Settings(question_ollama_model="m1"))
+    built = writers.get_writer(plain_settings(question_provider="ollama"))
+    assert isinstance(built, OllamaWriter)
+    chosen = writers.get_writer(plain_settings(question_ollama_model="m1"))
     assert chosen.model == "m1"
-    assert Settings(question_provider="claude", claude_model="c1").question_model == "c1"
-    assert Settings(question_ollama_model="").question_model == Settings().ollama_model
+    assert plain_settings(question_provider="claude", claude_model="c1").question_model == "c1"
+    assert plain_settings(question_ollama_model="").question_model == plain_settings().ollama_model
 
 
 def test_availability_names_what_is_wrong(monkeypatch):
@@ -192,7 +205,7 @@ def test_availability_names_what_is_wrong(monkeypatch):
 
         return get
 
-    settings = Settings(question_ollama_model="qwen-test")
+    settings = plain_settings(question_ollama_model="qwen-test")
     monkeypatch.setattr(writers.httpx, "get", tags(["qwen-test:latest"]))
     assert writers.check_available(settings)[0] is True
 
@@ -207,5 +220,7 @@ def test_availability_names_what_is_wrong(monkeypatch):
     ok, detail = writers.check_available(settings)
     assert ok is False and "not running" in detail
 
-    ok, detail = writers.check_available(Settings(question_provider="claude", anthropic_api_key=""))
+    ok, detail = writers.check_available(
+        plain_settings(question_provider="claude", anthropic_api_key="")
+    )
     assert ok is False and "ANTHROPIC_API_KEY" in detail

@@ -285,10 +285,10 @@ function submit() {
         </Banner>
         <p v-else-if="ai" class="muted" role="status">
           Written by {{ ai.model }} ({{ ai.provider }}). Every question is checked a second time,
-          without its answer, before a candidate can see it. A slow computer writes about one
-          question a minute, so try a small paper first.
+          without its answer, before a candidate can see it.
           <template v-if="ai.provider === 'ollama'">
-            A model running on this computer can fail the checks on logic puzzles; the candidate is then
+            A slow computer writes about one question a minute, so try a small paper first. A model
+            running on this computer can fail the checks on logic puzzles; the candidate is then
             offered to ask again. Claude writes far more reliably.
           </template>
         </p>
